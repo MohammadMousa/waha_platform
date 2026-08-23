@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/cart_item.dart';
 import '../models/quote.dart';
+import 'product_image.dart';
+import 'quantity_stepper.dart';
 
 /// A cart line as its own card: identity + unit price on the left, a
 /// proper stepper for quantity, and the line total pulled from the last
@@ -34,7 +36,7 @@ class CartLineTile extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: Padding(
@@ -42,15 +44,13 @@ class CartLineTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: Text(
-                item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
-                style: TextStyle(
-                  color: theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.bold,
-                ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: ProductImage(
+                imageResourceId: item.imageResourceId,
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
               ),
             ),
             const SizedBox(width: 12),
@@ -72,9 +72,11 @@ class CartLineTile extends StatelessWidget {
                         ?.copyWith(color: theme.colorScheme.outline),
                   ),
                   const SizedBox(height: 10),
-                  _QuantityStepper(
-                    quantity: item.quantity,
-                    onChanged: onQuantityChanged,
+                  QuantityStepper(
+                    qty: item.quantity,
+                    onAdd: () => onQuantityChanged(item.quantity + 1),
+                    onRemove: () => onQuantityChanged(item.quantity - 1),
+                    size: 30,
                   ),
                 ],
               ),
@@ -121,53 +123,3 @@ class CartLineTile extends StatelessWidget {
   }
 }
 
-class _QuantityStepper extends StatelessWidget {
-  final int quantity;
-  final ValueChanged<int> onChanged;
-
-  const _QuantityStepper({required this.quantity, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StepperButton(icon: Icons.remove, onTap: () => onChanged(quantity - 1)),
-          SizedBox(
-            width: 28,
-            child: Text(
-              '$quantity',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleSmall,
-            ),
-          ),
-          _StepperButton(icon: Icons.add, onTap: () => onChanged(quantity + 1)),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepperButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _StepperButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Icon(icon, size: 16),
-      ),
-    );
-  }
-}

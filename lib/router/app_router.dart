@@ -5,6 +5,7 @@ import '../screens/cart_screen.dart';
 import '../screens/categories_screen.dart';
 import '../screens/checkout_screen.dart';
 import '../screens/debug_admin_stub_screen.dart';
+import '../screens/odoo_admin_screen.dart';
 import '../screens/invoice_screen.dart';
 import '../screens/landing_screen.dart';
 import '../screens/login_screen.dart';
@@ -46,6 +47,7 @@ class Routes {
   /// Debug-only — deliberately NOT in kioskAllowlist. Exists to make the
   /// lock observable; see debug_admin_stub_screen.dart.
   static const debugAdminStub = '/debug/admin-stub';
+  static const odooAdmin = '/admin/odoo';
 
   /// Screens reachable while navigation is restricted. Applies to BOTH
   /// Kiosk and Shopping — per the actual product model, "customer already
@@ -129,6 +131,9 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.debugAdminStub:
         page = const DebugAdminStubScreen();
+        break;
+      case Routes.odooAdmin:
+        page = const OdooAdminScreen();
         break;
       case Routes.settings:
         page = const SettingsScreen();

@@ -13,6 +13,7 @@ import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/product_image.dart';
+import '../widgets/quantity_stepper.dart';
 import '../widgets/waha_app_bar.dart';
 import '../widgets/waha_bottom_nav.dart';
 
@@ -311,32 +312,13 @@ class _ProductCell extends StatelessWidget {
                 Positioned(
                   bottom: 6,
                   right: 6,
-                  child: qty > 0
-                      ? _QtyControls(
-                          qty: qty,
-                          onAdd: onAdd,
-                          onRemove: onRemoveOne,
-                        )
-                      : GestureDetector(
-                          onTap: onAdd,
-                          child: Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: onAdd != null
-                                  ? scheme.primary
-                                  : scheme.outlineVariant,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.add,
-                              size: 18,
-                              color: onAdd != null
-                                  ? scheme.onPrimary
-                                  : scheme.onSurface.withOpacity(0.4),
-                            ),
-                          ),
-                        ),
+                  child: QuantityStepper(
+                    qty: qty,
+                    onAdd: onAdd,
+                    onRemove: onRemoveOne,
+                    active: onAdd != null,
+                    size: 28,
+                  ),
                 ),
               ],
             ),
@@ -364,61 +346,3 @@ class _ProductCell extends StatelessWidget {
   }
 }
 
-class _QtyControls extends StatelessWidget {
-  final int qty;
-  final VoidCallback? onAdd;
-  final VoidCallback? onRemove;
-
-  const _QtyControls({
-    required this.qty,
-    required this.onAdd,
-    required this.onRemove,
-  });
-
-  static const _teal = Color(0xFF00796B);
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: onRemove,
-            child: Container(
-              width: 26,
-              height: 26,
-              color: _teal,
-              child: const Icon(Icons.remove, size: 14, color: Colors.white),
-            ),
-          ),
-          Container(
-            height: 26,
-            constraints: const BoxConstraints(minWidth: 24),
-            color: _teal,
-            child: Center(
-              child: Text(
-                '$qty',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: onAdd,
-            child: Container(
-              width: 26,
-              height: 26,
-              color: _teal,
-              child: const Icon(Icons.add, size: 14, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

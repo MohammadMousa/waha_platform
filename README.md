@@ -2,6 +2,22 @@
 
 Flutter frontend for Waha, a self-service kiosk and retail shopping system. Consumes the [Waha backend](https://github.com/mohammad_mousa79/waha) REST API.
 
+## Screenshots
+
+### Browse & Cart
+
+| Browse with quantity stepper | Invoice (unpaid) | Invoice (paid) |
+|---|---|---|
+| ![Browse](docs/screenshots/ui/browse-stepper.png) | ![Unpaid](docs/screenshots/ui/invoice-unpaid.png) | ![Paid](docs/screenshots/ui/invoice-paid.png) |
+
+### Odoo Integration
+
+| Admin Dashboard | Order Push (Odoo) | e-Invoice |
+|---|---|---|
+| ![Dashboard](docs/screenshots/odoo/admin-dashboard.png) | ![Orders](docs/screenshots/odoo/order-push.png) | ![Invoice](docs/screenshots/odoo/e-invoice.png) |
+
+---
+
 ## Modes
 
 | Mode | Description |
@@ -19,6 +35,15 @@ Mode is set via `POST /api/auth/store` with `sessionProperties: {"mode": "KIOSK"
 - `flutter_localizations` + ARB — full Arabic / English localization (RTL-aware)
 - `shared_preferences` — local token + config persistence
 
+## Key Features
+
+- **Multi-store hierarchy** — store switching with scoped catalog and orders per store
+- **Odoo integration** — catalog pull (categories + products with images), order push with per-user customer resolution, tax rate validation
+- **e-Invoice** — bilingual PDF invoice (AR/EN) with VAT breakdown, shareable link
+- **Payment methods** — Stripe, MyFatoorah, Simulated (swappable via backend config)
+- **Quantity stepper** — animated collapse/expand widget: single `+` circle when empty, pill with `−/count/+` when active, trash icon at qty 1
+- **Product images** — pulled from Odoo, served via backend resource API, displayed with a loading spinner and placeholder
+
 ## Project structure
 
 ```
@@ -32,8 +57,9 @@ lib/
 ├── state/          AuthService, OrderFlowController, PermissionService,
 │                   StoreConfigService, BrowsingModeService, LocaleService
 ├── utils/          localeName, scanActions, price formatting
-└── widgets/        Reusable widgets — WahaAppBar, WahaBottomNav, CartLineTile,
-                    ProductImage, CheckoutBar, ProductDetailSheet ...
+└── widgets/        ProductImage, QuantityStepper, CartLineTile,
+                    WahaAppBar, WahaBottomNav, CheckoutBar,
+                    ProductDetailSheet ...
 ```
 
 ## Running locally

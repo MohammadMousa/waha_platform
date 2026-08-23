@@ -324,13 +324,16 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-  // GET /api/orders?page=&size= — paginated order history, newest first
+  // GET /api/orders?storeId=&page=&size= — paginated order history, newest first
   Future<List<WahaOrder>> getOrderHistory(String token,
-      {int page = 0, int size = 10}) async {
+      {int? storeId, int page = 0, int size = 10}) async {
     final resp = await _send(
       () => _http.get(
-        _uri('/api/orders')
-            .replace(queryParameters: {'page': '$page', 'size': '$size'}),
+        _uri('/api/orders').replace(queryParameters: {
+          if (storeId != null) 'storeId': '$storeId',
+          'page': '$page',
+          'size': '$size',
+        }),
         headers: _headers(token: token),
       ),
     );
@@ -401,5 +404,66 @@ class ApiClient {
     final msg = _extractMessage(resp);
     if (resp.statusCode == 404) throw OrderNotFoundException(404, msg);
     throw UnknownApiException(resp.statusCode, msg);
+  }
+
+  // ── Odoo admin endpoints ──────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> odooStatus(String token, {int? storeId}) async {
+    final uri = _uri('/api/admin/odoo/status')
+        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp = await _send(() => _http.get(uri, headers: _headers(token: token)));
+    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> oodooConfigure(String token, String baseUrl, String apiKey,
+      String username, {String? customerOverride, int? storeId}) async {
+    final uri = _uri('/api/admin/odoo/configure')
+        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final body = <String, dynamic>{
+      'baseUrl': baseUrl,
+      'apiKey': apiKey,
+      'username': username,
+      if (customerOverride != null && customerOverride.isNotEmpty)
+        'customerOverride': customerOverride,
+    };
+    final resp = await _send(
+      () => _http.post(uri,
+          headers: _headers(token: token),
+          body: jsonEncode(body)),
+    );
+    if (resp.statusCode != 200) throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<int> oodooPullCategories(String token, {int? storeId}) async {
+    final uri = _uri('/api/admin/odoo/pull/categories')
+        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp = await _send(() => _http.post(uri, headers: _headers(token: token)));
+    if (resp.statusCode == 200) {
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['pulled'] as int? ?? 0;
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  /// Returns (pulled, visible) — pulled = new/updated from Odoo, visible = total accessible to store.
+  Future<(int, int)> oodooPullProducts(String token, {int? storeId}) async {
+    final uri = _uri('/api/admin/odoo/pull/products')
+        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp = await _send(() => _http.post(uri, headers: _headers(token: token)));
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      return (body['pulled'] as int? ?? 0, body['visible'] as int? ?? 0);
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<int> oodooPushOrders(String token, {int? storeId}) async {
+    final uri = _uri('/api/admin/odoo/push/orders')
+        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp = await _send(() => _http.post(uri, headers: _headers(token: token)));
+    if (resp.statusCode == 200) {
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['pushed'] as int? ?? 0;
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 }

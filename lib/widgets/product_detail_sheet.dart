@@ -8,6 +8,7 @@ import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import 'product_image.dart';
+import 'quantity_stepper.dart';
 
 class ProductDetailSheet extends StatelessWidget {
   final Product product;
@@ -138,11 +139,16 @@ class ProductDetailSheet extends StatelessWidget {
                               },
                             ),
                           )
-                        : _QtyRow(
-                            qty: qty,
-                            onAdd: () => flow.addProduct(product),
-                            onRemove: () =>
-                                flow.updateQuantity(product.id, qty - 1),
+                        : SizedBox(
+                            width: double.infinity,
+                            child: QuantityStepper(
+                              qty: qty,
+                              onAdd: () => flow.addProduct(product),
+                              onRemove: () =>
+                                  flow.updateQuantity(product.id, qty - 1),
+                              size: 52,
+                              fullWidth: true,
+                            ),
                           ))
                     : SizedBox(
                         width: double.infinity,
@@ -164,69 +170,6 @@ class ProductDetailSheet extends StatelessWidget {
   }
 }
 
-class _QtyRow extends StatelessWidget {
-  final int qty;
-  final VoidCallback onAdd;
-  final VoidCallback onRemove;
-
-  const _QtyRow(
-      {required this.qty, required this.onAdd, required this.onRemove});
-
-  static const _teal = Color(0xFF00796B);
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 52,
-            decoration: BoxDecoration(
-              color: _teal,
-              borderRadius: BorderRadius.circular(26),
-            ),
-            child: Row(
-              children: [
-                _Btn(icon: Icons.remove, onTap: onRemove),
-                Expanded(
-                  child: Text(
-                    '$qty',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                _Btn(icon: Icons.add, onTap: onAdd),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Btn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _Btn({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 52,
-        height: 52,
-        alignment: Alignment.center,
-        child: Icon(icon, color: Colors.white, size: 22),
-      ),
-    );
-  }
-}
 
 String _formatPrice(double amount, String? currency) {
   final s = amount.toStringAsFixed(2);

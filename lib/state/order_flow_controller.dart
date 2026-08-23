@@ -93,7 +93,8 @@ class OrderFlowController extends ChangeNotifier {
       existing.first.quantity += 1;
     } else {
       final name = localeName(product.name, localeService.locale.languageCode);
-      cart.add(CartItem(productId: product.id, name: name, quantity: 1));
+      cart.add(CartItem(productId: product.id, name: name, quantity: 1,
+          imageResourceId: product.imageResourceId));
     }
   }
 

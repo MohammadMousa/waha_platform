@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
 
-/// Displays a product image from `GET /api/images/{id}`.
-/// Shows a placeholder icon when id is null or the request fails.
 class ProductImage extends StatelessWidget {
   final int? imageResourceId;
   final double? width;
@@ -22,53 +20,94 @@ class ProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final placeholder = Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.3),
-        borderRadius: borderRadius,
-      ),
-      child: Icon(
-        Icons.image_outlined,
-        size: (height ?? 80) * 0.5,
-        color: scheme.primary.withValues(alpha: 0.35),
-      ),
-    );
-
-    if (imageResourceId == null) return placeholder;
-
-    final url = '${AppConfig.apiBaseUrl}/api/images/$imageResourceId';
-    Widget img = Image.network(
-      url,
-      width: width,
-      height: height,
-      fit: fit,
-      errorBuilder: (_, __, ___) => placeholder,
-      loadingBuilder: (_, child, progress) {
-        if (progress == null) return child;
-        return Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: borderRadius,
-          ),
-          child: const Center(
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
-        );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = width  ?? (constraints.hasBoundedWidth  ? constraints.maxWidth  : 80.0);
+        final h = height ?? (constraints.hasBoundedHeight ? constraints.maxHeight : 80.0);
+        return _build(context, w, h);
       },
     );
+  }
 
-    if (borderRadius != null) {
-      img = ClipRRect(borderRadius: borderRadius!, child: img);
+  Widget _build(BuildContext context, double w, double h) {
+    final scheme     = Theme.of(context).colorScheme;
+    final br         = borderRadius ?? BorderRadius.zero;
+    final iconSize   = (w * 0.38).clamp(18.0, 40.0);
+    final spinnerOut = (w * 0.46).clamp(22.0, 52.0);
+    final spinnerIn  = spinnerOut * 0.58;
+
+    // Tinted background shared by placeholder and loading states.
+    Widget background = Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.3),
+        borderRadius: br,
+      ),
+    );
+
+    Widget placeholder = Stack(
+      alignment: Alignment.center,
+      children: [
+        background,
+        Icon(Icons.image_outlined, size: iconSize,
+            color: scheme.primary.withValues(alpha: 0.35)),
+      ],
+    );
+
+    if (imageResourceId == null) {
+      return SizedBox(width: w, height: h, child: placeholder);
     }
-    return img;
+
+    // Two concentric spinning rings — outer: primary, inner: secondary.
+    Widget spinner = Stack(
+      alignment: Alignment.center,
+      children: [
+        background,
+        SizedBox(
+          width: spinnerOut,
+          height: spinnerOut,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            color: scheme.primary,
+          ),
+        ),
+        SizedBox(
+          width: spinnerIn,
+          height: spinnerIn,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: scheme.secondary,
+          ),
+        ),
+      ],
+    );
+
+    final url = '${AppConfig.apiBaseUrl}/api/resources/$imageResourceId';
+
+    // Stack the spinner below the image. The image renders opaque once loaded,
+    // covering the spinner — no loadingBuilder constraint issues in Flutter web.
+    Widget result = SizedBox(
+      width: w,
+      height: h,
+      child: ClipRRect(
+        borderRadius: br,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            spinner,
+            Image.network(
+              url,
+              width: w,
+              height: h,
+              fit: fit,
+              errorBuilder: (_, __, ___) => placeholder,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return result;
   }
 }

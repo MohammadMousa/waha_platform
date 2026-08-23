@@ -13,6 +13,7 @@ import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/product_image.dart';
+import '../widgets/quantity_stepper.dart';
 import '../widgets/waha_bottom_nav.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -219,29 +220,15 @@ class _SearchScreenState extends State<SearchScreen> {
                     Positioned(
                       bottom: 6,
                       right: 6,
-                      child: qty > 0
-                          ? _SearchQtyBadge(qty: qty)
-                          : GestureDetector(
-                              onTap: product.active
-                                  ? () => flow.addProduct(product)
-                                  : null,
-                              child: Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: product.active
-                                      ? scheme.primary
-                                      : scheme.outlineVariant,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(Icons.add,
-                                    size: 18,
-                                    color: product.active
-                                        ? scheme.onPrimary
-                                        : scheme.onSurface
-                                            .withValues(alpha: 0.4)),
-                              ),
-                            ),
+                      child: QuantityStepper(
+                        qty: qty,
+                        onAdd: product.active ? () => flow.addProduct(product) : null,
+                        onRemove: qty > 0
+                            ? () => flow.updateQuantity(product.id, qty - 1)
+                            : null,
+                        active: product.active,
+                        size: 28,
+                      ),
                     ),
                   ],
                 ),
@@ -264,26 +251,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-class _SearchQtyBadge extends StatelessWidget {
-  final int qty;
-  const _SearchQtyBadge({required this.qty});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFF00796B),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        '$qty',
-        style: const TextStyle(
-            color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
 
 String _fmtPrice(double amount, String? currency) {
   final s = amount.toStringAsFixed(2);

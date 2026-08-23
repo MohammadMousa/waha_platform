@@ -3,12 +3,14 @@
 class CartItem {
   final int productId;
   final String name;
+  final int? imageResourceId;
   int quantity;
 
   CartItem({
     required this.productId,
     required this.name,
     required this.quantity,
+    this.imageResourceId,
   });
 
   Map<String, dynamic> toOrderLine() => {

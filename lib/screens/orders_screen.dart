@@ -6,6 +6,7 @@ import '../models/order.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../state/auth_service.dart';
+import '../state/store_config_service.dart';
 import '../widgets/waha_bottom_nav.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -24,12 +25,24 @@ class _OrdersScreenState extends State<OrdersScreen> {
   int _page = 0;
   static const _pageSize = 10;
   String? _error;
+  int? _lastStoreId;
 
   @override
   void initState() {
     super.initState();
-    if (authService.isLoggedIn) _loadOrders();
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload whenever the active store changes (Rule §14: store switch resets store-scoped state).
+    final storeId = context.watch<StoreConfigService>().storeId
+        ?? authService.sessionStoreId;
+    if (storeId != _lastStoreId) {
+      _lastStoreId = storeId;
+      if (authService.isLoggedIn) _loadOrders();
+    }
   }
 
   @override
@@ -48,9 +61,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
+  // Always send the current storeId so switching stores fetches that store's
+  // orders regardless of what the backend session last recorded (Rule §14).
+  int? get _storeId =>
+      context.read<StoreConfigService>().storeId ?? authService.sessionStoreId;
+
   Future<void> _loadOrders() async {
     final token = authService.token;
     if (token == null) return;
+    final storeId = _storeId;
     setState(() {
       _loading = true;
       _error = null;
@@ -61,7 +80,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     try {
       final orders = await context
           .read<ApiClient>()
-          .getOrderHistory(token, page: 0, size: _pageSize);
+          .getOrderHistory(token, storeId: storeId, page: 0, size: _pageSize);
       if (mounted) {
         setState(() {
           _orders = orders;
@@ -79,11 +98,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Future<void> _loadMore() async {
     final token = authService.token;
     if (token == null) return;
+    final storeId = _storeId;
     setState(() => _loadingMore = true);
     try {
       final more = await context
           .read<ApiClient>()
-          .getOrderHistory(token, page: _page, size: _pageSize);
+          .getOrderHistory(token, storeId: storeId, page: _page, size: _pageSize);
       if (mounted) {
         setState(() {
           _orders.addAll(more);

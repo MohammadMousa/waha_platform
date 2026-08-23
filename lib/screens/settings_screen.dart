@@ -9,6 +9,7 @@ import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
+import '../state/permission_service.dart';
 import '../state/store_config_service.dart';
 import 'simulator_settings_screen.dart';
 
@@ -230,6 +231,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: FilledButton(onPressed: _saveTimers, child: Text(l10n.settingsSaveTimers)),
           ),
 
+          // ── Odoo Integration ──────────────────────────────────────────────
+          if (context.watch<PermissionService>().can('MANAGE_STORES')) ...[
+            const Divider(height: 40),
+            Text('Integrations', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.sync_outlined),
+              label: const Text('Odoo Integration'),
+              onPressed: () => Navigator.of(context).pushNamed(Routes.odooAdmin),
+            ),
+          ],
+
           const SizedBox(height: 48),
 
           // ── Version / Dev Tools unlock ────────────────────────────────────
@@ -449,6 +462,7 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       ),
                     ),
                   ],
+
                 ],
               ),
             ),
