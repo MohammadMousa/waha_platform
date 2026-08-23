@@ -1,0 +1,155 @@
+{
+  "@@locale": "ar",
+
+  "appTitle": "Waha",
+
+  "navHome": "الرئيسية",
+  "navScan": "مسح",
+  "navCart": "السلة",
+  "navProfile": "الملف الشخصي",
+  "navSettings": "الإعدادات",
+  "navStores": "المتاجر",
+
+  "landingHeadline": "امسح منتجاتك للبدء",
+  "landingSubtitle": "بدون حساب، بدون انتظار — التقط المنتجات من الرف وامسحها.",
+
+  "ctaStartScanning": "ابدأ المسح",
+  "ctaContinueShopping": "متابعة التسوق",
+
+  "cartTitle": "السلة",
+  "cartEmptyTitle": "السلة فارغة",
+  "cartEmptySubtitle": "امسح منتجًا لإضافته هنا.",
+  "cartSubtotal": "المجموع الفرعي",
+  "cartTax": "الضريبة",
+  "cartTotal": "الإجمالي",
+  "checkoutButton": "إتمام الشراء",
+
+  "payButton": "ادفع",
+  "payRetry": "إعادة محاولة الدفع",
+  "paymentDeclined": "تم رفض الدفع",
+  "payNoMethods": "لا توجد وسائل دفع متاحة",
+  "payNoMethodsSubtitle": "يرجى التواصل مع الدعم أو المحاولة لاحقًا.",
+  "payAlreadyPaid": "تم الدفع مسبقًا",
+
+  "successPaid": "تم الدفع",
+  "successNewOrder": "طلب جديد",
+  "successInvoiceQrLabel": "امسح لعرض فاتورتك الإلكترونية",
+  "receiptTitle": "الإيصال",
+
+  "settingsAppMode": "وضع التطبيق",
+  "modeNormal": "عادي",
+  "modeKiosk": "كشك",
+  "modeShopping": "تسوق",
+  "settingsKioskTimers": "مؤقتات استرداد الكشك عند الخمول",
+  "settingsSaveTimers": "حفظ المؤقتات",
+  "settingsLanguage": "اللغة",
+
+  "profileTitle": "الملف الشخصي",
+
+  "navBrowse": "تصفح",
+  "browseTitle": "المنتجات",
+  "browseEmpty": "لا توجد منتجات لهذا المتجر.",
+  "browseLoadError": "تعذر تحميل المنتجات.",
+  "browseRetry": "إعادة المحاولة",
+  "browseLoadMore": "تحميل المزيد",
+  "productDetailAddToCart": "أضف إلى السلة",
+  "productDetailUnavailable": "غير متاح حاليًا",
+
+  "authUsername": "اسم المستخدم",
+  "authPassword": "كلمة المرور",
+  "authRegisterTitle": "إنشاء حساب",
+  "authLoginTitle": "تسجيل الدخول",
+  "authRegisterCta": "إنشاء حساب",
+  "authLoginCta": "تسجيل الدخول",
+  "authSwitchToLogin": "لديك حساب بالفعل؟ سجّل الدخول",
+  "authSwitchToRegister": "جديد هنا؟ أنشئ حسابًا",
+  "authRequiredError": "اسم المستخدم وكلمة المرور مطلوبان",
+  "authPhoneLabel": "رقم الهاتف",
+  "authSendOtp": "إرسال الرمز",
+  "authAdminLogin": "دخول المشرف",
+
+  "storePickerTitle": "اختر متجرًا",
+  "storePickerEmpty": "لا توجد متاجر متاحة",
+  "storePickerSetDefault": "تعيين كمتجر افتراضي",
+  "storePickerDefaultSetSuffix": "تم تعيينه كمتجر افتراضي",
+  "storePickerGoToStore": "الذهاب للمتجر",
+  "storePickerMakeDefault": "تعيين افتراضي",
+  "storePickerIsDefault": "افتراضي",
+
+  "profileLoggedInPrefix": "مسجّل الدخول باسم",
+  "profileGuestMessage": "غير مسجّل الدخول — الشراء كضيف لا يزال يعمل.",
+  "profileLogout": "تسجيل الخروج",
+  "profileLogin": "تسجيل الدخول",
+  "profileRegister": "إنشاء حساب",
+  "profileChangeStore": "تغيير المتجر",
+  "profileNoStoreSelected": "لم يتم اختيار متجر",
+
+  "navOrders": "طلباتي",
+  "navSearch": "بحث",
+  "navCategories": "التصنيفات",
+
+  "ordersTitle": "طلباتي",
+  "ordersEmpty": "لا طلبات بعد.",
+  "ordersLoginPrompt": "سجّل الدخول لعرض سجل طلباتك.",
+
+  "searchTitle": "البحث",
+  "searchHint": "ابحث عن منتجات...",
+  "searchComingSoon": "البحث قادم قريبًا.",
+
+  "categoriesTitle": "التصنيفات",
+  "categoriesComingSoon": "التصنيفات قادمة قريبًا.",
+
+  "viewCart": "عرض السلة",
+
+  "homeSearchHint": "ماذا تبحث عن؟",
+  "homeProducts": "المنتجات",
+
+  "checkoutCreating": "جاري إنشاء طلبك...",
+  "checkoutSelectPayment": "اختر وسيلة الدفع",
+  "checkoutOrderSummary": "ملخص الطلب",
+
+  "seeAll": "عرض الكل",
+  "recentlyAdded": "أحدث المنتجات",
+
+  "invoiceTitle": "الفاتورة",
+  "invoicePaid": "مدفوع",
+  "invoiceUnpaid": "غير مدفوع",
+  "invoicePending": "قيد الانتظار",
+  "invoiceCancelled": "ملغى",
+  "invoicePaidVia": "تم الدفع عبر {method}",
+  "@invoicePaidVia": {
+    "placeholders": {
+      "method": { "type": "String" }
+    }
+  },
+  "invoiceSelectPayment": "اختر وسيلة الدفع",
+  "invoiceDownloadPdf": "تحميل الفاتورة",
+  "invoiceDetails": "تفاصيل الفاتورة",
+  "invoiceItems": "المنتجات",
+  "invoiceRef": "المرجع",
+  "invoiceDate": "التاريخ",
+  "invoiceStatusLabel": "الحالة",
+  "invoiceOrderNum": "الطلب",
+  "invoiceNewOrder": "طلب جديد",
+  "invoiceQrHint": "امسح للفتح في هاتفك",
+  "invoiceClosingSoon": "الشاشة تغلق خلال",
+
+  "payConfirm": "تأكيد الدفع",
+  "payProcessing": "جاري معالجة الدفع...",
+  "payWaiting": "في انتظار تأكيد الدفع...",
+  "payCheckNow": "دفعت — تحقق الآن",
+  "payOpenedBrowser": "أكمل الدفع في التبويب الذي فُتح.",
+
+  "language": "اللغة",
+
+  "shareInvoice": "مشاركة الفاتورة",
+  "shareCopyLink": "نسخ الرابط",
+  "shareLinkCopied": "تم نسخ الرابط",
+
+  "cartClearTitle": "مسح السلة؟",
+  "cartClearMessage": "سيتم إزالة جميع المنتجات من السلة.",
+  "cartClearConfirm": "مسح",
+  "cartClearCancel": "إلغاء",
+
+  "perUnit": "للوحدة"
+}

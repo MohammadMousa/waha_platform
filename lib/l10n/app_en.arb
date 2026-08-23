@@ -1,0 +1,155 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Waha",
+
+  "navHome": "Home",
+  "navScan": "Scan",
+  "navCart": "Cart",
+  "navProfile": "Profile",
+  "navSettings": "Settings",
+  "navStores": "Stores",
+
+  "landingHeadline": "Scan your products to begin",
+  "landingSubtitle": "No account, no waiting — pick items off the shelf and scan.",
+
+  "ctaStartScanning": "Start Scanning",
+  "ctaContinueShopping": "Continue Shopping",
+
+  "cartTitle": "Cart",
+  "cartEmptyTitle": "Cart is empty",
+  "cartEmptySubtitle": "Scan a product to add it here.",
+  "cartSubtotal": "Subtotal",
+  "cartTax": "Tax",
+  "cartTotal": "Total",
+  "checkoutButton": "Checkout",
+
+  "payButton": "Pay",
+  "payRetry": "Retry Payment",
+  "paymentDeclined": "Payment declined",
+  "payNoMethods": "No payment methods available",
+  "payNoMethodsSubtitle": "Please contact support or try again later.",
+  "payAlreadyPaid": "Order Already Paid",
+
+  "successPaid": "Paid",
+  "successNewOrder": "New Order",
+  "successInvoiceQrLabel": "Scan to view your e-invoice",
+  "receiptTitle": "Receipt",
+
+  "settingsAppMode": "App mode",
+  "modeNormal": "Normal",
+  "modeKiosk": "Kiosk",
+  "modeShopping": "Shopping",
+  "settingsKioskTimers": "Kiosk idle-recovery timers",
+  "settingsSaveTimers": "Save Timers",
+  "settingsLanguage": "Language",
+
+  "profileTitle": "Profile",
+
+  "navBrowse": "Browse",
+  "browseTitle": "Products",
+  "browseEmpty": "No products found for this store.",
+  "browseLoadError": "Couldn't load products.",
+  "browseRetry": "Retry",
+  "browseLoadMore": "Load More",
+  "productDetailAddToCart": "Add to Cart",
+  "productDetailUnavailable": "Not currently available",
+
+  "authUsername": "Username",
+  "authPassword": "Password",
+  "authRegisterTitle": "Register",
+  "authLoginTitle": "Log In",
+  "authRegisterCta": "Create Account",
+  "authLoginCta": "Log In",
+  "authSwitchToLogin": "Already have an account? Log in",
+  "authSwitchToRegister": "New here? Create an account",
+  "authRequiredError": "Username and password are required",
+  "authPhoneLabel": "Phone Number",
+  "authSendOtp": "Send OTP",
+  "authAdminLogin": "Admin Login",
+
+  "storePickerTitle": "Choose a Store",
+  "storePickerEmpty": "No stores available",
+  "storePickerSetDefault": "Set as Default Store",
+  "storePickerDefaultSetSuffix": "set as default store",
+  "storePickerGoToStore": "Go to Store",
+  "storePickerMakeDefault": "Make Default",
+  "storePickerIsDefault": "Default",
+
+  "profileLoggedInPrefix": "Logged in as",
+  "profileGuestMessage": "Not logged in — guest checkout still works.",
+  "profileLogout": "Log Out",
+  "profileLogin": "Log In",
+  "profileRegister": "Register",
+  "profileChangeStore": "Change Store",
+  "profileNoStoreSelected": "No store selected",
+
+  "navOrders": "Orders",
+  "navSearch": "Search",
+  "navCategories": "Categories",
+
+  "ordersTitle": "My Orders",
+  "ordersEmpty": "No orders yet.",
+  "ordersLoginPrompt": "Log in to view your order history.",
+
+  "searchTitle": "Search",
+  "searchHint": "Search products…",
+  "searchComingSoon": "Search is coming soon.",
+
+  "categoriesTitle": "Categories",
+  "categoriesComingSoon": "Categories are coming soon.",
+
+  "viewCart": "View Cart",
+
+  "homeSearchHint": "What are you looking for?",
+  "homeProducts": "Products",
+
+  "checkoutCreating": "Creating your order…",
+  "checkoutSelectPayment": "Select Payment Method",
+  "checkoutOrderSummary": "Order Summary",
+
+  "seeAll": "See all",
+  "recentlyAdded": "Recently Added",
+
+  "invoiceTitle": "Invoice",
+  "invoicePaid": "PAID",
+  "invoiceUnpaid": "Unpaid",
+  "invoicePending": "Pending",
+  "invoiceCancelled": "Cancelled",
+  "invoicePaidVia": "Paid via {method}",
+  "@invoicePaidVia": {
+    "placeholders": {
+      "method": { "type": "String" }
+    }
+  },
+  "invoiceSelectPayment": "Select Payment Method",
+  "invoiceDownloadPdf": "Download Invoice",
+  "invoiceDetails": "Invoice Details",
+  "invoiceItems": "Items",
+  "invoiceRef": "Reference",
+  "invoiceDate": "Date",
+  "invoiceStatusLabel": "Status",
+  "invoiceOrderNum": "Order",
+  "invoiceNewOrder": "New Order",
+  "invoiceQrHint": "Scan to open invoice on your phone",
+  "invoiceClosingSoon": "Screen closing in",
+
+  "payConfirm": "Confirm Payment",
+  "payProcessing": "Processing payment…",
+  "payWaiting": "Waiting for payment confirmation…",
+  "payCheckNow": "I've paid — Check Now",
+  "payOpenedBrowser": "Complete payment in the browser tab that just opened.",
+
+  "language": "Language",
+
+  "shareInvoice": "Share Invoice",
+  "shareCopyLink": "Copy Link",
+  "shareLinkCopied": "Link copied to clipboard",
+
+  "cartClearTitle": "Clear cart?",
+  "cartClearMessage": "Remove all items from the cart.",
+  "cartClearConfirm": "Clear",
+  "cartClearCancel": "Cancel",
+
+  "perUnit": "per unit"
+}
