@@ -156,6 +156,21 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
+  // GET /api/stores/admin — admin variant; returns full store tree including
+  // non-public nodes. Requires MANAGE_STORES permission on the server.
+  Future<List<Store>> getAdminStores(String token) async {
+    final resp = await _send(
+      () => _http.get(_uri('/api/stores/admin'), headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) {
+      final list = jsonDecode(resp.body) as List<dynamic>;
+      return list.map((e) => Store.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    final msg = _extractMessage(resp);
+    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
+    throw UnknownApiException(resp.statusCode, msg);
+  }
+
   // ---- Products ------------------------------------------------------
 
   // GET /api/products/barcode/{barcode}?storeId={id}

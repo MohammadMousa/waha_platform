@@ -176,7 +176,12 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
     }
   }
 
-  if (isKiosk && name != Routes.landing) {
+  // Only wrap kiosk-allowed non-landing pages — NOT pages that were
+  // silently redirected to LandingScreen by the allowlist guard above.
+  // Without the contains() check, a restricted route (e.g. /settings in
+  // kiosk) would redirect to LandingScreen but still receive the idle
+  // guard, causing the dialog to fire on the landing page itself.
+  if (isKiosk && name != Routes.landing && Routes.kioskAllowlist.contains(name)) {
     page = KioskIdleGuard(
       afterInvoice: Routes.afterInvoiceRoutes.contains(name),
       child: page,

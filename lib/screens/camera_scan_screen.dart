@@ -15,8 +15,38 @@ class CameraScanScreen extends StatefulWidget {
   State<CameraScanScreen> createState() => _CameraScanScreenState();
 }
 
-class _CameraScanScreenState extends State<CameraScanScreen> {
+class _CameraScanScreenState extends State<CameraScanScreen>
+    with WidgetsBindingObserver {
+  final MobileScannerController _controller = MobileScannerController();
   bool _handled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _controller.start();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+        _controller.stop();
+        break;
+      default:
+        break;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.dispose();
+    super.dispose();
+  }
 
   void _onDetect(BarcodeCapture capture) {
     if (_handled) return;
@@ -77,7 +107,7 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(onDetect: _onDetect),
+          MobileScanner(controller: _controller, onDetect: _onDetect),
           // Purely visual — a dimmed mask with a cut-out square and corner
           // brackets so the customer knows where to aim. Doesn't affect
           // detection at all; mobile_scanner scans the full camera frame

@@ -476,6 +476,24 @@ abstract class AppLocalizations {
   /// **'Default'**
   String get storePickerIsDefault;
 
+  /// No description provided for @storePickerCurrentStore.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get storePickerCurrentStore;
+
+  /// No description provided for @storePickerRefreshStore.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Store'**
+  String get storePickerRefreshStore;
+
+  /// No description provided for @storePickerRefreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'Store refreshed'**
+  String get storePickerRefreshed;
+
   /// No description provided for @profileLoggedInPrefix.
   ///
   /// In en, this message translates to:
@@ -817,6 +835,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'per unit'**
   String get perUnit;
+
+  /// No description provided for @kioskIdleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you still there?'**
+  String get kioskIdleTitle;
+
+  /// No description provided for @kioskIdleBeforeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your session will reset in {seconds} seconds.'**
+  String kioskIdleBeforeBody(int seconds);
+
+  /// No description provided for @kioskIdleAfterBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This screen will close in {seconds} seconds.'**
+  String kioskIdleAfterBody(int seconds);
+
+  /// No description provided for @kioskIdleContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get kioskIdleContinue;
+
+  /// No description provided for @kioskIdleNewOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Start New Order'**
+  String get kioskIdleNewOrder;
+
+  /// No description provided for @kioskPaidTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Received'**
+  String get kioskPaidTitle;
+
+  /// No description provided for @kioskPaidScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan to open your e-invoice'**
+  String get kioskPaidScanHint;
+
+  /// No description provided for @kioskPaidClosingIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen closes in {seconds} s'**
+  String kioskPaidClosingIn(int seconds);
+
+  /// No description provided for @kioskPaidResetTimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Give me more time'**
+  String get kioskPaidResetTimer;
+
+  /// No description provided for @kioskPaidNewOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'New Order'**
+  String get kioskPaidNewOrder;
 }
 
 class _AppLocalizationsDelegate

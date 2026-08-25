@@ -10,6 +10,7 @@ import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
+import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
 import 'simulator_settings_screen.dart';
 
@@ -76,6 +77,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tapCount++;
     if (_tapCount >= 10 && !_devUnlocked) {
       setState(() => _devUnlocked = true);
+      if (AppConfig.simulatorAvailable) {
+        context.read<SimulatorService>().showDevTools();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Developer tools unlocked')),
       );
@@ -116,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _saveStoreId() {
+  Future<void> _saveStoreId() async {
     final parsed = int.tryParse(_storeId.text.trim());
     if (parsed == null || parsed <= 0) {
       setState(() => _storeIdError = 'Store ID must be a positive number.');
@@ -124,16 +128,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _storeIdError = null);
     final flow = context.read<OrderFlowController>();
+    final api  = context.read<ApiClient>();
     final hadItems = flow.cart.isNotEmpty;
-    storeConfigService.setStoreId(parsed);
-    // Cart items are scoped to the old store's products — clear on store switch
-    // to prevent 409s when the new store's scope chain differs.
+
+    try {
+      // If logged in, update the backend session so store-scoped APIs use the
+      // new store immediately — not just after the next login.
+      if (authService.isLoggedIn) {
+        await authService.selectStore(api, parsed);
+      } else {
+        storeConfigService.setStoreId(parsed);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Store update failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
     if (hadItems) flow.clearCart();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(hadItems
-          ? 'Store updated — cart cleared (items were scoped to old store).'
-          : 'Store updated.'),
-    ));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(hadItems
+            ? 'Store updated — cart cleared (items were scoped to old store).'
+            : 'Store updated.'),
+      ));
+    }
   }
 
   Future<void> _register() async {

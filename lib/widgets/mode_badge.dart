@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config/app_config.dart';
 import '../state/browsing_mode_service.dart';
+import '../state/simulator_service.dart';
 
-/// Small, always-visible indicator of the current browsing mode. Stacked
-/// on every route in app_router.dart — not just screens that use
-/// WahaAppBar, since Cart/Checkout/Pay/Success/Settings/Profile all have
-/// their own plain AppBars. Exists specifically so "which mode is this
-/// running in" is answerable by looking at the screen, not by opening
-/// Settings — bottom-left, away from the simulator cluster's bottom-right
-/// spot and clear of every screen's own AppBar.
+/// Small indicator of the current browsing mode. Stacked on every route in
+/// app_router.dart. Bottom-left, away from the simulator cluster's bottom-right.
+/// Hidden when dev tools are hidden (simulator eye-off button or startup default).
+/// Tap 10 times anywhere on the landing page background to reveal.
 class ModeBadge extends StatelessWidget {
   const ModeBadge({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final bool hidden = AppConfig.simulatorAvailable &&
+        context.watch<SimulatorService>().devToolsHidden;
+
+    if (hidden) return const Positioned(bottom: 0, left: 0, child: SizedBox.shrink());
+
     final mode = context.watch<BrowsingModeService>().mode;
     final (label, color) = switch (mode) {
       BrowsingMode.normal => ('NORMAL', Colors.blueGrey),

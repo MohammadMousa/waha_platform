@@ -41,7 +41,7 @@ class AuthService extends ChangeNotifier {
         : null;
     final effectiveDefault = defaultFromProps ?? session.defaultStoreId;
     if (storeConfigService.storeId == null && effectiveDefault != null) {
-      storeConfigService.setStoreId(effectiveDefault);
+      storeConfigService.setStoreId(effectiveDefault, persist: false);
     }
 
     // Read app name from properties and store it for the UI.
@@ -135,56 +135,57 @@ class AuthService extends ChangeNotifier {
         token = cachedToken;
         _applySession(session);
         notifyListeners();
-        // _applySession already applies server defaultStoreId if storeConfigService
-        // is unset — no need to call resolveDefaultStore separately here.
-        return;
+        // Fall through to resolveDefaultStore below — _applySession sets
+        // storeId from the session but never sets storeCurrency (it's not in
+        // the auth response). Without resolveDefaultStore, currency stays null
+        // after every restart for logged-in users and the cart shows no symbol.
       } on UnauthorizedException {
         // Falls through to re-authenticate with cached credentials.
       } catch (_) {
-        // Network/timeout — keep token rather than discarding a
-        // possibly-still-valid session over a transient problem.
+        // Network/timeout — keep token but still resolve currency if possible.
         token = cachedToken;
         notifyListeners();
-        return;
       }
     }
 
-    if (cachedUsername != null && cachedPassword != null) {
+    if (token == null && cachedUsername != null && cachedPassword != null) {
       try {
         await login(api, cachedUsername, cachedPassword);
-        return;
+        // Fall through to resolveDefaultStore — login() doesn't set currency.
       } catch (_) {
         await LocalPrefs.clearAuthToken();
         await LocalPrefs.clearAuthCredentials();
       }
     }
 
-    if (mode == BrowsingMode.shopping) {
+    if (token == null && mode == BrowsingMode.shopping) {
       try {
         await loginAsGuest(api);
-        return;
       } catch (_) {
         // Backend unreachable — stay logged out, surface error at checkout.
       }
     }
 
-    // Normal / Kiosk staying anonymous — ensure a store is configured so
-    // browse/scan work without needing the user to pick one manually.
+    // Always ensure store currency is resolved — it's in-memory only and
+    // lost on every restart regardless of auth state.
     await resolveDefaultStore(api);
   }
 
-  /// Fetches the server's default store and sets it locally if no store is
-  /// currently configured. Safe to call any time — no-op if already set.
-  /// Used for anonymous users after logout and on first startup.
+  /// Fetches the server's default store list and resolves currency in-memory.
+  /// Prefers the store already selected (from LocalPrefs or session) so it
+  /// doesn't overwrite the user's configured default. Never writes to LocalPrefs.
   Future<void> resolveDefaultStore(ApiClient api) async {
-    // Always fetch even if storeId is known — currency may be null after restart.
-    if (storeConfigService.storeId != null &&
-        storeConfigService.storeCurrency != null) return;
+    if (storeConfigService.storeCurrency != null) return;
     try {
       final stores = await api.getStores();
       if (stores.isNotEmpty) {
-        final s = stores.first;
-        storeConfigService.setStore(s.id, name: s.name, currency: s.currency);
+        final currentId = storeConfigService.storeId;
+        final candidates =
+            currentId != null ? stores.where((s) => s.id == currentId) : null;
+        final s = (candidates != null && candidates.isNotEmpty)
+            ? candidates.first
+            : stores.first;
+        storeConfigService.applySessionStore(s.id, name: s.name, currency: s.currency);
       }
     } catch (_) {
       // Non-fatal — user hits StorePicker if they try to browse with no store.

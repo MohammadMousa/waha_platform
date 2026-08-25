@@ -43,10 +43,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   int _pollAttempts = 0;
   static const _maxPollAttempts = 150; // ~5 min at 2s
 
-  // Kiosk post-payment countdown
-  Timer? _kioskTimer;
-  int _kioskCountdown = 15;
-  bool _showingKioskQr = false;
 
   @override
   void initState() {
@@ -57,7 +53,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
-    _kioskTimer?.cancel();
     super.dispose();
   }
 
@@ -107,26 +102,21 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   void _onPaid(WahaOrder order) {
     _order = order;
-    final isKiosk = browsingModeService.mode == BrowsingMode.kiosk;
-    if (isKiosk) {
-      setState(() {
-        _phase = _Phase.paid;
-        _showingKioskQr = true;
-        _kioskCountdown = 15;
+    setState(() => _phase = _Phase.paid);
+    if (browsingModeService.mode == BrowsingMode.kiosk) {
+      // Delay one frame so the Scaffold beneath the dialog is fully built.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          barrierColor: Colors.black87,
+          builder: (_) => _KioskPaidDialog(
+            order: order,
+            onNewOrder: _resetAndGoHome,
+          ),
+        );
       });
-      _kioskTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (!mounted) {
-          t.cancel();
-          return;
-        }
-        setState(() => _kioskCountdown--);
-        if (_kioskCountdown <= 0) {
-          t.cancel();
-          _resetAndGoHome();
-        }
-      });
-    } else {
-      setState(() => _phase = _Phase.paid);
     }
   }
 
@@ -400,17 +390,24 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.invoiceTitle),
-        leading: _phase == _Phase.paid
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.of(context).maybePop(),
-              ),
-      ),
-      body: switch (_phase) {
+    // Block back only in kiosk mode after payment — in normal mode the back
+    // button must always work, even when viewing a previously-paid invoice.
+    final bool blockBack =
+        _phase == _Phase.paid && browsingModeService.mode == BrowsingMode.kiosk;
+
+    return PopScope(
+      canPop: !blockBack,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(l10n.invoiceTitle),
+          leading: blockBack
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+        ),
+        body: switch (_phase) {
         _Phase.loading => _error != null
             ? _buildError(l10n)
             : const Center(child: CircularProgressIndicator()),
@@ -421,6 +418,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         _Phase.paid => _buildPaid(l10n),
         _Phase.cancelled => _buildCancelled(l10n),
       },
+      ),
     );
   }
 
@@ -697,40 +695,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             const SizedBox(height: 16),
             _CollapsibleItems(order: order, currency: currency, l10n: l10n),
 
-            // Kiosk: QR + countdown
-            if (_showingKioskQr && order.invoiceUrl != null) ...[
-              const SizedBox(height: 24),
-              Card(
-                elevation: 0,
-                color: scheme.primaryContainer.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      QrImageView(
-                        data: order.invoiceUrl!,
-                        version: QrVersions.auto,
-                        size: 160,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(l10n.invoiceQrHint,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: scheme.outline)),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${l10n.invoiceClosingSoon} $_kioskCountdown s',
-                        style: TextStyle(
-                          color: scheme.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ],
 
           const SizedBox(height: 24),
@@ -743,16 +707,221 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           ),
           if (order != null) ...[
             const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.share_outlined),
-                label: Text(l10n.shareInvoice),
-                onPressed: () => _shareInvoice(order),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.share_outlined),
+                    label: Text(l10n.shareInvoice),
+                    onPressed: () => _shareInvoice(order),
+                  ),
+                ),
+                if (browsingModeService.mode == BrowsingMode.normal &&
+                    order.invoiceUrl != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.download_outlined),
+                      label: Text(l10n.invoiceDownloadPdf),
+                      onPressed: () async {
+                        final lang = localeService.locale.languageCode;
+                        final pdfUri = Uri.parse(
+                            '${order.invoiceUrl}/pdf?lang=$lang');
+                        await launchUrl(pdfUri,
+                            mode: LaunchMode.externalApplication);
+                      },
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ── Kiosk paid dialog ────────────────────────────────────────────────────────
+// Blocking full-screen overlay shown immediately after payment in kiosk mode.
+// The customer scans the QR to get their e-invoice. Timer auto-resets to home.
+// "Give me more time" restarts the countdown. Back button is disabled.
+
+class _KioskPaidDialog extends StatefulWidget {
+  final WahaOrder order;
+  final VoidCallback onNewOrder;
+
+  const _KioskPaidDialog({required this.order, required this.onNewOrder});
+
+  @override
+  State<_KioskPaidDialog> createState() => _KioskPaidDialogState();
+}
+
+class _KioskPaidDialogState extends State<_KioskPaidDialog> {
+  late int _secondsLeft;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _secondsLeft = kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds;
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _secondsLeft--);
+      if (_secondsLeft <= 0) {
+        _timer?.cancel();
+        _doNewOrder();
+      }
+    });
+  }
+
+  void _resetTimer() {
+    setState(() {
+      _secondsLeft = kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds;
+    });
+    _startTimer();
+  }
+
+  void _doNewOrder() {
+    _timer?.cancel();
+    if (mounted) Navigator.of(context).pop();
+    widget.onNewOrder();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    final url = widget.order.invoiceUrl;
+
+    return PopScope(
+      canPop: false,
+      child: Dialog.fullscreen(
+        backgroundColor: Colors.black87,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // PAID stamp
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.green.shade600,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.4),
+                        blurRadius: 32,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.check_rounded,
+                      color: Colors.white, size: 62),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.kioskPaidTitle,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // QR section
+                if (url != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: QrImageView(
+                      data: url,
+                      version: QrVersions.auto,
+                      size: 200,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.kioskPaidScanHint,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70, fontSize: 15),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+
+                // Countdown
+                Text(
+                  l10n.kioskPaidClosingIn(_secondsLeft),
+                  style: TextStyle(
+                    color: _secondsLeft <= 5
+                        ? Colors.red.shade300
+                        : Colors.white54,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: const BorderSide(color: Colors.white30),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: _resetTimer,
+                        child: Text(l10n.kioskPaidResetTimer),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: scheme.primary,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: _doNewOrder,
+                        child: Text(
+                          l10n.kioskPaidNewOrder,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

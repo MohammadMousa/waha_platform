@@ -30,6 +30,9 @@ class SimulatorOverlay extends StatelessWidget {
     if (!AppConfig.simulatorAvailable) return const SizedBox.shrink();
 
     final sim = context.watch<SimulatorService>();
+    // hideDevTools() hides everything — secret gesture on mode badge restores.
+    if (sim.devToolsHidden) return const SizedBox.shrink();
+
     if (!sim.clusterVisible) {
       return Positioned(
         bottom: 16,
@@ -50,7 +53,12 @@ class SimulatorOverlay extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _IconBtn(icon: Icons.close, tooltip: 'Close', onTap: sim.hideCluster),
+              _IconBtn(icon: Icons.close, tooltip: 'Collapse', onTap: sim.hideCluster),
+              _IconBtn(
+                icon: Icons.visibility_off_outlined,
+                tooltip: 'Hide all dev tools\n(5-tap badge to restore)',
+                onTap: sim.hideDevTools,
+              ),
               _IconBtn(
                 icon: Icons.home,
                 tooltip: 'Home',

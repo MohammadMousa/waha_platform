@@ -200,6 +200,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storePickerIsDefault => 'Default';
 
   @override
+  String get storePickerCurrentStore => 'Current';
+
+  @override
+  String get storePickerRefreshStore => 'Refresh Store';
+
+  @override
+  String get storePickerRefreshed => 'Store refreshed';
+
+  @override
   String get profileLoggedInPrefix => 'Logged in as';
 
   @override
@@ -373,4 +382,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get perUnit => 'per unit';
+
+  @override
+  String get kioskIdleTitle => 'Are you still there?';
+
+  @override
+  String kioskIdleBeforeBody(int seconds) {
+    return 'Your session will reset in $seconds seconds.';
+  }
+
+  @override
+  String kioskIdleAfterBody(int seconds) {
+    return 'This screen will close in $seconds seconds.';
+  }
+
+  @override
+  String get kioskIdleContinue => 'Continue';
+
+  @override
+  String get kioskIdleNewOrder => 'Start New Order';
+
+  @override
+  String get kioskPaidTitle => 'Payment Received';
+
+  @override
+  String get kioskPaidScanHint => 'Scan to open your e-invoice';
+
+  @override
+  String kioskPaidClosingIn(int seconds) {
+    return 'Screen closes in $seconds s';
+  }
+
+  @override
+  String get kioskPaidResetTimer => 'Give me more time';
+
+  @override
+  String get kioskPaidNewOrder => 'New Order';
 }

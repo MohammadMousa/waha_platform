@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
@@ -35,6 +37,10 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   _IdleContext get _ctx =>
       widget.afterInvoice ? _IdleContext.afterInvoice : _IdleContext.beforeInvoice;
 
+  // Once the order is paid, _KioskPaidDialog owns the countdown.
+  // The idle guard must not interfere with it.
+  bool get _isPaid => _flow.order?.status == 'PAID';
+
   Duration get _warnAfter => _ctx == _IdleContext.afterInvoice
       ? kioskTimerConfig.afterInvoiceIdleWarningAfter
       : kioskTimerConfig.beforeInvoiceIdleWarningAfter;
@@ -44,18 +50,31 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
     super.initState();
     _flow = context.read<OrderFlowController>();
     _flow.addListener(_onActivity);
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
     _startIdleTimer();
   }
 
   @override
   void dispose() {
     _flow.removeListener(_onActivity);
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     _idleTimer?.cancel();
     super.dispose();
   }
 
+  // HID barcode scanner generates key events, not pointer events.
+  // Return false to not consume the event — just observe it.
+  bool _onKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) _onActivity();
+    return false;
+  }
+
   void _onActivity() {
-    if (_warningShowing) return; // don't silently swallow the warning
+    if (_warningShowing) return;
+    if (_isPaid) {
+      _idleTimer?.cancel();
+      return;
+    }
     _startIdleTimer();
   }
 
@@ -66,6 +85,10 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
 
   Future<void> _showWarning() async {
     if (!mounted || _warningShowing) return;
+    if (_isPaid) {
+      _idleTimer?.cancel();
+      return;
+    }
     setState(() => _warningShowing = true);
 
     final continued = await showDialog<bool>(
@@ -84,8 +107,15 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
       // action either way: reset and go Home. No previous-customer state
       // should carry into whatever loads next.
       _flow.reset();
-      Navigator.of(context)
-          .pushNamedAndRemoveUntil(Routes.landing, (route) => false);
+      if (!mounted) return;
+      final nav = Navigator.of(context);
+      // pushNamedAndRemoveUntil with (route)=>false removes ALL routes before
+      // pushing the new one. If we are already at the root (canPop==false),
+      // Flutter's history is a single entry and removing it triggers the
+      // '_history.isNotEmpty' assertion. Skip navigation — we're already home.
+      if (nav.canPop()) {
+        nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
+      }
     }
   }
 
@@ -94,6 +124,7 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _onActivity(),
+      onPointerMove: (_) => _onActivity(),
       child: widget.child,
     );
   }
@@ -136,22 +167,23 @@ class _StillThereDialogState extends State<_StillThereDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final isAfter = widget.context == _IdleContext.afterInvoice;
     return AlertDialog(
-      title: const Text('Are you still there?'),
+      title: Text(l10n.kioskIdleTitle),
       content: Text(
         isAfter
-            ? 'This screen will close in $_secondsLeft seconds.'
-            : 'Your session will reset in $_secondsLeft seconds.',
+            ? l10n.kioskIdleAfterBody(_secondsLeft)
+            : l10n.kioskIdleBeforeBody(_secondsLeft),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Start New Order'),
+          child: Text(l10n.kioskIdleNewOrder),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Continue'),
+          child: Text(l10n.kioskIdleContinue),
         ),
       ],
     );

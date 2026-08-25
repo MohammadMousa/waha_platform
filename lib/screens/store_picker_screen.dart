@@ -6,8 +6,10 @@ import '../models/store.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
+import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
 import '../state/order_flow_controller.dart';
+import '../state/permission_service.dart';
 import '../state/store_config_service.dart';
 
 class StorePickerScreen extends StatefulWidget {
@@ -24,10 +26,14 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
   @override
   void initState() {
     super.initState();
-    _future = context.read<ApiClient>().getStores();
+    final token = authService.token;
+    if (permissionService.can('MANAGE_STORES') && token != null) {
+      _future = context.read<ApiClient>().getAdminStores(token);
+    } else {
+      _future = context.read<ApiClient>().getStores();
+    }
   }
 
-  /// Back button only when user already has a store in this session.
   bool get _hasCurrentStore =>
       (authService.isLoggedIn && authService.hasSelectedStore) ||
       (!authService.isLoggedIn && storeConfigService.storeId != null);
@@ -37,20 +43,19 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
     if (flow.cart.isNotEmpty) flow.clearCart();
   }
 
-  /// Proceed to this store: sets session or local config, then navigates.
-  Future<void> _goToStore(Store store) async {
+  /// Switches to a different store — updates session + in-memory config, then
+  /// navigates home. Never writes to LocalPrefs (default stays unchanged).
+  Future<void> _goToStore(Store store, String languageCode) async {
     if (_busy) return;
     setState(() => _busy = true);
     final hadItems = context.read<OrderFlowController>().cart.isNotEmpty;
     final api = context.read<ApiClient>();
-    final langCode = Localizations.localeOf(context).languageCode;
     try {
       if (authService.isLoggedIn) {
         await authService.selectStore(api, store.id);
       }
-      // Always persist name/currency locally so the profile sheet can display them.
-      storeConfigService.setStore(store.id,
-          name: store.label(langCode), currency: store.currency);
+      storeConfigService.applySessionStore(store.id,
+          name: store.label(languageCode), currency: store.currency);
       if (hadItems) _clearCartIfNeeded();
       if (mounted) {
         final returnTo = ModalRoute.of(context)?.settings.arguments as String?;
@@ -67,11 +72,44 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
     }
   }
 
-  /// Set as local default without navigating.
-  void _makeDefault(Store store, String languageCode, AppLocalizations l10n) {
-    storeConfigService.setStore(store.id,
-        name: store.label(languageCode), currency: store.currency);
-    setState(() {}); // refresh star icons
+  /// Refreshes the current store — re-applies session + in-memory config
+  /// without navigating away. Useful for picking up new products/roles.
+  Future<void> _refreshStore(
+      Store store, String languageCode, AppLocalizations l10n) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final api = context.read<ApiClient>();
+    try {
+      if (authService.isLoggedIn) {
+        await authService.selectStore(api, store.id);
+      }
+      storeConfigService.applySessionStore(store.id,
+          name: store.label(languageCode), currency: store.currency);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.storePickerRefreshed),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Persists the selected store as the local default. Does NOT change the
+  /// active session store or navigate anywhere.
+  Future<void> _makeDefault(
+      Store store, String languageCode, AppLocalizations l10n) async {
+    await LocalPrefs.setStoreId(store.id);
+    if (!mounted) return;
+    setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -112,10 +150,10 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                 itemCount: stores.length,
                 itemBuilder: (context, i) {
                   final store = stores[i];
-                  final isDefault = storeConfigService.storeId == store.id;
-                  final isSessionStore = authService.isLoggedIn &&
-                      authService.sessionStoreId == store.id;
-                  final isCurrentStore = isDefault || isSessionStore;
+                  // in-memory current store (set by applySessionStore on switch/refresh)
+                  final isCurrentStore = storeConfigService.storeId == store.id;
+                  // explicitly persisted local default (set by "Make Default" only)
+                  final isDefault = LocalPrefs.storeId == store.id;
 
                   return Card(
                     elevation: 2,
@@ -127,7 +165,7 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Store header row
+                          // Header row: icon + name + status badges
                           Row(
                             children: [
                               Container(
@@ -150,26 +188,33 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                                 ),
                               ),
                               if (isCurrentStore)
+                                Icon(Icons.check_circle_outline_rounded,
+                                    color: scheme.primary, size: 20),
+                              if (isDefault) ...[
+                                if (isCurrentStore) const SizedBox(width: 6),
                                 Icon(Icons.star_rounded,
-                                    color: scheme.primary, size: 22),
+                                    color: Colors.amber.shade600, size: 20),
+                              ],
                             ],
                           ),
                           const Divider(height: 20),
                           // Actions row
                           Row(
                             children: [
-                              // Default indicator or Make Default
-                              if (isCurrentStore)
+                              // Left: default status or make-default button
+                              if (isDefault)
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.check,
-                                        size: 16, color: scheme.outline),
+                                    Icon(Icons.star_rounded,
+                                        size: 15,
+                                        color: Colors.amber.shade600),
                                     const SizedBox(width: 4),
                                     Text(l10n.storePickerIsDefault,
                                         style: TextStyle(
-                                            color: scheme.outline,
-                                            fontSize: 13)),
+                                            color: Colors.amber.shade700,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500)),
                                   ],
                                 )
                               else
@@ -189,21 +234,43 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                                           store, languageCode, l10n),
                                 ),
                               const Spacer(),
-                              // Go to Store button
-                              FilledButton.icon(
-                                icon: const Icon(Icons.arrow_forward, size: 16),
-                                label: Text(l10n.storePickerGoToStore),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: scheme.primary,
-                                  foregroundColor: scheme.onPrimary,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20)),
+                              // Right: refresh if current, go-to if not
+                              if (isCurrentStore)
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: Text(l10n.storePickerRefreshStore),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: scheme.primary,
+                                    side: BorderSide(color: scheme.primary),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 10),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(20)),
+                                  ),
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _refreshStore(
+                                          store, languageCode, l10n),
+                                )
+                              else
+                                FilledButton.icon(
+                                  icon: const Icon(Icons.arrow_forward,
+                                      size: 16),
+                                  label: Text(l10n.storePickerGoToStore),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: scheme.primary,
+                                    foregroundColor: scheme.onPrimary,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 10),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(20)),
+                                  ),
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _goToStore(store, languageCode),
                                 ),
-                                onPressed:
-                                    _busy ? null : () => _goToStore(store),
-                              ),
                             ],
                           ),
                         ],

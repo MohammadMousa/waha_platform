@@ -400,9 +400,14 @@ class _QuickActionCard extends StatelessWidget {
 
 // ── Kiosk / Shopping mode: scan-first landing ─────────────────────────────────
 
-class _ScanLanding extends StatelessWidget {
+class _ScanLanding extends StatefulWidget {
   const _ScanLanding();
 
+  @override
+  State<_ScanLanding> createState() => _ScanLandingState();
+}
+
+class _ScanLandingState extends State<_ScanLanding> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -410,8 +415,16 @@ class _ScanLanding extends StatelessWidget {
     final isShopping = mode == BrowsingMode.shopping;
     final l10n = AppLocalizations.of(context)!;
 
+    // Resolve app title from server — same logic as _NormalLanding.
+    final storeConfig = context.watch<StoreConfigService>();
+    final lang = localeService.locale.languageCode;
+    final serverName = storeConfig.appName != null
+        ? localeName(storeConfig.appName!, lang)
+        : '';
+    final appTitle = serverName.isNotEmpty ? serverName : l10n.appTitle;
+
     return Scaffold(
-      appBar: WahaAppBar(title: l10n.appTitle),
+      appBar: WahaAppBar(title: appTitle),
       bottomNavigationBar: const WahaBottomNav(current: BottomNavTab.home),
       body: Stack(
         children: [

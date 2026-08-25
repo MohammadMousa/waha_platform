@@ -200,6 +200,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get storePickerIsDefault => 'افتراضي';
 
   @override
+  String get storePickerCurrentStore => 'الحالي';
+
+  @override
+  String get storePickerRefreshStore => 'تحديث المتجر';
+
+  @override
+  String get storePickerRefreshed => 'تم تحديث المتجر';
+
+  @override
   String get profileLoggedInPrefix => 'مسجّل الدخول باسم';
 
   @override
@@ -372,4 +381,40 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get perUnit => 'للوحدة';
+
+  @override
+  String get kioskIdleTitle => 'هل لا تزال هنا؟';
+
+  @override
+  String kioskIdleBeforeBody(int seconds) {
+    return 'ستُعاد تهيئة الجلسة خلال $seconds ثوانٍ.';
+  }
+
+  @override
+  String kioskIdleAfterBody(int seconds) {
+    return 'ستُغلق هذه الشاشة خلال $seconds ثوانٍ.';
+  }
+
+  @override
+  String get kioskIdleContinue => 'متابعة';
+
+  @override
+  String get kioskIdleNewOrder => 'بدء طلب جديد';
+
+  @override
+  String get kioskPaidTitle => 'تم استلام الدفع';
+
+  @override
+  String get kioskPaidScanHint => 'امسح لفتح الفاتورة الإلكترونية';
+
+  @override
+  String kioskPaidClosingIn(int seconds) {
+    return 'تغلق الشاشة خلال $seconds ث';
+  }
+
+  @override
+  String get kioskPaidResetTimer => 'أعطني مزيداً من الوقت';
+
+  @override
+  String get kioskPaidNewOrder => 'طلب جديد';
 }

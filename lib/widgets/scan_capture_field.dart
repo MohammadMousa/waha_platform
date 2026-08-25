@@ -77,6 +77,12 @@ class _ScanCaptureFieldState extends State<ScanCaptureField> {
       controller: _controller,
       focusNode: _focusNode,
       autofocus: true,
+      // keyboardType.none keeps the hardware-scanner path alive (HID events
+      // still land in the TextField) while telling Android not to pop up the
+      // soft keyboard. Without this, Android raises the keyboard the moment
+      // the invisible field receives focus, causing a 60px overflow on the
+      // landing page.
+      keyboardType: widget.visible ? null : TextInputType.none,
       decoration: widget.visible
           ? const InputDecoration(
               labelText: 'Scan or enter barcode',

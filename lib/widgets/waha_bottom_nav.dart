@@ -91,7 +91,15 @@ class WahaBottomNav extends StatelessWidget {
           BottomNavTab.cart => Routes.cart,
           BottomNavTab.categories => Routes.categories,
         };
-        Navigator.of(context).pushNamedAndRemoveUntil(route, (r) => false);
+        if (route == Routes.landing) {
+          // Pop to root without pushing another landing on top.
+          Navigator.of(context).popUntil((r) => r.isFirst);
+        } else {
+          // Keep landing as the bottom of the stack so back-button always
+          // has somewhere to go — only remove routes above landing.
+          Navigator.of(context).pushNamedAndRemoveUntil(
+              route, ModalRoute.withName(Routes.landing));
+        }
       },
       items: tabs.map((t) => t.$2).toList(),
       type: BottomNavigationBarType.fixed,

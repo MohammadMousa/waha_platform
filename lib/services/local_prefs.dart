@@ -99,4 +99,10 @@ class LocalPrefs {
     await _p.setInt(_kAfterWarn, afterWarnSeconds);
     await _p.setInt(_kAfterCountdown, afterCountdownSeconds);
   }
+
+  // Dev-tools cluster visibility. Defaults to false (hidden) when not set.
+  static const _kSimDevToolsVisible = 'waha.sim_dev_tools_visible';
+  static bool get simDevToolsVisible => _p.getBool(_kSimDevToolsVisible) ?? false;
+  static Future<void> setSimDevToolsVisible(bool value) =>
+      _p.setBool(_kSimDevToolsVisible, value);
 }

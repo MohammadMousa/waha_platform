@@ -75,6 +75,9 @@
   "storePickerGoToStore": "الذهاب للمتجر",
   "storePickerMakeDefault": "تعيين افتراضي",
   "storePickerIsDefault": "افتراضي",
+  "storePickerCurrentStore": "الحالي",
+  "storePickerRefreshStore": "تحديث المتجر",
+  "storePickerRefreshed": "تم تحديث المتجر",
 
   "profileLoggedInPrefix": "مسجّل الدخول باسم",
   "profileGuestMessage": "غير مسجّل الدخول — الشراء كضيف لا يزال يعمل.",
@@ -151,5 +154,32 @@
   "cartClearConfirm": "مسح",
   "cartClearCancel": "إلغاء",
 
-  "perUnit": "للوحدة"
+  "perUnit": "للوحدة",
+
+  "kioskIdleTitle": "هل لا تزال هنا؟",
+  "kioskIdleBeforeBody": "ستُعاد تهيئة الجلسة خلال {seconds} ثوانٍ.",
+  "@kioskIdleBeforeBody": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "kioskIdleAfterBody": "ستُغلق هذه الشاشة خلال {seconds} ثوانٍ.",
+  "@kioskIdleAfterBody": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "kioskIdleContinue": "متابعة",
+  "kioskIdleNewOrder": "بدء طلب جديد",
+
+  "kioskPaidTitle": "تم استلام الدفع",
+  "kioskPaidScanHint": "امسح لفتح الفاتورة الإلكترونية",
+  "kioskPaidClosingIn": "تغلق الشاشة خلال {seconds} ث",
+  "@kioskPaidClosingIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "kioskPaidResetTimer": "أعطني مزيداً من الوقت",
+  "kioskPaidNewOrder": "طلب جديد"
 }

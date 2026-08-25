@@ -1,19 +1,50 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config/app_config.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/quote.dart';
 import '../router/app_router.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
+import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/scan_actions.dart';
 import '../widgets/cart_line_tile.dart';
 import '../widgets/checkout_bar.dart';
 import '../widgets/waha_bottom_nav.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  // Secret dev-tools toggle: 10 taps anywhere on the cart body within 3 s.
+  int _tapCount = 0;
+  Timer? _tapTimer;
+
+  void _onBodyTap() {
+    if (!AppConfig.simulatorAvailable) return;
+    _tapTimer?.cancel();
+    _tapCount++;
+    if (_tapCount >= 10) {
+      _tapCount = 0;
+      context.read<SimulatorService>().showDevTools();
+      return;
+    }
+    _tapTimer = Timer(const Duration(seconds: 3), () => _tapCount = 0);
+  }
+
+  @override
+  void dispose() {
+    _tapTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +90,10 @@ class CartScreen extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: const WahaBottomNav(current: BottomNavTab.cart),
-      body: Column(
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _onBodyTap,
+        child: Column(
         children: [
           if (flow.lastError != null)
             Container(
@@ -154,6 +188,7 @@ class CartScreen extends StatelessWidget {
             checkoutLabel: l10n.checkoutButton,
           ),
         ],
+        ),
       ),
     );
   }

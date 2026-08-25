@@ -22,6 +22,8 @@ class _OdooAdminScreenState extends State<OdooAdminScreen> {
 
   bool _loading       = false;
   bool _configured    = false;
+  bool _inherited     = false; // true = this store inherits the integration from a parent
+  int? _ownerStoreId;
   String? _baseUrl;
   String? _username;
   String? _customerOverride;
@@ -40,6 +42,8 @@ class _OdooAdminScreenState extends State<OdooAdminScreen> {
     if (_loadedStoreId != null && _loadedStoreId != currentStoreId) {
       setState(() {
         _configured       = false;
+        _inherited        = false;
+        _ownerStoreId     = null;
         _baseUrl          = null;
         _username         = null;
         _customerOverride = null;
@@ -92,6 +96,8 @@ class _OdooAdminScreenState extends State<OdooAdminScreen> {
       final status = await context.read<ApiClient>().odooStatus(token, storeId: storeId);
       setState(() {
         _configured       = status['configured'] as bool? ?? false;
+        _inherited        = status['inherited']  as bool? ?? false;
+        _ownerStoreId     = status['ownerStoreId'] as int?;
         _baseUrl          = status['baseUrl']           as String?;
         _username         = status['username']          as String?;
         _customerOverride = status['customerOverride']  as String?;
@@ -198,7 +204,12 @@ class _OdooAdminScreenState extends State<OdooAdminScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   // ── Status banner ──────────────────────────────────────────
-                  _StatusCard(configured: _configured, baseUrl: _baseUrl),
+                  _StatusCard(
+                    configured: _configured,
+                    inherited: _inherited,
+                    ownerStoreId: _ownerStoreId,
+                    baseUrl: _baseUrl,
+                  ),
                   const SizedBox(height: 20),
 
                   // ── Error / success ────────────────────────────────────────
@@ -210,105 +221,106 @@ class _OdooAdminScreenState extends State<OdooAdminScreen> {
                             textColor: Colors.green.shade900),
                   if (_error != null || _successMsg != null) const SizedBox(height: 12),
 
-                  // ── Configure connection ────────────────────────────────────
-                  Text('Connection', style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        TextFormField(
-                          controller: _urlCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Odoo Base URL',
-                            hintText: 'https://mycompany.odoo.com',
-                            prefixIcon: Icon(Icons.link),
+                  // ── Configure + catalog: owner only ────────────────────────
+                  if (!_inherited) ...[
+                    Text('Connection', style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _urlCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Odoo Base URL',
+                              hintText: 'https://mycompany.odoo.com',
+                              prefixIcon: Icon(Icons.link),
+                            ),
+                            keyboardType: TextInputType.url,
+                            validator: (v) =>
+                                (v == null || v.trim().isEmpty) ? 'Required' : null,
                           ),
-                          keyboardType: TextInputType.url,
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _userCtrl,
-                          decoration: InputDecoration(
-                            labelText: _configured ? 'Odoo Username (leave blank to keep current)' : 'Odoo Username',
-                            hintText: 'admin@mycompany.com',
-                            prefixIcon: const Icon(Icons.person_outline),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _userCtrl,
+                            decoration: InputDecoration(
+                              labelText: _configured ? 'Odoo Username (leave blank to keep current)' : 'Odoo Username',
+                              hintText: 'admin@mycompany.com',
+                              prefixIcon: const Icon(Icons.person_outline),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) {
+                              if (!_configured && (v == null || v.trim().isEmpty)) return 'Required';
+                              return null;
+                            },
                           ),
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (v) {
-                            if (!_configured && (v == null || v.trim().isEmpty)) return 'Required';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _keyCtrl,
-                          decoration: InputDecoration(
-                            labelText: _configured ? 'API Key (leave blank to keep current)' : 'API Key',
-                            prefixIcon: const Icon(Icons.key),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _keyCtrl,
+                            decoration: InputDecoration(
+                              labelText: _configured ? 'API Key (leave blank to keep current)' : 'API Key',
+                              prefixIcon: const Icon(Icons.key),
+                            ),
+                            obscureText: true,
+                            validator: (v) {
+                              if (!_configured && (v == null || v.trim().isEmpty)) return 'Required';
+                              return null;
+                            },
                           ),
-                          obscureText: true,
-                          validator: (v) {
-                            if (!_configured && (v == null || v.trim().isEmpty)) return 'Required';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _overrideCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Customer Name (Override, optional)',
-                            hintText: 'e.g. oasis.kiosks',
-                            prefixIcon: Icon(Icons.person_pin_outlined),
-                            helperText: 'All orders use this Odoo customer instead of device/user identity.',
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _overrideCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Customer Name (Override, optional)',
+                              hintText: 'e.g. oasis.kiosks',
+                              prefixIcon: Icon(Icons.person_pin_outlined),
+                              helperText: 'All orders use this Odoo customer instead of device/user identity.',
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            icon: _loading
-                                ? const SizedBox(width: 16, height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.save_outlined),
-                            label: const Text('Save Connection'),
-                            onPressed: _loading ? null : _save,
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              icon: _loading
+                                  ? const SizedBox(width: 16, height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.save_outlined),
+                              label: const Text('Save Connection'),
+                              onPressed: _loading ? null : _save,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 24),
+                    const Divider(),
+                    const SizedBox(height: 16),
 
-                  // ── Catalog pull ───────────────────────────────────────────
-                  Text('Catalog Sync', style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text('Pulls data from Odoo into Waha. Incremental after first run.',
-                      style: TextStyle(color: scheme.outline, fontSize: 13)),
-                  const SizedBox(height: 12),
+                    Text('Catalog Sync', style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text('Pulls data from Odoo into Waha. Incremental after first run.',
+                        style: TextStyle(color: scheme.outline, fontSize: 13)),
+                    const SizedBox(height: 12),
 
-                  _SyncRow(
-                    label: 'Categories',
-                    icon: Icons.category_outlined,
-                    lastSync: _lastCatSync,
-                    enabled: _configured && !_loading,
-                    onPull: _pullCategories,
-                  ),
-                  const SizedBox(height: 10),
-                  _SyncRow(
-                    label: 'Products',
-                    icon: Icons.inventory_2_outlined,
-                    lastSync: _lastProdSync,
-                    enabled: _configured && !_loading,
-                    onPull: _pullProducts,
-                  ),
+                    _SyncRow(
+                      label: 'Categories',
+                      icon: Icons.category_outlined,
+                      lastSync: _lastCatSync,
+                      enabled: _configured && !_loading,
+                      onPull: _pullCategories,
+                    ),
+                    const SizedBox(height: 10),
+                    _SyncRow(
+                      label: 'Products',
+                      icon: Icons.inventory_2_outlined,
+                      lastSync: _lastProdSync,
+                      enabled: _configured && !_loading,
+                      onPull: _pullProducts,
+                    ),
+                  ],
 
                   if (_queue != null) ...[
                     const SizedBox(height: 24),
@@ -347,37 +359,58 @@ class _OdooAdminScreenState extends State<OdooAdminScreen> {
 
 class _StatusCard extends StatelessWidget {
   final bool configured;
+  final bool inherited;
+  final int? ownerStoreId;
   final String? baseUrl;
-  const _StatusCard({required this.configured, this.baseUrl});
+  const _StatusCard({required this.configured, required this.inherited,
+                     this.ownerStoreId, this.baseUrl});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final Color bgColor = !configured
+        ? scheme.surfaceContainerHighest
+        : inherited
+            ? Colors.blue.shade50
+            : Colors.green.shade50;
+    final Color iconColor = !configured
+        ? scheme.outline
+        : inherited
+            ? Colors.blue.shade700
+            : Colors.green.shade700;
+    final String title = !configured
+        ? 'Not configured'
+        : inherited
+            ? 'Inherited from store $ownerStoreId'
+            : 'Connected';
+    final String? subtitle = inherited
+        ? 'Push orders only. Switch to the owner store to configure or pull catalog.'
+        : (baseUrl != null && baseUrl!.isNotEmpty ? baseUrl : null);
+    final IconData icon = !configured
+        ? Icons.radio_button_unchecked
+        : inherited
+            ? Icons.link_outlined
+            : Icons.check_circle_outline;
+
     return Card(
       elevation: 0,
-      color: configured ? Colors.green.shade50 : scheme.surfaceContainerHighest,
+      color: bgColor,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(
-              configured ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-              color: configured ? Colors.green.shade700 : scheme.outline,
-            ),
+            Icon(icon, color: iconColor),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    configured ? 'Connected' : 'Not configured',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: configured ? Colors.green.shade800 : scheme.onSurface,
-                    ),
-                  ),
-                  if (baseUrl != null && baseUrl!.isNotEmpty)
-                    Text(baseUrl!, style: TextStyle(fontSize: 12, color: scheme.outline)),
+                  Text(title, style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: iconColor,
+                  )),
+                  if (subtitle != null)
+                    Text(subtitle, style: TextStyle(fontSize: 12, color: scheme.outline)),
                 ],
               ),
             ),

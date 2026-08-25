@@ -75,6 +75,9 @@
   "storePickerGoToStore": "Go to Store",
   "storePickerMakeDefault": "Make Default",
   "storePickerIsDefault": "Default",
+  "storePickerCurrentStore": "Current",
+  "storePickerRefreshStore": "Refresh Store",
+  "storePickerRefreshed": "Store refreshed",
 
   "profileLoggedInPrefix": "Logged in as",
   "profileGuestMessage": "Not logged in — guest checkout still works.",
@@ -151,5 +154,32 @@
   "cartClearConfirm": "Clear",
   "cartClearCancel": "Cancel",
 
-  "perUnit": "per unit"
+  "perUnit": "per unit",
+
+  "kioskIdleTitle": "Are you still there?",
+  "kioskIdleBeforeBody": "Your session will reset in {seconds} seconds.",
+  "@kioskIdleBeforeBody": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "kioskIdleAfterBody": "This screen will close in {seconds} seconds.",
+  "@kioskIdleAfterBody": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "kioskIdleContinue": "Continue",
+  "kioskIdleNewOrder": "Start New Order",
+
+  "kioskPaidTitle": "Payment Received",
+  "kioskPaidScanHint": "Scan to open your e-invoice",
+  "kioskPaidClosingIn": "Screen closes in {seconds} s",
+  "@kioskPaidClosingIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "kioskPaidResetTimer": "Give me more time",
+  "kioskPaidNewOrder": "New Order"
 }

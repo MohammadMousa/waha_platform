@@ -35,6 +35,16 @@ class StoreConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Updates the active store in-memory only — never writes to LocalPrefs.
+  /// Use this for session switches and startup resolution; only "Make Default"
+  /// in the store picker should ever write to LocalPrefs.
+  void applySessionStore(int id, {String? name, String? currency}) {
+    _storeId = id;
+    if (name != null) _storeName = name;
+    if (currency != null) _storeCurrency = currency;
+    notifyListeners();
+  }
+
   void setAppName(Map<String, dynamic> nameMap) {
     _appName = nameMap;
     notifyListeners();

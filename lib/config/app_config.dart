@@ -6,10 +6,25 @@ import '../state/browsing_mode_service.dart';
 class AppConfig {
   AppConfig._();
 
+  /// ── Physical Android device dev switch ───────────────────────────────
+  /// `10.0.2.2` (the Android default below) is a NAT alias that only
+  /// resolves inside the Android *emulator* — it points nowhere on a real
+  /// phone. When testing on a real device (USB or wifi) against the
+  /// Docker backend running on this laptop, flip [_useLanBackendForDevice]
+  /// to `true` and point [_lanBackendUrl] at the laptop's current LAN IP
+  /// (`ip -4 addr show` → the wifi interface, e.g. wlp2s0) plus the
+  /// Docker-published port (8081 here, not the container-internal 8080).
+  /// Flip back to `false` before switching back to the emulator, and
+  /// don't commit this as `true` — it only affects `Platform.isAndroid`,
+  /// so web/desktop/emulator runs are untouched either way.
+  static const bool _useLanBackendForDevice = true;
+  static const String _lanBackendUrl = 'http://192.168.1.3:8081';
+
   /// Resolves in this order:
   /// 1. `--dart-define=API_BASE_URL=...` at build/run time (always wins —
   ///    this is how a real kiosk pointed at a LAN backend IP gets configured).
-  /// 2. Platform-sensible dev default, matching FRONTEND_CONTEXT.md.
+  /// 2. The dev switch above, Android only.
+  /// 3. Platform-sensible dev default, matching FRONTEND_CONTEXT.md.
   ///    Port 8081 — the backend's host-side port, distinct from the
   ///    container's own internal 8080; only matters for the URL callers
   ///    outside the container use.
@@ -20,7 +35,9 @@ class AppConfig {
     if (override.isNotEmpty) return override;
 
     if (kIsWeb) return 'http://localhost:8081';
-    if (Platform.isAndroid) return 'http://10.0.2.2:8081';
+    if (Platform.isAndroid) {
+      return _useLanBackendForDevice ? _lanBackendUrl : 'http://10.0.2.2:8081';
+    }
     // Desktop dev fallback (not a Phase 1 target, but harmless to have).
     return 'http://localhost:8081';
   }
