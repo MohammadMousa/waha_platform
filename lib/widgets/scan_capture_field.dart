@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/api_exceptions.dart';
+import '../services/scan_sound_service.dart';
 import '../state/order_flow_controller.dart';
 
 /// Captures barcode input from a hardware scanner acting as a keyboard
@@ -47,10 +48,16 @@ class _ScanCaptureFieldState extends State<ScanCaptureField> {
     final flow = context.read<OrderFlowController>();
     try {
       await flow.scanBarcode(barcode.trim());
+      ScanSoundService.playSuccess();
     } on ProductNotFoundException catch (e) {
+      ScanSoundService.playFailure();
       _reportError(e.message, isNotFound: true);
     } on ProductNotSellableException catch (e) {
+      ScanSoundService.playFailure();
       _reportError(e.message, isNotFound: false);
+    } catch (e) {
+      ScanSoundService.playFailure();
+      _reportError(e.toString().replaceFirst('Exception: ', ''), isNotFound: false);
     } finally {
       _controller.clear();
       _focusNode.requestFocus();

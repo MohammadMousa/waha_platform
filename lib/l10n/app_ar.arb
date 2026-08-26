@@ -181,5 +181,30 @@
     }
   },
   "kioskPaidResetTimer": "أعطني مزيداً من الوقت",
-  "kioskPaidNewOrder": "طلب جديد"
+  "kioskPaidNewOrder": "طلب جديد",
+
+  "invoiceDueLabel": "المستحق",
+  "adminPaymentMethods": "وسائل الدفع",
+  "adminPaymentMethodsHint": "تفعيل أو تعطيل وسائل الدفع لهذا المتجر.",
+  "adminPaymentMethodsSaving": "جارٍ الحفظ…",
+  "mobilePaymentScanHint": "امسح للدفع عبر هاتفك",
+  "mobilePaymentPolling": "في انتظار الدفع…",
+
+  "qrPayTitle": "امسح للدفع",
+  "qrPayInstruction": "امسح رمز الاستجابة السريعة بهاتفك لإتمام الدفع.",
+  "qrPayWaiting": "في انتظار الدفع…",
+  "qrPayExpired": "انتهت صلاحية رابط الدفع",
+  "qrPayExpiredBody": "انتهت صلاحية رمز الاستجابة السريعة. يرجى العودة والمحاولة مرة أخرى.",
+  "qrPayConfirmed": "تم تأكيد الدفع",
+  "qrPayCancel": "إلغاء",
+  "qrPayGoBack": "العودة",
+  "qrPayCancelConfirm": "إلغاء هذه العملية والعودة؟",
+  "qrPayCancelContinue": "الاستمرار في الانتظار",
+  "qrPayExpiresIn": "تنتهي خلال {minutes}:{seconds}",
+  "@qrPayExpiresIn": {
+    "placeholders": {
+      "minutes": { "type": "String" },
+      "seconds": { "type": "String" }
+    }
+  }
 }

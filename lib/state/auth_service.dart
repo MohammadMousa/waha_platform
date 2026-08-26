@@ -25,6 +25,16 @@ class AuthService extends ChangeNotifier {
   bool get isLoggedIn => token != null;
   bool get hasSelectedStore => sessionStoreId != null;
 
+  void _applyConfig(Map<String, String> config) {
+    final appNameJson = config['appName'];
+    if (appNameJson != null && appNameJson.isNotEmpty) {
+      try {
+        final nameMap = jsonDecode(appNameJson) as Map<String, dynamic>;
+        storeConfigService.setAppName(nameMap);
+      } catch (_) {}
+    }
+  }
+
   void _applySession(AuthSession session, {String? tokenOverride}) {
     if (tokenOverride != null) token = tokenOverride;
     userId = session.userId;
@@ -125,6 +135,10 @@ class AuthService extends ChangeNotifier {
   ///      Normal/Kiosk: stay logged out.
   ///   4. Always: if no store configured after auth, resolve from server default.
   Future<void> resolveStartupAuth(ApiClient api, BrowsingMode mode) async {
+    // Load public system config (appName, etc.) before any auth so the title
+    // shows immediately even in kiosk mode with no cached login.
+    _applyConfig(await api.getConfig());
+
     final cachedToken = LocalPrefs.authToken;
     final cachedUsername = LocalPrefs.authUsername;
     final cachedPassword = LocalPrefs.authPassword;

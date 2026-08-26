@@ -417,4 +417,60 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get kioskPaidNewOrder => 'طلب جديد';
+
+  @override
+  String get invoiceDueLabel => 'المستحق';
+
+  @override
+  String get adminPaymentMethods => 'وسائل الدفع';
+
+  @override
+  String get adminPaymentMethodsHint =>
+      'تفعيل أو تعطيل وسائل الدفع لهذا المتجر.';
+
+  @override
+  String get adminPaymentMethodsSaving => 'جارٍ الحفظ…';
+
+  @override
+  String get mobilePaymentScanHint => 'امسح للدفع عبر هاتفك';
+
+  @override
+  String get mobilePaymentPolling => 'في انتظار الدفع…';
+
+  @override
+  String get qrPayTitle => 'امسح للدفع';
+
+  @override
+  String get qrPayInstruction =>
+      'امسح رمز الاستجابة السريعة بهاتفك لإتمام الدفع.';
+
+  @override
+  String get qrPayWaiting => 'في انتظار الدفع…';
+
+  @override
+  String get qrPayExpired => 'انتهت صلاحية رابط الدفع';
+
+  @override
+  String get qrPayExpiredBody =>
+      'انتهت صلاحية رمز الاستجابة السريعة. يرجى العودة والمحاولة مرة أخرى.';
+
+  @override
+  String get qrPayConfirmed => 'تم تأكيد الدفع';
+
+  @override
+  String get qrPayCancel => 'إلغاء';
+
+  @override
+  String get qrPayGoBack => 'العودة';
+
+  @override
+  String get qrPayCancelConfirm => 'إلغاء هذه العملية والعودة؟';
+
+  @override
+  String get qrPayCancelContinue => 'الاستمرار في الانتظار';
+
+  @override
+  String qrPayExpiresIn(String minutes, String seconds) {
+    return 'تنتهي خلال $minutes:$seconds';
+  }
 }

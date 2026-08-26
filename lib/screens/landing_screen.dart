@@ -6,7 +6,6 @@ import '../models/product.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../state/browsing_mode_service.dart';
-import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
@@ -15,10 +14,56 @@ import '../widgets/product_detail_sheet.dart';
 import '../widgets/product_image.dart';
 import '../widgets/scan_capture_field.dart';
 import '../widgets/waha_app_bar.dart';
+import '../services/server_discovery.dart';
 import '../widgets/waha_bottom_nav.dart';
 
-class LandingScreen extends StatelessWidget {
+class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
+
+  @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkServerDiscovery());
+  }
+
+  void _checkServerDiscovery() {
+    final discovered = ServerDiscovery.justDiscoveredUrl;
+    if (discovered == null || !mounted) return;
+    ServerDiscovery.justDiscoveredUrl = null; // consume — show only once
+
+    final found = discovered.isNotEmpty;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(found ? 'Server Found' : 'Server Not Found'),
+        content: Text(
+          found
+              ? 'Auto-connected to:\n$discovered\n\nYou can change this any time in Settings → Server Connection.'
+              : 'No server found on your network.\n\nOpen Settings → Server Connection to enter the URL manually.',
+        ),
+        actions: [
+          if (!found)
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pushNamed(Routes.settings);
+              },
+              child: const Text('Open Settings'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +118,7 @@ class _NormalLandingState extends State<_NormalLanding> {
     final total = flow.quote?.total;
     final storeConfig = context.watch<StoreConfigService>();
     final currency = storeConfig.storeCurrency ?? flow.order?.currency;
-    final lang = localeService.locale.languageCode;
+    final lang = Localizations.localeOf(context).languageCode;
     final _appNameStr = storeConfig.appName != null
         ? localeName(storeConfig.appName!, lang)
         : '';
@@ -417,7 +462,7 @@ class _ScanLandingState extends State<_ScanLanding> {
 
     // Resolve app title from server — same logic as _NormalLanding.
     final storeConfig = context.watch<StoreConfigService>();
-    final lang = localeService.locale.languageCode;
+    final lang = Localizations.localeOf(context).languageCode;
     final serverName = storeConfig.appName != null
         ? localeName(storeConfig.appName!, lang)
         : '';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_config.dart';
+import '../services/local_prefs.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
@@ -12,6 +13,7 @@ import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
 import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
+import '../utils/locale_name.dart';
 import 'simulator_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -253,10 +255,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: FilledButton(onPressed: _saveTimers, child: Text(l10n.settingsSaveTimers)),
           ),
 
-          // ── Odoo Integration ──────────────────────────────────────────────
+          // ── Admin: Payment Methods + Integrations ─────────────────────────
           if (context.watch<PermissionService>().can('MANAGE_STORES')) ...[
             const Divider(height: 40),
-            Text('Integrations', style: Theme.of(context).textTheme.titleMedium),
+            Text('Admin', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            _AdminPaymentMethodsPanel(),
+            const SizedBox(height: 10),
+            _ServerConnectionPanel(),
             const SizedBox(height: 10),
             OutlinedButton.icon(
               icon: const Icon(Icons.sync_outlined),
@@ -527,3 +533,432 @@ String _platformLabel(SupportedPlatform p) => switch (p) {
       SupportedPlatform.android => 'Android',
       SupportedPlatform.desktop => 'Desktop',
     };
+
+// ── Admin: Payment Methods Panel ──────────────────────────────────────────────
+// Expandable tile in the Admin section. Loads all payment methods for the
+// current store and shows a checklist. Toggling a checkbox calls the backend
+// with a blocking loading dialog and shows success/error feedback.
+
+class _AdminPaymentMethodsPanel extends StatefulWidget {
+  @override
+  State<_AdminPaymentMethodsPanel> createState() => _AdminPaymentMethodsPanelState();
+}
+
+class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
+  bool _expanded = false;
+  bool _loading = false;
+  String? _error;
+  List<AdminPaymentMethodView> _methods = [];
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final storeId = authService.sessionStoreId ?? storeConfigService.storeId;
+      final methods = await context.read<ApiClient>().getAdminPaymentMethods(storeId: storeId, token: authService.token);
+      if (mounted) setState(() { _methods = methods; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  Future<void> _toggle(AdminPaymentMethodView method) async {
+    final newActive = !method.effectiveActive;
+    final api = context.read<ApiClient>();
+    final storeId = authService.sessionStoreId ?? storeConfigService.storeId;
+
+    // Show blocking dialog — prevents double-tap and signals feedback
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Saving…'),
+            ]),
+          ),
+        )),
+      ),
+    );
+
+    try {
+      await api.setPaymentMethodStoreActive(method.id, active: newActive, storeId: storeId, token: authService.token);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close dialog
+      await _load(); // refresh list
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    final lang = localeService.locale.languageCode;
+
+    return Card(
+      elevation: 0,
+      color: scheme.surfaceVariant.withOpacity(0.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              final opening = !_expanded;
+              setState(() => _expanded = opening);
+              if (opening && _methods.isEmpty && !_loading) _load();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.payment_outlined, size: 20, color: scheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(l10n.adminPaymentMethods,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                      color: scheme.outline),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            const Divider(height: 1),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    TextButton(onPressed: _load, child: const Text('Retry')),
+                  ],
+                ),
+              )
+            else if (_methods.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(l10n.payNoMethods,
+                    style: TextStyle(color: scheme.outline)),
+              )
+            else
+              for (final m in _methods)
+                CheckboxListTile(
+                  title: Text(
+                    _nameOrKey(m.displayName, m.key, lang),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(m.provider,
+                      style: TextStyle(fontSize: 12, color: scheme.outline)),
+                  value: m.effectiveActive,
+                  onChanged: (_) => _toggle(m),
+                  dense: true,
+                ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _nameOrKey(Map<String, dynamic>? displayName, String fallback, String lang) {
+  final name = localeName(displayName, lang);
+  return name.isEmpty ? fallback : name;
+}
+
+// ── Server Connection panel ───────────────────────────────────────────────────
+
+enum _ServerPreset {
+  emulator('Emulator — 10.0.2.2', '10.0.2.2', 8081),
+  localhost('Localhost', 'localhost', 8081),
+  custom('Custom', '', 8081);
+
+  final String label;
+  final String defaultHost;
+  final int defaultPort;
+  const _ServerPreset(this.label, this.defaultHost, this.defaultPort);
+}
+
+class _ServerConnectionPanel extends StatefulWidget {
+  @override
+  State<_ServerConnectionPanel> createState() => _ServerConnectionPanelState();
+}
+
+class _ServerConnectionPanelState extends State<_ServerConnectionPanel> {
+  bool _expanded = false;
+  bool _useDefault = false;
+  _ServerPreset _preset = _ServerPreset.custom;
+  late final TextEditingController _hostCtrl;
+  late final TextEditingController _portCtrl;
+  bool _saving = false;
+  String? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    final stored = LocalPrefs.apiBaseUrl;
+    _useDefault = stored == null || stored.isEmpty;
+
+    // Parse host + port from the stored override, or from the current resolved URL.
+    final toParse = (stored != null && stored.isNotEmpty) ? stored : AppConfig.apiBaseUrl;
+    final uri = Uri.tryParse(toParse);
+    _hostCtrl = TextEditingController(text: uri?.host ?? '');
+    _portCtrl = TextEditingController(text: (uri?.hasPort == true ? uri!.port : 8081).toString());
+    _detectPreset();
+  }
+
+  @override
+  void dispose() {
+    _hostCtrl.dispose();
+    _portCtrl.dispose();
+    super.dispose();
+  }
+
+  void _detectPreset() {
+    final host = _hostCtrl.text.trim();
+    final port = int.tryParse(_portCtrl.text.trim()) ?? 8081;
+    for (final p in _ServerPreset.values) {
+      if (p != _ServerPreset.custom && p.defaultHost == host && p.defaultPort == port) {
+        _preset = p;
+        return;
+      }
+    }
+    _preset = _ServerPreset.custom;
+  }
+
+  void _selectPreset(_ServerPreset p) {
+    setState(() {
+      _preset = p;
+      if (p != _ServerPreset.custom) {
+        _hostCtrl.text = p.defaultHost;
+        _portCtrl.text = p.defaultPort.toString();
+      }
+    });
+  }
+
+  String get _previewUrl {
+    final h = _hostCtrl.text.trim();
+    final port = _portCtrl.text.trim();
+    if (h.isEmpty) return '';
+    return 'http://$h:$port';
+  }
+
+  Future<void> _save() async {
+    setState(() { _saving = true; _result = null; });
+    try {
+      if (_useDefault) {
+        await LocalPrefs.clearApiBaseUrl();
+        if (mounted) setState(() { _saving = false; _result = '✓ Override cleared — using app default'; });
+        return;
+      }
+      final url = _previewUrl;
+      if (url.isEmpty) { setState(() { _saving = false; }); return; }
+      await LocalPrefs.setApiBaseUrl(url);
+      final token = authService.token;
+      if (token != null) {
+        await context.read<ApiClient>().updateConfig({'publicBaseUrl': url}, token: token);
+      }
+      if (mounted) setState(() { _saving = false; _result = '✓ Saved — restart app to reconnect'; });
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _result = 'Local saved. Backend: $e'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fieldsEnabled = !_useDefault;
+
+    return Card(
+      elevation: 0,
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.dns_outlined, color: scheme.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Server Connection',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                      color: scheme.outline),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Use app default checkbox ──────────────────────────
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Use app default'),
+                    subtitle: Text(
+                      'Falls back to built-in platform URL (LAN / emulator / localhost)',
+                      style: TextStyle(fontSize: 11, color: scheme.outline),
+                    ),
+                    value: _useDefault,
+                    onChanged: (v) => setState(() => _useDefault = v!),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ── Preset dropdown ───────────────────────────────────
+                  _FieldRow(
+                    label: 'Preset',
+                    enabled: fieldsEnabled,
+                    child: DropdownButtonFormField<_ServerPreset>(
+                      value: _preset,
+                      isDense: true,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        enabled: fieldsEnabled,
+                      ),
+                      items: _ServerPreset.values
+                          .map((p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(p.label),
+                              ))
+                          .toList(),
+                      onChanged: fieldsEnabled ? (p) => _selectPreset(p!) : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ── Host ─────────────────────────────────────────────
+                  _FieldRow(
+                    label: 'Host',
+                    enabled: fieldsEnabled,
+                    child: TextField(
+                      controller: _hostCtrl,
+                      enabled: fieldsEnabled,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        hintText: '192.168.1.x',
+                      ),
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      onChanged: (_) => setState(_detectPreset),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ── Port ─────────────────────────────────────────────
+                  _FieldRow(
+                    label: 'Port',
+                    enabled: fieldsEnabled,
+                    child: SizedBox(
+                      width: 100,
+                      child: TextField(
+                        controller: _portCtrl,
+                        enabled: fieldsEnabled,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          hintText: '8081',
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(_detectPreset),
+                      ),
+                    ),
+                  ),
+
+                  // ── URL preview ───────────────────────────────────────
+                  if (!_useDefault && _previewUrl.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _previewUrl,
+                      style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          color: scheme.primary),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: _saving
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Text('Save & Apply'),
+                    ),
+                  ),
+                  if (_result != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_result!,
+                        style: TextStyle(fontSize: 12, color: scheme.outline)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FieldRow extends StatelessWidget {
+  final String label;
+  final Widget child;
+  final bool enabled;
+  const _FieldRow({required this.label, required this.child, this.enabled = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 52,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: enabled ? scheme.onSurface : scheme.outline,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: child),
+      ],
+    );
+  }
+}

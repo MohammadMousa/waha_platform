@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../screens/camera_scan_screen.dart';
 import '../services/api_exceptions.dart';
+import '../services/scan_sound_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import 'locale_name.dart';
@@ -21,13 +22,17 @@ Future<void> openCameraAndAddToCart(BuildContext context) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
     final product = await flow.scanBarcode(barcode);
+    ScanSoundService.playSuccess();
     final name = localeName(product.name, localeService.locale.languageCode);
     messenger.showSnackBar(SnackBar(content: Text('Added: $name')));
   } on ProductNotFoundException catch (e) {
+    ScanSoundService.playFailure();
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
   } on ProductNotSellableException catch (e) {
+    ScanSoundService.playFailure();
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
   } catch (e) {
+    ScanSoundService.playFailure();
     messenger.showSnackBar(SnackBar(content: Text('Scan failed: $e')));
   }
 }

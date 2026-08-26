@@ -895,6 +895,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New Order'**
   String get kioskPaidNewOrder;
+
+  /// No description provided for @invoiceDueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Due'**
+  String get invoiceDueLabel;
+
+  /// No description provided for @adminPaymentMethods.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Methods'**
+  String get adminPaymentMethods;
+
+  /// No description provided for @adminPaymentMethodsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable or disable payment methods for this store.'**
+  String get adminPaymentMethodsHint;
+
+  /// No description provided for @adminPaymentMethodsSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get adminPaymentMethodsSaving;
+
+  /// No description provided for @mobilePaymentScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan to pay from your phone'**
+  String get mobilePaymentScanHint;
+
+  /// No description provided for @mobilePaymentPolling.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for payment…'**
+  String get mobilePaymentPolling;
+
+  /// No description provided for @qrPayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan to Pay'**
+  String get qrPayTitle;
+
+  /// No description provided for @qrPayInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan the QR code with your phone to complete payment.'**
+  String get qrPayInstruction;
+
+  /// No description provided for @qrPayWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for payment…'**
+  String get qrPayWaiting;
+
+  /// No description provided for @qrPayExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment link expired'**
+  String get qrPayExpired;
+
+  /// No description provided for @qrPayExpiredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The QR code has expired. Please go back and try again.'**
+  String get qrPayExpiredBody;
+
+  /// No description provided for @qrPayConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment confirmed'**
+  String get qrPayConfirmed;
+
+  /// No description provided for @qrPayCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get qrPayCancel;
+
+  /// No description provided for @qrPayGoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go Back'**
+  String get qrPayGoBack;
+
+  /// No description provided for @qrPayCancelConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel this payment and go back?'**
+  String get qrPayCancelConfirm;
+
+  /// No description provided for @qrPayCancelContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Waiting'**
+  String get qrPayCancelContinue;
+
+  /// No description provided for @qrPayExpiresIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires in {minutes}:{seconds}'**
+  String qrPayExpiresIn(String minutes, String seconds);
 }
 
 class _AppLocalizationsDelegate

@@ -233,15 +233,16 @@ class OrderFlowController extends ChangeNotifier {
     return order!;
   }
 
-  /// Normal/Shopping only — starts a real Stripe/MyFatoorah session and
-  /// returns the URL to send the customer's browser to. Does NOT pay the
-  /// order itself; see pay_screen.dart for what happens with the result
-  /// (opened externally, then polled via refreshOrder() until PAID).
-  Future<String> createPaymentSession({required String provider}) async {
+  /// Starts a Stripe/MyFatoorah session. For REDIRECT provider, returns a URL
+  /// to open in the browser. For QR_LINK provider, also returns qrCodeDataUri
+  /// and expiresAt for the kiosk QR screen.
+  Future<PaymentSessionResult> createPaymentSession(
+      {required String provider, required String providerMode}) async {
     if (orderId == null) {
       throw StateError('createPaymentSession() called before checkout()');
     }
-    return _api.createPaymentSession(orderId!, provider: provider);
+    return _api.createPaymentSession(orderId!,
+        provider: provider, providerMode: providerMode);
   }
 
   // ---- Reset ------------------------------------------------------------

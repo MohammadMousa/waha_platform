@@ -136,8 +136,9 @@ class _PayScreenState extends State<PayScreen> {
     });
     final flow = context.read<OrderFlowController>();
     try {
-      final redirectUrl = await flow.createPaymentSession(provider: providerKey);
-      final uri = Uri.parse(redirectUrl);
+      final session = await flow.createPaymentSession(
+          provider: providerKey, providerMode: 'REDIRECT');
+      final uri = Uri.parse(session.redirectUrl);
       final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!launched) throw Exception('launch failed');
       if (!mounted) return;

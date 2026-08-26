@@ -181,5 +181,30 @@
     }
   },
   "kioskPaidResetTimer": "Give me more time",
-  "kioskPaidNewOrder": "New Order"
+  "kioskPaidNewOrder": "New Order",
+
+  "invoiceDueLabel": "Due",
+  "adminPaymentMethods": "Payment Methods",
+  "adminPaymentMethodsHint": "Enable or disable payment methods for this store.",
+  "adminPaymentMethodsSaving": "Saving…",
+  "mobilePaymentScanHint": "Scan to pay from your phone",
+  "mobilePaymentPolling": "Waiting for payment…",
+
+  "qrPayTitle": "Scan to Pay",
+  "qrPayInstruction": "Scan the QR code with your phone to complete payment.",
+  "qrPayWaiting": "Waiting for payment…",
+  "qrPayExpired": "Payment link expired",
+  "qrPayExpiredBody": "The QR code has expired. Please go back and try again.",
+  "qrPayConfirmed": "Payment confirmed",
+  "qrPayCancel": "Cancel",
+  "qrPayGoBack": "Go Back",
+  "qrPayCancelConfirm": "Cancel this payment and go back?",
+  "qrPayCancelContinue": "Keep Waiting",
+  "qrPayExpiresIn": "Expires in {minutes}:{seconds}",
+  "@qrPayExpiresIn": {
+    "placeholders": {
+      "minutes": { "type": "String" },
+      "seconds": { "type": "String" }
+    }
+  }
 }

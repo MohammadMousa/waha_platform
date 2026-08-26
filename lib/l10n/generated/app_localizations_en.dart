@@ -418,4 +418,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get kioskPaidNewOrder => 'New Order';
+
+  @override
+  String get invoiceDueLabel => 'Due';
+
+  @override
+  String get adminPaymentMethods => 'Payment Methods';
+
+  @override
+  String get adminPaymentMethodsHint =>
+      'Enable or disable payment methods for this store.';
+
+  @override
+  String get adminPaymentMethodsSaving => 'Saving…';
+
+  @override
+  String get mobilePaymentScanHint => 'Scan to pay from your phone';
+
+  @override
+  String get mobilePaymentPolling => 'Waiting for payment…';
+
+  @override
+  String get qrPayTitle => 'Scan to Pay';
+
+  @override
+  String get qrPayInstruction =>
+      'Scan the QR code with your phone to complete payment.';
+
+  @override
+  String get qrPayWaiting => 'Waiting for payment…';
+
+  @override
+  String get qrPayExpired => 'Payment link expired';
+
+  @override
+  String get qrPayExpiredBody =>
+      'The QR code has expired. Please go back and try again.';
+
+  @override
+  String get qrPayConfirmed => 'Payment confirmed';
+
+  @override
+  String get qrPayCancel => 'Cancel';
+
+  @override
+  String get qrPayGoBack => 'Go Back';
+
+  @override
+  String get qrPayCancelConfirm => 'Cancel this payment and go back?';
+
+  @override
+  String get qrPayCancelContinue => 'Keep Waiting';
+
+  @override
+  String qrPayExpiresIn(String minutes, String seconds) {
+    return 'Expires in $minutes:$seconds';
+  }
 }

@@ -146,6 +146,18 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
+  // GET /api/config — public, no auth. Returns system_properties as key→value map.
+  Future<Map<String, String>> getConfig() async {
+    try {
+      final resp = await _http.get(_uri('/api/config')).timeout(const Duration(seconds: 5));
+      if (resp.statusCode == 200) {
+        final raw = jsonDecode(resp.body) as Map<String, dynamic>;
+        return raw.map((k, v) => MapEntry(k, v.toString()));
+      }
+    } catch (_) {}
+    return {};
+  }
+
   // GET /api/stores
   Future<List<Store>> getStores() async {
     final resp = await _send(() => _http.get(_uri('/api/stores')));
@@ -289,6 +301,51 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
+  // PUT /api/config — update system properties (requires MANAGE_STORES)
+  Future<void> updateConfig(Map<String, String> updates, {required String token}) async {
+    final resp = await _send(
+      () => _http.put(
+        _uri('/api/config'),
+        headers: _headers(token: token),
+        body: jsonEncode(updates),
+      ),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // GET /api/payment-methods/admin?storeId= — all methods with store active state
+  Future<List<AdminPaymentMethodView>> getAdminPaymentMethods({int? storeId, String? token}) async {
+    final resp = await _send(
+      () => _http.get(
+        _uri('/api/payment-methods/admin').replace(queryParameters: {
+          if (storeId != null) 'storeId': '$storeId',
+        }),
+        headers: _headers(token: token),
+      ),
+    );
+    if (resp.statusCode == 200) {
+      final list = jsonDecode(resp.body) as List<dynamic>;
+      return list.map((e) => AdminPaymentMethodView.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // PUT /api/payment-methods/{id}/store-active?active=&storeId=
+  Future<void> setPaymentMethodStoreActive(int id, {required bool active, int? storeId, String? token}) async {
+    final resp = await _send(
+      () => _http.put(
+        _uri('/api/payment-methods/$id/store-active').replace(queryParameters: {
+          'active': '$active',
+          if (storeId != null) 'storeId': '$storeId',
+        }),
+        headers: _headers(token: token),
+      ),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
   // ---- Cart / order ----------------------------------------------------
 
   // POST /api/orders/quote
@@ -391,18 +448,21 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-  // POST /api/orders/{id}/payment-session — Normal/Shopping real payment
-  Future<String> createPaymentSession(String orderId, {required String provider}) async {
+  // POST /api/orders/{id}/payment-session
+  // providerMode: 'REDIRECT' (normal/shopping) or 'QR_LINK' (kiosk).
+  // QR_LINK responses include qrCodeDataUri + expiresAt.
+  Future<PaymentSessionResult> createPaymentSession(String orderId,
+      {required String provider, required String providerMode}) async {
     final resp = await _send(
       () => _http.post(
         _uri('/api/orders/$orderId/payment-session'),
         headers: _headers(),
-        body: jsonEncode({'provider': provider}),
+        body: jsonEncode({'provider': provider, 'providerMode': providerMode}),
       ),
     );
     if (resp.statusCode == 200) {
-      final body = jsonDecode(resp.body) as Map<String, dynamic>;
-      return body['redirectUrl'] as String;
+      return PaymentSessionResult.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 404) throw OrderNotFoundException(404, msg);
@@ -481,4 +541,53 @@ class ApiClient {
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
+}
+
+class PaymentSessionResult {
+  final String redirectUrl;
+  final String? qrCodeDataUri;
+  final DateTime? expiresAt;
+
+  const PaymentSessionResult({
+    required this.redirectUrl,
+    this.qrCodeDataUri,
+    this.expiresAt,
+  });
+
+  factory PaymentSessionResult.fromJson(Map<String, dynamic> json) =>
+      PaymentSessionResult(
+        redirectUrl: json['redirectUrl'] as String,
+        qrCodeDataUri: json['qrCodeDataUri'] as String?,
+        expiresAt: json['expiresAt'] != null
+            ? DateTime.parse(json['expiresAt'] as String)
+            : null,
+      );
+}
+
+class AdminPaymentMethodView {
+  final int id;
+  final String key;
+  final Map<String, dynamic>? displayName;
+  final String provider;
+  final bool effectiveActive;
+  final bool hasStoreOverride;
+
+  const AdminPaymentMethodView({
+    required this.id,
+    required this.key,
+    required this.displayName,
+    required this.provider,
+    required this.effectiveActive,
+    required this.hasStoreOverride,
+  });
+
+  factory AdminPaymentMethodView.fromJson(Map<String, dynamic> json) =>
+      AdminPaymentMethodView(
+        id: (json['id'] as num).toInt(),
+        key: json['key'] as String,
+        displayName: json['displayName'] as Map<String, dynamic>?,
+        provider: json['provider'] as String,
+        effectiveActive: json['effectiveActive'] as bool? ?? true,
+        hasStoreOverride: json['hasStoreOverride'] as bool? ?? false,
+      );
 }

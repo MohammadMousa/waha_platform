@@ -1,44 +1,36 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import '../services/local_prefs.dart';
 import '../state/browsing_mode_service.dart';
 
 class AppConfig {
   AppConfig._();
 
-  /// ── Physical Android device dev switch ───────────────────────────────
-  /// `10.0.2.2` (the Android default below) is a NAT alias that only
-  /// resolves inside the Android *emulator* — it points nowhere on a real
-  /// phone. When testing on a real device (USB or wifi) against the
-  /// Docker backend running on this laptop, flip [_useLanBackendForDevice]
-  /// to `true` and point [_lanBackendUrl] at the laptop's current LAN IP
-  /// (`ip -4 addr show` → the wifi interface, e.g. wlp2s0) plus the
-  /// Docker-published port (8081 here, not the container-internal 8080).
-  /// Flip back to `false` before switching back to the emulator, and
-  /// don't commit this as `true` — it only affects `Platform.isAndroid`,
-  /// so web/desktop/emulator runs are untouched either way.
-  static const bool _useLanBackendForDevice = true;
-  static const String _lanBackendUrl = 'http://192.168.1.3:8081';
-
   /// Resolves in this order:
-  /// 1. `--dart-define=API_BASE_URL=...` at build/run time (always wins —
-  ///    this is how a real kiosk pointed at a LAN backend IP gets configured).
-  /// 2. The dev switch above, Android only.
-  /// 3. Platform-sensible dev default, matching FRONTEND_CONTEXT.md.
-  ///    Port 8081 — the backend's host-side port, distinct from the
-  ///    container's own internal 8080; only matters for the URL callers
-  ///    outside the container use.
+  /// 1. `--dart-define=API_BASE_URL=...` at build/run time (always wins).
+  /// 2. Runtime override stored by Settings → Server Connection panel.
+  /// 3. Platform default — emulator alias on Android, origin host on web,
+  ///    localhost elsewhere. On a real Android device the default resolves
+  ///    to the emulator alias (unreachable) — set the URL once via the
+  ///    Server Connection panel to point at the LAN IP.
   ///
-  /// Never hardcode this elsewhere in the app — always go through here.
+  /// Never hardcode a LAN IP here — use the Server Connection panel instead.
   static String get apiBaseUrl {
     const override = String.fromEnvironment('API_BASE_URL');
     if (override.isNotEmpty) return override;
 
-    if (kIsWeb) return 'http://localhost:8081';
-    if (Platform.isAndroid) {
-      return _useLanBackendForDevice ? _lanBackendUrl : 'http://10.0.2.2:8081';
-    }
-    // Desktop dev fallback (not a Phase 1 target, but harmless to have).
+    // Runtime override persisted by Settings → Server Connection panel.
+    // On Android, skip stored localhost values — localhost resolves to the
+    // device itself, not the backend server.
+    final stored = LocalPrefs.apiBaseUrl;
+    final storedIsUsable = stored != null &&
+        stored.isNotEmpty &&
+        (!Platform.isAndroid || !stored.contains('localhost'));
+    if (storedIsUsable) return stored;
+
+    if (kIsWeb) return 'http://${Uri.base.host}:8081';
+    if (Platform.isAndroid) return 'http://10.0.2.2:8081';
     return 'http://localhost:8081';
   }
 

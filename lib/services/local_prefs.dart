@@ -105,4 +105,17 @@ class LocalPrefs {
   static bool get simDevToolsVisible => _p.getBool(_kSimDevToolsVisible) ?? false;
   static Future<void> setSimDevToolsVisible(bool value) =>
       _p.setBool(_kSimDevToolsVisible, value);
+
+  static const _kSimProductCodes = 'waha.sim_product_codes';
+  static List<String> get simProductCodes =>
+      _p.getStringList(_kSimProductCodes) ?? [];
+  static Future<void> setSimProductCodes(List<String> codes) =>
+      _p.setStringList(_kSimProductCodes, codes);
+
+  // Runtime API base URL — overrides platform default when set.
+  // Persisted so kiosk devices survive reboots without reconfiguration.
+  static const _kApiBaseUrl = 'waha.api_base_url';
+  static String? get apiBaseUrl => _p.getString(_kApiBaseUrl);
+  static Future<void> setApiBaseUrl(String value) => _p.setString(_kApiBaseUrl, value);
+  static Future<void> clearApiBaseUrl() => _p.remove(_kApiBaseUrl);
 }

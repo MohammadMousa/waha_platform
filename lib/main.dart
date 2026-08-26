@@ -1,3 +1,7 @@
+import 'dart:io' show Platform;
+
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +11,7 @@ import 'l10n/generated/app_localizations.dart';
 import 'router/app_router.dart';
 import 'services/api_client.dart';
 import 'services/local_prefs.dart';
+import 'services/server_discovery.dart';
 import 'state/auth_service.dart';
 import 'state/browsing_mode_service.dart';
 import 'state/locale_service.dart';
@@ -19,6 +24,11 @@ Future<void> main() async {
   // Needed before touching any platform channel (SharedPreferences included)
   // pre-runApp.
   WidgetsFlutterBinding.ensureInitialized();
+  // Initialize audioplayers audio context on non-web platforms so sounds
+  // are routed correctly and not silently discarded by the Android audio system.
+  if (!kIsWeb) {
+    await AudioPlayer.global.setAudioContext(AudioContext());
+  }
   await LocalPrefs.init();
   await _resolveStartupConfig();
   runApp(const WahaApp());
@@ -74,6 +84,20 @@ Future<void> _resolveStartupConfig() async {
           afterCountdown != null ? Duration(seconds: afterCountdown) : null,
       persist: false,
     );
+  }
+
+  // First-launch auto-discovery: if running on Android with no URL stored,
+  // probe the local subnet for a responding backend. If found, save the URL
+  // now so resolveStartupAuth below uses the correct host immediately.
+  // justDiscoveredUrl bridges the result to LandingScreen for the UI prompt.
+  if (!kIsWeb && Platform.isAndroid && LocalPrefs.apiBaseUrl == null) {
+    final found = await ServerDiscovery.discover();
+    if (found != null) {
+      await LocalPrefs.setApiBaseUrl(found);
+      ServerDiscovery.justDiscoveredUrl = found;
+    } else {
+      ServerDiscovery.justDiscoveredUrl = ''; // ran but nothing found
+    }
   }
 
   // Auth resolution — a standalone ApiClient here since this runs before
