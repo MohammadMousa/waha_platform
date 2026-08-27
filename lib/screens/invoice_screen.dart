@@ -340,10 +340,36 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   void _handleMethod(PaymentMethod method) {
     if (method.provider == 'SIMULATED') {
       _paySimulated(outcome: 'SUCCESS');
+    } else if (method.provider == 'TERMINAL') {
+      _handleTerminal(method);
     } else if (method.isPaymentUrl) {
       _handlePaymentUrl(method);
     } else {
       _payWithRedirect(method);
+    }
+  }
+
+  Future<void> _handleTerminal(PaymentMethod method) async {
+    final orderId = _order?.orderId;
+    if (orderId == null) return;
+    final apiClient = context.read<ApiClient>();
+
+    final paidOrder = await showDialog<WahaOrder>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: _TerminalPaymentScreen(
+          orderId: orderId,
+          apiClient: apiClient,
+        ),
+      ),
+    );
+
+    if (paidOrder != null && mounted) {
+      _onPaid(paidOrder);
     }
   }
 
@@ -459,6 +485,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   IconData _iconForMethod(PaymentMethod method) {
     if (method.isPaymentUrl) return Icons.phone_android_outlined;
+    if (method.provider == 'TERMINAL') return Icons.contactless_outlined;
     return switch (method.key.replaceAll('_qr', '')) {
       'simulated' => Icons.phone_android_outlined,
       'stripe' => Icons.credit_card,
@@ -666,6 +693,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                           : () {
                               if (method.isPaymentUrl) {
                                 _handlePaymentUrl(method);
+                              } else if (method.provider == 'TERMINAL') {
+                                _handleTerminal(method);
                               } else if (method.provider == 'REDIRECT' ||
                                   method.provider == 'QR_LINK') {
                                 _payWithRedirect(method);
@@ -729,7 +758,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   Widget _buildPaid(AppLocalizations l10n) {
     final order = _order;
-    final scheme = Theme.of(context).colorScheme;
     final currency =
         storeConfigService.storeCurrency ?? order?.currency;
 
@@ -760,13 +788,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                 ),
           ),
           if (order != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              order.displayId != null
-                  ? '${l10n.invoiceOrderNum} #${order.displayId}'
-                  : order.orderId.substring(0, 8),
-              style: TextStyle(color: scheme.outline),
-            ),
             const SizedBox(height: 24),
             _InvoiceHeaderCard(
               order: order,
@@ -789,10 +810,13 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           ),
           if (order != null && browsingModeService.mode == BrowsingMode.normal) ...[
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.share_outlined),
-              label: Text(l10n.shareInvoice),
-              onPressed: () => _shareInvoice(order),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.share_outlined),
+                label: Text(l10n.shareInvoice),
+                onPressed: () => _shareInvoice(order),
+              ),
             ),
           ],
         ],
@@ -1025,7 +1049,15 @@ class _InvoiceHeaderCard extends StatelessWidget {
     final isNormal = browsingModeService.mode == BrowsingMode.normal;
     final lang = localeService.locale.languageCode;
 
-    // Side widget: QR in kiosk, download icon button in normal mode.
+    final due = order.status == 'PAID' ? 0.0 : order.total;
+    final dueColor = due > 0 ? scheme.primary : Colors.green.shade700;
+
+    // Side widget: QR in kiosk. Everywhere else there's no QR to show, which
+    // used to leave that slot blank (just a small download button, top-
+    // aligned, with empty space below it) — so outside kiosk mode the Due
+    // amount lives here instead, with the download button above it when
+    // available. The info column below drops Due entirely in that case, so
+    // its payment-method line moves up to fill the space Due used to take.
     Widget? sideWidget;
     if (isKiosk && order.invoiceUrl != null) {
       sideWidget = Container(
@@ -1040,15 +1072,56 @@ class _InvoiceHeaderCard extends StatelessWidget {
           size: 82,
         ),
       );
-    } else if (isNormal && order.invoiceUrl != null) {
-      sideWidget = IconButton.outlined(
-        icon: const Icon(Icons.download_outlined),
-        iconSize: 28,
-        tooltip: l10n.invoiceDownloadPdf,
-        onPressed: () async {
-          final pdfUri = Uri.parse('${order.invoiceUrl}/pdf?lang=$lang');
-          await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
-        },
+    } else if (!isKiosk) {
+      sideWidget = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (isNormal && order.invoiceUrl != null) ...[
+            IconButton.outlined(
+              icon: const Icon(Icons.download_outlined),
+              iconSize: 28,
+              tooltip: l10n.invoiceDownloadPdf,
+              onPressed: () async {
+                final pdfUri = Uri.parse('${order.invoiceUrl}/pdf?lang=$lang');
+                await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+          Text(
+            l10n.invoiceDueLabel,
+            style: TextStyle(fontSize: 12, color: scheme.outline),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                due.toStringAsFixed(2),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: dueColor,
+                      height: 1.1,
+                    ),
+              ),
+              if (currency != null) ...[
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    _currencySymbol(currency),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: dueColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       );
     }
 
@@ -1147,16 +1220,16 @@ class _InvoiceHeaderCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  // Due label
-                  Text(
-                    l10n.invoiceDueLabel,
-                    style: TextStyle(fontSize: 12, color: scheme.outline),
-                  ),
-                  // Due value — big, primary color
-                  Builder(builder: (context) {
-                    final due = order.status == 'PAID' ? 0.0 : order.total;
-                    return Row(
+                  // Due lives here only in kiosk mode — everywhere else it
+                  // moved into sideWidget (see above), so paymentMethod below
+                  // moves up to take its place instead of leaving a gap.
+                  if (isKiosk) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.invoiceDueLabel,
+                      style: TextStyle(fontSize: 12, color: scheme.outline),
+                    ),
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
@@ -1166,7 +1239,7 @@ class _InvoiceHeaderCard extends StatelessWidget {
                               .displaySmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w800,
-                                color: scheme.primary,
+                                color: dueColor,
                                 height: 1.1,
                               ),
                         ),
@@ -1178,15 +1251,15 @@ class _InvoiceHeaderCard extends StatelessWidget {
                               _currencySymbol(currency),
                               style: TextStyle(
                                 fontSize: 14,
-                                color: scheme.primary,
+                                color: dueColor,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                         ],
                       ],
-                    );
-                  }),
+                    ),
+                  ],
                   if (order.status == 'PAID' &&
                       order.paymentMethod != null) ...[
                     const SizedBox(height: 6),
@@ -1652,6 +1725,138 @@ class _MobilePaymentScreenState extends State<_MobilePaymentScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Terminal payment dialog ────────────────────────────────────────────────────
+
+class _TerminalPaymentScreen extends StatefulWidget {
+  final String orderId;
+  final ApiClient apiClient;
+
+  const _TerminalPaymentScreen({required this.orderId, required this.apiClient});
+
+  @override
+  State<_TerminalPaymentScreen> createState() => _TerminalPaymentScreenState();
+}
+
+class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
+  String? _sessionId;
+  String _statusLabel = 'Connecting to terminal…';
+  bool _timedOut = false;
+  bool _cancelled = false;
+  Timer? _poll;
+
+  static const _pollInterval = Duration(seconds: 2);
+  static const _timeoutDuration = Duration(seconds: 95);
+
+  @override
+  void initState() {
+    super.initState();
+    _createSession();
+  }
+
+  Future<void> _createSession() async {
+    try {
+      final id = await widget.apiClient.createTerminalSession(widget.orderId);
+      setState(() {
+        _sessionId = id;
+        _statusLabel = 'Please tap your card on the terminal';
+      });
+      _startPolling();
+      Future.delayed(_timeoutDuration, _onTimeout);
+    } catch (e) {
+      if (mounted) setState(() => _statusLabel = 'Failed to start session: $e');
+    }
+  }
+
+  void _startPolling() {
+    _poll = Timer.periodic(_pollInterval, (_) => _checkStatus());
+  }
+
+  Future<void> _checkStatus() async {
+    final id = _sessionId;
+    if (id == null) return;
+    try {
+      final status = await widget.apiClient.getTerminalSessionStatus(id);
+      if (!mounted) return;
+      if (status == 'CONFIRMED') {
+        _poll?.cancel();
+        final order = await widget.apiClient.getOrder(widget.orderId);
+        if (mounted) Navigator.pop(context, order);
+      } else if (status == 'TIMEOUT') {
+        _poll?.cancel();
+        setState(() { _timedOut = true; _statusLabel = 'Session timed out'; });
+      } else if (status == 'CANCELLED') {
+        _poll?.cancel();
+        setState(() { _cancelled = true; _statusLabel = 'Payment cancelled'; });
+      }
+    } catch (_) {}
+  }
+
+  void _onTimeout() {
+    if (!mounted || _timedOut || _cancelled) return;
+    _poll?.cancel();
+    setState(() { _timedOut = true; _statusLabel = 'No response from terminal'; });
+  }
+
+  Future<void> _cancel() async {
+    _poll?.cancel();
+    final id = _sessionId;
+    if (id != null) {
+      try { await widget.apiClient.cancelTerminalSession(id); } catch (_) {}
+    }
+    if (mounted) Navigator.pop(context, null);
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final done = _timedOut || _cancelled;
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            done ? Icons.error_outline : Icons.contactless_outlined,
+            size: 72,
+            color: done ? scheme.error : scheme.primary,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            done ? 'Payment Failed' : 'Card Terminal',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _statusLabel,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.outline),
+          ),
+          if (!done) ...[
+            const SizedBox(height: 24),
+            const LinearProgressIndicator(),
+          ],
+          const SizedBox(height: 32),
+          if (done)
+            FilledButton(onPressed: () => Navigator.pop(context, null), child: const Text('Close'))
+          else
+            OutlinedButton.icon(
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('Cancel'),
+              onPressed: _cancel,
+              style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
+            ),
+        ],
+      ),
     );
   }
 }

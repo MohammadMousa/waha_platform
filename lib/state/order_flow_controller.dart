@@ -10,6 +10,7 @@ import '../models/quote.dart';
 import '../models/product.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
+import '../services/scan_sound_service.dart';
 import '../utils/locale_name.dart';
 import 'auth_service.dart';
 import 'locale_service.dart';
@@ -82,11 +83,24 @@ class OrderFlowController extends ChangeNotifier {
       notifyListeners();
       unawaited(_refreshQuote());
       return product;
+    } on ProductNotFoundException {
+      // Same chokepoint reasoning as the success sound in _addOrIncrement:
+      // every caller (real scanner, simulator, camera scan) goes through
+      // scanBarcode, so the failure sound belongs here, not per-caller.
+      ScanSoundService.playFailure();
+      rethrow;
+    } on ProductNotSellableException {
+      ScanSoundService.playFailure();
+      rethrow;
     } finally {
       _setBusy(false);
     }
   }
 
+  /// Single chokepoint for every "item entered the cart" path — scan,
+  /// manual add from Browse/Search/Product Detail, and the simulator's
+  /// fake scan. The success sound fires here, not per-caller, so it never
+  /// has to be re-wired when a new add-to-cart entry point shows up.
   void _addOrIncrement(Product product) {
     final existing = cart.where((c) => c.productId == product.id);
     if (existing.isNotEmpty) {
@@ -96,6 +110,7 @@ class OrderFlowController extends ChangeNotifier {
       cart.add(CartItem(productId: product.id, name: name, quantity: 1,
           imageResourceId: product.imageResourceId));
     }
+    ScanSoundService.playSuccess();
   }
 
   /// Adds a product straight to the cart — used by Browse/Product Detail,
@@ -116,6 +131,7 @@ class OrderFlowController extends ChangeNotifier {
       cart.removeWhere((c) => c.productId == productId);
     } else {
       final item = cart.firstWhere((c) => c.productId == productId);
+      if (quantity > item.quantity) ScanSoundService.playSuccess();
       item.quantity = quantity;
     }
     await _refreshQuote();

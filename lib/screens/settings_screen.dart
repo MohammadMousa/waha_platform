@@ -61,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: '${kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds}',
     );
     _storeId = TextEditingController(text: storeConfigService.storeId?.toString() ?? '');
+    _devUnlocked = LocalPrefs.devToolsUnlocked;
   }
 
   @override
@@ -79,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tapCount++;
     if (_tapCount >= 10 && !_devUnlocked) {
       setState(() => _devUnlocked = true);
+      LocalPrefs.setDevToolsUnlocked(true);
       if (AppConfig.simulatorAvailable) {
         context.read<SimulatorService>().showDevTools();
       }
@@ -94,6 +96,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     }
+  }
+
+  void _hideDevTools() {
+    setState(() {
+      _devUnlocked = false;
+      _tapCount = 0;
+    });
+    LocalPrefs.setDevToolsUnlocked(false);
   }
 
   int? _parseSeconds(String s) {
@@ -300,6 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               regResult: _regResult,
               registering: _registering,
               onRegister: _register,
+              onHide: _hideDevTools,
             ),
           ],
 
@@ -323,6 +334,7 @@ class _DevToolsPanel extends StatefulWidget {
   final String? regResult;
   final bool registering;
   final VoidCallback onRegister;
+  final VoidCallback onHide;
 
   const _DevToolsPanel({
     required this.storeIdController,
@@ -333,6 +345,7 @@ class _DevToolsPanel extends StatefulWidget {
     required this.regResult,
     required this.registering,
     required this.onRegister,
+    required this.onHide,
   });
 
   @override
@@ -342,6 +355,7 @@ class _DevToolsPanel extends StatefulWidget {
 class _DevToolsPanelState extends State<_DevToolsPanel> {
   bool _expanded = false;
   bool _obscurePass = true;
+  bool _showScanToast = LocalPrefs.showScanSuccessToast;
 
   @override
   Widget build(BuildContext context) {
@@ -374,6 +388,14 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       ),
                     ),
                   ),
+                  Tooltip(
+                    message: 'Hide Developer Tools',
+                    child: IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.visibility_off_outlined, color: scheme.error, size: 20),
+                      onPressed: widget.onHide,
+                    ),
+                  ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     color: scheme.error,
@@ -389,6 +411,28 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Scan feedback
+                  const Text('Scan feedback',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    title: const Text('Show footer toast on successful scan'),
+                    subtitle: const Text(
+                      'Off by default — the scan sound already confirms success. '
+                      'Failures always show a blocking dialog regardless of this.',
+                    ),
+                    value: _showScanToast,
+                    onChanged: (value) {
+                      final next = value ?? false;
+                      setState(() => _showScanToast = next);
+                      LocalPrefs.setShowScanSuccessToast(next);
+                    },
+                  ),
+
+                  const Divider(height: 32),
+
                   // Store ID override
                   const Text('Store ID override',
                       style: TextStyle(fontWeight: FontWeight.w600)),

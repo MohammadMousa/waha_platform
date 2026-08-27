@@ -6,10 +6,12 @@ import '../router/app_router.dart';
 import '../screens/camera_scan_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/api_exceptions.dart';
+import '../services/local_prefs.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/simulator_service.dart';
 import '../utils/locale_name.dart';
+import '../utils/scan_actions.dart';
 import 'manual_code_dialog.dart';
 
 /// The floating button cluster from the reference screenshot, reworked as
@@ -122,14 +124,18 @@ class SimulatorOverlay extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final product = await flow.scanBarcode(code);
-      final name = localeName(product.name, localeService.locale.languageCode);
-      messenger.showSnackBar(SnackBar(content: Text('Scanned: $name')));
+      if (LocalPrefs.showScanSuccessToast && context.mounted) {
+        final name = localeName(product.name, localeService.locale.languageCode);
+        messenger.showSnackBar(SnackBar(content: Text('Scanned: $name')));
+      }
     } on ProductNotFoundException {
-      messenger.showSnackBar(SnackBar(content: Text('No product for code $code')));
+      if (context.mounted) {
+        await showBlockingScanError(context, 'No product for code $code');
+      }
     } on ProductNotSellableException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      if (context.mounted) await showBlockingScanError(context, e.message);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Scan failed: $e')));
+      if (context.mounted) await showBlockingScanError(context, 'Scan failed: $e');
     }
   }
 }
@@ -149,6 +155,10 @@ class _ScanTypeBtn extends StatelessWidget {
       child: _IconBtn(
         icon: icon,
         tooltip: '$tooltip (tap: fire cached, long-press: set code)',
+        // Tooltip's own long-press-to-show gesture otherwise competes with
+        // the GestureDetector above for the same long-press and wins,
+        // silently swallowing it before _openManualEntry ever fires.
+        tooltipTriggerMode: TooltipTriggerMode.tap,
         onTap: () async {
           final cached = sim.cachedCode(type);
           if (cached == null || cached.isEmpty) {
@@ -166,7 +176,7 @@ class _ScanTypeBtn extends StatelessWidget {
   Future<void> _openManualEntry(BuildContext context, SimulatorService sim) async {
     final code = await showManualCodeDialog(context, title: 'Set Product Code');
     if (code == null || code.isEmpty) return;
-    sim.setCachedCode(type, code);
+    sim.addCachedCode(type, code);
     if (context.mounted) {
       await SimulatorOverlay._fireScan(context, code);
     }
@@ -177,13 +187,20 @@ class _IconBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final TooltipTriggerMode? tooltipTriggerMode;
 
-  const _IconBtn({required this.icon, required this.tooltip, required this.onTap});
+  const _IconBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.tooltipTriggerMode,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
+      triggerMode: tooltipTriggerMode,
       child: IconButton(
         icon: Icon(icon, color: Colors.white),
         onPressed: onTap,

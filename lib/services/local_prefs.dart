@@ -106,6 +106,24 @@ class LocalPrefs {
   static Future<void> setSimDevToolsVisible(bool value) =>
       _p.setBool(_kSimDevToolsVisible, value);
 
+  // Whether the Settings screen's "Developer Tools" section has been
+  // unlocked (10-tap gesture). Persisted separately from
+  // simDevToolsVisible (the floating overlay cluster) so it stays revealed
+  // across visits to Settings until explicitly hidden via its own eye
+  // button, instead of re-locking every time the screen is rebuilt.
+  static const _kDevToolsUnlocked = 'waha.dev_tools_unlocked';
+  static bool get devToolsUnlocked => _p.getBool(_kDevToolsUnlocked) ?? false;
+  static Future<void> setDevToolsUnlocked(bool value) =>
+      _p.setBool(_kDevToolsUnlocked, value);
+
+  // Footer toast after a successful camera-scan add. Off by default — the
+  // scan sound already confirms success, so the toast is opt-in extra
+  // feedback rather than something shown to every customer.
+  static const _kShowScanSuccessToast = 'waha.show_scan_success_toast';
+  static bool get showScanSuccessToast => _p.getBool(_kShowScanSuccessToast) ?? false;
+  static Future<void> setShowScanSuccessToast(bool value) =>
+      _p.setBool(_kShowScanSuccessToast, value);
+
   static const _kSimProductCodes = 'waha.sim_product_codes';
   static List<String> get simProductCodes =>
       _p.getStringList(_kSimProductCodes) ?? [];

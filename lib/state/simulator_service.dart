@@ -50,6 +50,16 @@ class SimulatorService extends ChangeNotifier {
     setCachedCodes(type, code.isEmpty ? [] : [code]);
   }
 
+  // Adds a newly entered code to the saved list instead of replacing it, so
+  // every code entered via the long-press dialog stays available for
+  // cachedCode's random pick, rather than the latest entry wiping the rest.
+  void addCachedCode(SimScanType type, String code) {
+    if (code.isEmpty) return;
+    final list = List<String>.of(_cachedCodes[type] ?? <String>[]);
+    if (!list.contains(code)) list.add(code);
+    setCachedCodes(type, list);
+  }
+
   void setEnabled(bool value) {
     _enabled = value;
     notifyListeners();

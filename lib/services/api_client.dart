@@ -470,6 +470,32 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
+  // ── Terminal payment endpoints ────────────────────────────────────────────
+
+  Future<String> createTerminalSession(String orderId) async {
+    final resp = await _send(
+      () => _http.post(_uri('/api/orders/$orderId/terminal-session'), headers: _headers()),
+    );
+    if (resp.statusCode == 200) {
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['id'] as String;
+    }
+    final msg = _extractMessage(resp);
+    if (resp.statusCode == 409) throw OrderAlreadyPaidException(409, msg);
+    throw UnknownApiException(resp.statusCode, msg);
+  }
+
+  Future<String> getTerminalSessionStatus(String sessionId) async {
+    final resp = await _send(() => _http.get(_uri('/api/terminal-sessions/$sessionId')));
+    if (resp.statusCode == 200) {
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['status'] as String;
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> cancelTerminalSession(String sessionId) async {
+    await _send(() => _http.post(_uri('/api/terminal-sessions/$sessionId/cancel'), headers: _headers()));
+  }
+
   // GET /api/orders/{id}
   Future<WahaOrder> getOrder(String orderId) async {
     final resp = await _send(() => _http.get(_uri('/api/orders/$orderId')));

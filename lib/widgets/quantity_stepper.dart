@@ -74,33 +74,39 @@ class QuantityStepper extends StatelessWidget {
           BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _circleBtn(
-            icon: last ? Icons.delete_outline : Icons.remove,
-            color: last ? const Color(0xFFE53935) : const Color(0xFFEEEEEE),
-            iconColor: last ? Colors.white : Colors.grey[700]!,
-            onTap: onRemove,
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: size * 0.28),
-            child: Text(
-              '$qty',
-              style: TextStyle(
-                fontSize: size * 0.44,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+      // Pinned LTR: a stepper is a numeric control, not reading-order
+      // content — minus stays on the left and plus on the right regardless
+      // of the app's locale/text direction (Arabic included).
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _circleBtn(
+              icon: last ? Icons.delete_outline : Icons.remove,
+              color: last ? const Color(0xFFE53935) : const Color(0xFFEEEEEE),
+              iconColor: last ? Colors.white : Colors.grey[700]!,
+              onTap: onRemove,
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: size * 0.28),
+              child: Text(
+                '$qty',
+                style: TextStyle(
+                  fontSize: size * 0.44,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
               ),
             ),
-          ),
-          _circleBtn(
-            icon: Icons.add,
-            color: active ? teal : Colors.grey[300]!,
-            iconColor: Colors.white,
-            onTap: active ? onAdd : null,
-          ),
-        ],
+            _circleBtn(
+              icon: Icons.add,
+              color: active ? teal : Colors.grey[300]!,
+              iconColor: Colors.white,
+              onTap: active ? onAdd : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -119,32 +125,36 @@ class QuantityStepper extends StatelessWidget {
           BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
-      child: Row(
-        children: [
-          _circleBtn(
-            icon: last ? Icons.delete_outline : Icons.remove,
-            color: last ? const Color(0xFFE53935) : const Color(0xFFEEEEEE),
-            iconColor: last ? Colors.white : Colors.grey[700]!,
-            onTap: onRemove,
-          ),
-          Expanded(
-            child: Text(
-              '$qty',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: size * 0.42,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+      // Pinned LTR — see _expanded for why.
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Row(
+          children: [
+            _circleBtn(
+              icon: last ? Icons.delete_outline : Icons.remove,
+              color: last ? const Color(0xFFE53935) : const Color(0xFFEEEEEE),
+              iconColor: last ? Colors.white : Colors.grey[700]!,
+              onTap: onRemove,
+            ),
+            Expanded(
+              child: Text(
+                '$qty',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: size * 0.42,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
               ),
             ),
-          ),
-          _circleBtn(
-            icon: Icons.add,
-            color: active ? teal : Colors.grey[300]!,
-            iconColor: Colors.white,
-            onTap: active ? onAdd : null,
-          ),
-        ],
+            _circleBtn(
+              icon: Icons.add,
+              color: active ? teal : Colors.grey[300]!,
+              iconColor: Colors.white,
+              onTap: active ? onAdd : null,
+            ),
+          ],
+        ),
       ),
     );
   }

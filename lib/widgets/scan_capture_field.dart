@@ -47,13 +47,14 @@ class _ScanCaptureFieldState extends State<ScanCaptureField> {
     });
     final flow = context.read<OrderFlowController>();
     try {
+      // Success sound fires from OrderFlowController._addOrIncrement, the
+      // shared chokepoint for every add-to-cart path (scan + manual) — not
+      // here, so manual adds elsewhere get it too.
       await flow.scanBarcode(barcode.trim());
-      ScanSoundService.playSuccess();
     } on ProductNotFoundException catch (e) {
-      ScanSoundService.playFailure();
+      // Failure sound already fired inside OrderFlowController.scanBarcode.
       _reportError(e.message, isNotFound: true);
     } on ProductNotSellableException catch (e) {
-      ScanSoundService.playFailure();
       _reportError(e.message, isNotFound: false);
     } catch (e) {
       ScanSoundService.playFailure();
