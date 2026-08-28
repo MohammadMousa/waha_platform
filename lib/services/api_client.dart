@@ -567,6 +567,85 @@ class ApiClient {
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
+
+  // ---- Resource Library -----------------------------------------------
+
+  Future<List<ResourceDirectory>> getDirectories(String store, String token) async {
+    final resp = await _send(
+      () => _http.get(_uri('/api/resources/$store/directories'), headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) {
+      return (jsonDecode(resp.body) as List)
+          .map((e) => ResourceDirectory.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<ResourceDirectory> createDirectory(String store, String name, String token) async {
+    final resp = await _send(
+      () => _http.post(
+        _uri('/api/resources/$store/directories'),
+        headers: _headers(token: token),
+        body: jsonEncode({'name': name}),
+      ),
+    );
+    if (resp.statusCode == 200) {
+      return ResourceDirectory.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<List<ResourceAsset>> getAssets(String store, String dir, String token) async {
+    final resp = await _send(
+      () => _http.get(_uri('/api/resources/$store/directories/$dir'), headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) {
+      return (jsonDecode(resp.body) as List)
+          .map((e) => ResourceAsset.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<ResourceAsset> uploadAsset(
+      String store, String dir, List<int> bytes, String filename, String mimeType, String token,
+      {String? nameOverride}) async {
+    final uri = _uri('/api/resources/$store/directories/$dir');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(http.MultipartFile.fromBytes('file', bytes,
+          filename: filename, contentType: http.MediaType.parse(mimeType)));
+    if (nameOverride != null) request.fields['name'] = nameOverride;
+
+    http.StreamedResponse streamed;
+    try {
+      streamed = await _http.send(request);
+    } catch (e) {
+      throw NetworkException(e);
+    }
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      return ResourceAsset(
+        id: 0,
+        name: body['name'] as String,
+        mimeType: mimeType,
+        sizeBytes: bytes.length,
+        sha256: body['sha256'] as String,
+      );
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> deleteAsset(String store, String dir, String name, String token) async {
+    final resp = await _send(
+      () => _http.delete(_uri('/api/resources/$store/directories/$dir/$name'),
+          headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
 }
 
 class PaymentSessionResult {
@@ -616,4 +695,34 @@ class AdminPaymentMethodView {
         effectiveActive: json['effectiveActive'] as bool? ?? true,
         hasStoreOverride: json['hasStoreOverride'] as bool? ?? false,
       );
+}
+
+class ResourceDirectory {
+  final int id;
+  final String name;
+  const ResourceDirectory({required this.id, required this.name});
+  factory ResourceDirectory.fromJson(Map<String, dynamic> json) =>
+      ResourceDirectory(id: (json['id'] as num).toInt(), name: json['name'] as String);
+}
+
+class ResourceAsset {
+  final int id;
+  final String name;
+  final String mimeType;
+  final int sizeBytes;
+  final String sha256;
+  const ResourceAsset({
+    required this.id, required this.name, required this.mimeType,
+    required this.sizeBytes, required this.sha256,
+  });
+  factory ResourceAsset.fromJson(Map<String, dynamic> json) => ResourceAsset(
+    id: (json['id'] as num).toInt(),
+    name: json['name'] as String,
+    mimeType: json['mimeType'] as String,
+    sizeBytes: (json['sizeBytes'] as num).toInt(),
+    sha256: json['sha256'] as String,
+  );
+  bool get isImage => mimeType.startsWith('image/');
+  bool get isHtml => mimeType == 'text/html';
+  String publicUrl(String store, String dir) => '/resource/$store/$dir/$name';
 }

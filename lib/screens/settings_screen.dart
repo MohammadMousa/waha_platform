@@ -280,6 +280,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => Navigator.of(context).pushNamed(Routes.odooAdmin),
             ),
           ],
+          if (context.watch<PermissionService>().can('EDIT_RESOURCES')) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.folder_open_outlined),
+              label: const Text('Resource Explorer'),
+              onPressed: () => Navigator.of(context).pushNamed(Routes.resourceExplorer),
+            ),
+          ],
 
           const SizedBox(height: 48),
 

@@ -16,6 +16,7 @@ import '../screens/profile_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/scan_screen.dart';
 import '../screens/search_screen.dart';
+import '../screens/resource_explorer_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/store_picker_screen.dart';
 import '../screens/success_screen.dart';
@@ -43,6 +44,7 @@ class Routes {
   static const orders = '/orders';
   static const search = '/search';
   static const categories = '/categories';
+  static const resourceExplorer = '/admin/resources';
 
   /// Debug-only — deliberately NOT in kioskAllowlist. Exists to make the
   /// lock observable; see debug_admin_stub_screen.dart.
@@ -134,6 +136,9 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.odooAdmin:
         page = const OdooAdminScreen();
+        break;
+      case Routes.resourceExplorer:
+        page = const ResourceExplorerScreen();
         break;
       case Routes.settings:
         page = const SettingsScreen();
