@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../models/product.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
+import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
@@ -16,6 +18,7 @@ import '../widgets/scan_capture_field.dart';
 import '../widgets/waha_app_bar.dart';
 import '../services/server_discovery.dart';
 import '../widgets/waha_bottom_nav.dart';
+import '../config/app_config.dart';
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -25,10 +28,39 @@ class LandingScreen extends StatefulWidget {
 }
 
 class _LandingScreenState extends State<LandingScreen> {
+  LandingPageInfo? _landingPage;
+  bool _landingChecked = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkServerDiscovery());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkServerDiscovery();
+      _resolveLandingPage();
+    });
+  }
+
+  Future<void> _resolveLandingPage() async {
+    final mode = browsingModeService.mode;
+    if (mode == BrowsingMode.normal) {
+      if (mounted) setState(() => _landingChecked = true);
+      return;
+    }
+    final pageKey = switch (mode) {
+      BrowsingMode.kiosk    => 'KIOSK_LANDING',
+      BrowsingMode.shopping => 'SHOPPING_LANDING',
+      _                     => null,
+    };
+    if (pageKey == null) {
+      if (mounted) setState(() => _landingChecked = true);
+      return;
+    }
+    try {
+      final info = await context.read<ApiClient>().getLandingPage(pageKey, authService.token);
+      if (mounted) setState(() { _landingPage = info; _landingChecked = true; });
+    } catch (_) {
+      if (mounted) setState(() => _landingChecked = true);
+    }
   }
 
   void _checkServerDiscovery() {
@@ -69,8 +101,54 @@ class _LandingScreenState extends State<LandingScreen> {
   Widget build(BuildContext context) {
     final mode = context.watch<BrowsingModeService>().mode;
     if (mode == BrowsingMode.normal) return const _NormalLanding();
+
+    if (!_landingChecked) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final page = _landingPage;
+    if (page != null) {
+      final fullUrl = '${AppConfig.apiBaseUrl}${page.resourceUrl}';
+      return _WebViewLanding(url: fullUrl);
+    }
+
     return const _ScanLanding();
   }
+}
+
+// ── Dynamic landing page via WebView ─────────────────────────────────────────
+
+class _WebViewLanding extends StatefulWidget {
+  final String url;
+  const _WebViewLanding({required this.url});
+
+  @override
+  State<_WebViewLanding> createState() => _WebViewLandingState();
+}
+
+class _WebViewLandingState extends State<_WebViewLanding> {
+  late final WebViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  void didUpdateWidget(_WebViewLanding old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) {
+      _controller.loadRequest(Uri.parse(widget.url));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: WebViewWidget(controller: _controller),
+      );
 }
 
 // ── Normal mode: home page ────────────────────────────────────────────────────

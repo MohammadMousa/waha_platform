@@ -646,6 +646,21 @@ class ApiClient {
     if (resp.statusCode == 200) return;
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
+
+  // GET /api/landing/{pageKey} — resolves current-store-vs-global landing page.
+  // Returns null when no page is configured (404).
+  Future<LandingPageInfo?> getLandingPage(String pageKey, String? token) async {
+    final resp = await _send(
+      () => _http.get(_uri('/api/landing/$pageKey'),
+          headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 404) return null;
+    if (resp.statusCode == 200) {
+      return LandingPageInfo.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
 }
 
 class PaymentSessionResult {
@@ -725,4 +740,28 @@ class ResourceAsset {
   bool get isImage => mimeType.startsWith('image/');
   bool get isHtml => mimeType == 'text/html';
   String publicUrl(String store, String dir) => '/resource/$store/$dir/$name';
+}
+
+class LandingPageInfo {
+  final String pageKey;
+  final String scope; // "local" | "global"
+  final String store;
+  final String resourceUrl; // relative, e.g. /resource/root/pages/KIOSK_LANDING.html
+  final String contentHash;
+
+  const LandingPageInfo({
+    required this.pageKey,
+    required this.scope,
+    required this.store,
+    required this.resourceUrl,
+    required this.contentHash,
+  });
+
+  factory LandingPageInfo.fromJson(Map<String, dynamic> json) => LandingPageInfo(
+    pageKey: json['page_key'] as String,
+    scope: json['scope'] as String,
+    store: json['store'] as String,
+    resourceUrl: json['resource_url'] as String,
+    contentHash: json['content_hash'] as String,
+  );
 }
