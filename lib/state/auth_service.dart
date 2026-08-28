@@ -199,7 +199,8 @@ class AuthService extends ChangeNotifier {
         final s = (candidates != null && candidates.isNotEmpty)
             ? candidates.first
             : stores.first;
-        storeConfigService.applySessionStore(s.id, name: s.name, currency: s.currency);
+        storeConfigService.applySessionStore(s.id,
+            name: s.label('en'), slug: s.name, currency: s.currency);
       }
     } catch (_) {
       // Non-fatal — user hits StorePicker if they try to browse with no store.

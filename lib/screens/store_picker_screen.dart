@@ -55,7 +55,7 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
         await authService.selectStore(api, store.id);
       }
       storeConfigService.applySessionStore(store.id,
-          name: store.label(languageCode), currency: store.currency);
+          name: store.label(languageCode), slug: store.name, currency: store.currency);
       if (hadItems) _clearCartIfNeeded();
       if (mounted) {
         final returnTo = ModalRoute.of(context)?.settings.arguments as String?;
@@ -84,7 +84,7 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
         await authService.selectStore(api, store.id);
       }
       storeConfigService.applySessionStore(store.id,
-          name: store.label(languageCode), currency: store.currency);
+          name: store.label(languageCode), slug: store.name, currency: store.currency);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -24,7 +24,8 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
   bool _loadingAssets = false;
   String? _error;
 
-  String get _storeName => storeConfigService.storeName ?? '';
+  String get _storeSlug => storeConfigService.storeSlug ?? '';
+  String get _storeDisplayName => storeConfigService.storeName ?? _storeSlug;
 
   @override
   void initState() {
@@ -35,10 +36,10 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
   String get _token => authService.token ?? '';
 
   Future<void> _loadDirs() async {
-    if (_storeName.isEmpty) return;
+    if (_storeSlug.isEmpty) { setState(() { _error = 'Store not configured'; _loadingDirs = false; }); return; }
     setState(() { _loadingDirs = true; _error = null; });
     try {
-      final dirs = await context.read<ApiClient>().getDirectories(_storeName, _token);
+      final dirs = await context.read<ApiClient>().getDirectories(_storeSlug, _token);
       if (mounted) {
         setState(() { _dirs = dirs; _loadingDirs = false; });
         if (_selectedDir != null) {
@@ -59,7 +60,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
   Future<void> _selectDir(ResourceDirectory dir) async {
     setState(() { _selectedDir = dir; _loadingAssets = true; _assets = []; });
     try {
-      final assets = await context.read<ApiClient>().getAssets(_storeName, dir.name, _token);
+      final assets = await context.read<ApiClient>().getAssets(_storeSlug, dir.name, _token);
       if (mounted) setState(() { _assets = assets; _loadingAssets = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loadingAssets = false; });
@@ -72,7 +73,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
         hint: 'e.g. landing, products');
     if (name == null || name.isEmpty) return;
     try {
-      await client.createDirectory(_storeName, name, _token);
+      await client.createDirectory(_storeSlug, name, _token);
       await _loadDirs();
     } catch (e) {
       if (mounted) {
@@ -96,7 +97,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
     setState(() => _loadingAssets = true);
     try {
       await client.uploadAsset(
-        _storeName, dir.name, file.bytes!, file.name, mimeType, _token);
+        _storeSlug, dir.name, file.bytes!, file.name, mimeType, _token);
       if (mounted) await _selectDir(dir);
     } catch (e) {
       if (mounted) {
@@ -129,7 +130,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
     );
     if (confirmed != true) return;
     try {
-      await client.deleteAsset(_storeName, dir.name, asset.name, _token);
+      await client.deleteAsset(_storeSlug, dir.name, asset.name, _token);
       if (mounted) await _selectDir(dir);
     } catch (e) {
       if (mounted) {
@@ -143,7 +144,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
   void _copyUrl(ResourceAsset asset) {
     final dir = _selectedDir;
     if (dir == null) return;
-    final url = asset.publicUrl(_storeName, dir.name);
+    final url = asset.publicUrl(_storeSlug, dir.name);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Copied: $url')),
@@ -155,7 +156,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
     final wide = MediaQuery.of(context).size.width > 600;
     return Scaffold(
       appBar: AppBar(
-        title: Text('Resource Explorer${_storeName.isNotEmpty ? ' — $_storeName' : ''}'),
+        title: Text('Resource Explorer${_storeDisplayName.isNotEmpty ? ' — $_storeDisplayName' : ''}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_outlined),
@@ -190,7 +191,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
                     onUpload: _upload,
                     onDelete: _delete,
                     onCopyUrl: _copyUrl,
-                    storeName: _storeName,
+                    storeName: _storeSlug,
                   )),
                 ])
               : _selectedDir == null
@@ -215,7 +216,7 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
                         onUpload: _upload,
                         onDelete: _delete,
                         onCopyUrl: _copyUrl,
-                        storeName: _storeName,
+                        storeName: _storeSlug,
                       )),
                     ]),
     );

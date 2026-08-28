@@ -9,7 +9,8 @@ import '../services/local_prefs.dart';
 /// re-resolved at runtime via resolveDefaultStore / _applySession.
 class StoreConfigService extends ChangeNotifier {
   int? _storeId;
-  String? _storeName;
+  String? _storeName;   // human-readable display name (may be Arabic)
+  String? _storeSlug;   // URL-safe slug from stores.name — use for API calls
   String? _storeCurrency;
   Map<String, dynamic>? _appName; // {"en": "Waha", "ar": "واحة"}
 
@@ -17,6 +18,8 @@ class StoreConfigService extends ChangeNotifier {
 
   int? get storeId => _storeId;
   String? get storeName => _storeName;
+  /// The URL-safe slug (`stores.name`). Always use this for API calls.
+  String? get storeSlug => _storeSlug;
   String? get storeCurrency => _storeCurrency;
   Map<String, dynamic>? get appName => _appName;
 
@@ -27,9 +30,10 @@ class StoreConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setStore(int id, {String? name, String? currency, bool persist = true}) {
+  void setStore(int id, {String? name, String? slug, String? currency, bool persist = true}) {
     _storeId = id;
     _storeName = name;
+    if (slug != null) _storeSlug = slug;
     _storeCurrency = currency;
     if (persist) LocalPrefs.setStoreId(id);
     notifyListeners();
@@ -38,9 +42,10 @@ class StoreConfigService extends ChangeNotifier {
   /// Updates the active store in-memory only — never writes to LocalPrefs.
   /// Use this for session switches and startup resolution; only "Make Default"
   /// in the store picker should ever write to LocalPrefs.
-  void applySessionStore(int id, {String? name, String? currency}) {
+  void applySessionStore(int id, {String? name, String? slug, String? currency}) {
     _storeId = id;
     if (name != null) _storeName = name;
+    if (slug != null) _storeSlug = slug;
     if (currency != null) _storeCurrency = currency;
     notifyListeners();
   }
