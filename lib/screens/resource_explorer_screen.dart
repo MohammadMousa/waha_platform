@@ -456,6 +456,11 @@ class _AssetRow extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          IconButton(
+            icon: Icon(Icons.open_in_new_outlined, size: 18, color: scheme.primary),
+            tooltip: 'Preview',
+            onPressed: () => _openPreview(context, asset, dir, storeName),
+          ),
           IconButton(icon: const Icon(Icons.copy_outlined, size: 18), tooltip: 'Copy URL', onPressed: onCopyUrl),
           IconButton(icon: Icon(Icons.delete_outline, size: 18, color: scheme.error), tooltip: 'Delete', onPressed: onDelete),
         ],
@@ -513,6 +518,11 @@ class _AssetCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 11)),
                 ),
+                GestureDetector(
+                  onTap: () => _openPreview(context, asset, dir, storeName),
+                  child: Icon(Icons.open_in_new_outlined, size: 13, color: scheme.primary),
+                ),
+                const SizedBox(width: 4),
                 GestureDetector(
                   onTap: onCopyUrl,
                   child: Icon(Icons.copy_outlined, size: 13, color: scheme.outline),
