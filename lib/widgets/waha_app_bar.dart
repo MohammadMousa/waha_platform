@@ -7,9 +7,11 @@ import '../state/locale_service.dart';
 import 'profile_sheet.dart';
 
 /// App bar — profile icon for Normal mode, language toggle for Kiosk/Shopping.
+/// Pass [extraActions] to prepend additional action widgets (e.g. EditModeToggle).
 class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
-  const WahaAppBar({super.key, required this.title});
+  final List<Widget> extraActions;
+  const WahaAppBar({super.key, required this.title, this.extraActions = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +22,7 @@ class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       title: Text(title),
       actions: [
+        ...extraActions,
         if (isNormal)
           IconButton(
             tooltip: l10n.profileTitle,

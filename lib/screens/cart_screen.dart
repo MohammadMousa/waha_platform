@@ -28,6 +28,12 @@ class _CartScreenState extends State<CartScreen> {
   int _tapCount = 0;
   Timer? _tapTimer;
 
+  final ScrollController _scrollController = ScrollController();
+  final Map<int, GlobalKey> _itemKeys = {};
+  final Set<int> _flashingIds = {};
+  Timer? _flashTimer;
+  late final OrderFlowController _flow;
+
   void _onBodyTap() {
     if (!AppConfig.simulatorAvailable) return;
     _tapTimer?.cancel();
@@ -41,8 +47,47 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _flow = context.read<OrderFlowController>();
+    _flow.addListener(_onFlowChanged);
+  }
+
+  void _onFlowChanged() {
+    final flow = _flow;
+    final touched = flow.lastTouchedProductId;
+    if (touched == null || !mounted) return;
+    flow.lastTouchedProductId = null; // consume — no notifyListeners needed
+
+    // Flash highlight
+    setState(() => _flashingIds.add(touched));
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _flashingIds.clear());
+    });
+
+    // Scroll the item into view after the frame renders with the new item
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _itemKeys[touched];
+      final ctx = key?.currentContext;
+      if (ctx != null && mounted) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            alignment: 0.5);
+      }
+    });
+  }
+
+  GlobalKey _keyFor(int productId) =>
+      _itemKeys.putIfAbsent(productId, GlobalKey.new);
+
+  @override
   void dispose() {
+    _flow.removeListener(_onFlowChanged);
+    _scrollController.dispose();
     _tapTimer?.cancel();
+    _flashTimer?.cancel();
     super.dispose();
   }
 
@@ -144,6 +189,7 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     itemCount: flow.cart.length,
                     itemBuilder: (context, i) {
@@ -151,20 +197,29 @@ class _CartScreenState extends State<CartScreen> {
                       QuoteLine? line;
                       if (quote != null) {
                         for (final l in quote.items) {
-                          if (l.productId == item.productId) {
-                            line = l;
-                            break;
-                          }
+                          if (l.productId == item.productId) { line = l; break; }
                         }
                       }
                       final controller = context.read<OrderFlowController>();
-                      return CartLineTile(
-                        item: item,
-                        line: line,
-                        currency: currency,
-                        onQuantityChanged: (q) =>
-                            controller.updateQuantity(item.productId, q),
-                        onRemove: () => controller.removeItem(item.productId),
+                      final flashing = _flashingIds.contains(item.productId);
+                      return AnimatedContainer(
+                        key: _keyFor(item.productId),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOut,
+                        decoration: BoxDecoration(
+                          color: flashing
+                              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.55)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: CartLineTile(
+                          item: item,
+                          line: line,
+                          currency: currency,
+                          onQuantityChanged: (q) =>
+                              controller.updateQuantity(item.productId, q),
+                          onRemove: () => controller.removeItem(item.productId),
+                        ),
                       );
                     },
                   ),

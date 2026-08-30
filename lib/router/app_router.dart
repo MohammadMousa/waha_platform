@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/store.dart';
 import '../screens/browse_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/categories_screen.dart';
@@ -16,10 +17,16 @@ import '../screens/profile_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/scan_screen.dart';
 import '../screens/search_screen.dart';
+import '../screens/category_edit_screen.dart';
+import '../screens/product_edit_screen.dart';
+import '../screens/payment_methods_screen.dart';
+import '../screens/receipt_info_edit_screen.dart';
 import '../screens/resource_explorer_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/store_edit_screen.dart';
 import '../screens/store_picker_screen.dart';
 import '../screens/success_screen.dart';
+import '../models/category.dart';
 import '../models/product.dart';
 import '../state/browsing_mode_service.dart';
 import '../widgets/kiosk_idle_guard.dart';
@@ -45,6 +52,11 @@ class Routes {
   static const search = '/search';
   static const categories = '/categories';
   static const resourceExplorer = '/admin/resources';
+  static const productEdit = '/admin/product/edit';
+  static const categoryEdit = '/admin/category/edit';
+  static const storeEdit = '/admin/store/edit';
+  static const receiptInfoEdit = '/admin/receipt-info/edit';
+  static const paymentMethods = '/admin/payment-methods';
 
   /// Debug-only — deliberately NOT in kioskAllowlist. Exists to make the
   /// lock observable; see debug_admin_stub_screen.dart.
@@ -63,7 +75,12 @@ class Routes {
   /// lists Shopping as having full browsing too — kept out of scope this
   /// round to avoid re-litigating Shopping's already-built fast-scan UX
   /// in the same change; see FRONTEND_AI.md.
-  static const kioskAllowlist = {landing, scan, cart, checkout, invoice, pay, success};
+  // browse/categories/search/productDetail are intentionally included so that
+  // HTML landing-page banners (href="/screen?name=browse_screen&tag=X") can
+  // navigate to catalog screens from kiosk/shopping mode without being blocked
+  // by the nav guard.  Settings, profile, admin, and auth routes remain locked.
+  static const kioskAllowlist = {landing, scan, cart, checkout, invoice, pay, success,
+      browse, categories, search, productDetail};
 
   /// Which non-Landing routes represent "after invoice" for idle-timer
   /// purposes (shorter, display-oriented countdown vs. the general
@@ -140,6 +157,30 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
       case Routes.resourceExplorer:
         page = const ResourceExplorerScreen();
         break;
+      case Routes.productEdit:
+        final productId = settings.arguments;
+        page = productId is int
+            ? ProductEditScreen(productId: productId)
+            : const LandingScreen();
+        break;
+      case Routes.categoryEdit:
+        final catArg = settings.arguments;
+        page = catArg is Category
+            ? CategoryEditScreen(category: catArg)
+            : const LandingScreen();
+        break;
+      case Routes.storeEdit:
+        final storeArg = settings.arguments;
+        page = storeArg is Store
+            ? StoreEditScreen(store: storeArg)
+            : const LandingScreen();
+        break;
+      case Routes.paymentMethods:
+        page = const PaymentMethodsScreen();
+        break;
+      case Routes.receiptInfoEdit:
+        page = const ReceiptInfoEditScreen();
+        break;
       case Routes.settings:
         page = const SettingsScreen();
         break;
@@ -150,7 +191,8 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         final browseArgs = settings.arguments;
         final categoryId = browseArgs is Map ? browseArgs['categoryId'] as int? : null;
         final browseTitle = browseArgs is Map ? browseArgs['title'] as String? : null;
-        page = BrowseScreen(categoryId: categoryId, browseTitle: browseTitle);
+        final searchQuery = browseArgs is Map ? browseArgs['searchQuery'] as String? : null;
+        page = BrowseScreen(categoryId: categoryId, browseTitle: browseTitle, searchQuery: searchQuery);
         break;
       case Routes.register:
         page = const RegisterScreen();

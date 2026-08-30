@@ -130,10 +130,48 @@ class LocalPrefs {
   static Future<void> setSimProductCodes(List<String> codes) =>
       _p.setStringList(_kSimProductCodes, codes);
 
+  // Auto-cache: when on, every code the simulator fires (tap, long-press
+  // manual entry, camera-via-simulator) gets appended to simProductCodes
+  // automatically, up to simCacheLimit. Off by default — opt-in, since it
+  // changes the saved-codes list as a side effect of just using the
+  // simulator rather than requiring the explicit editor screen.
+  static const _kSimAutoCache = 'waha.sim_auto_cache';
+  static bool get simAutoCache => _p.getBool(_kSimAutoCache) ?? false;
+  static Future<void> setSimAutoCache(bool value) =>
+      _p.setBool(_kSimAutoCache, value);
+
+  static const _kSimCacheLimit = 'waha.sim_cache_limit';
+  static int get simCacheLimit => _p.getInt(_kSimCacheLimit) ?? 10;
+  static Future<void> setSimCacheLimit(int value) =>
+      _p.setInt(_kSimCacheLimit, value);
+
   // Runtime API base URL — overrides platform default when set.
   // Persisted so kiosk devices survive reboots without reconfiguration.
   static const _kApiBaseUrl = 'waha.api_base_url';
   static String? get apiBaseUrl => _p.getString(_kApiBaseUrl);
   static Future<void> setApiBaseUrl(String value) => _p.setString(_kApiBaseUrl, value);
   static Future<void> clearApiBaseUrl() => _p.remove(_kApiBaseUrl);
+
+  // Landing page cache — hash only; HTML bytes live in LandingCache files.
+  // Separate key per page (KIOSK_LANDING, SHOPPING_LANDING, CLIENT_LANDING, ADMIN_LANDING).
+  static String? landingHash(String pageKey) =>
+      _p.getString('waha.landing_hash.$pageKey');
+  static Future<void> setLandingHash(String pageKey, String hash) =>
+      _p.setString('waha.landing_hash.$pageKey', hash);
+
+  // Resource URL for each landing page key — relative path like
+  // /resource/waha/pages/KIOSK_LANDING.html — stored so the WebView can load
+  // via loadRequest() on the next cold start without waiting for the API.
+  static String? landingResourceUrl(String pageKey) =>
+      _p.getString('waha.landing_res_url.$pageKey');
+  static Future<void> setLandingResourceUrl(String pageKey, String url) =>
+      _p.setString('waha.landing_res_url.$pageKey', url);
+
+  // Which page key was last used for BrowsingMode.normal — either
+  // 'ADMIN_LANDING' or 'CLIENT_LANDING'. Saved after auth resolves so the
+  // correct page is served on the very next cold start without waiting.
+  static const _kLandingNormalKey = 'waha.landing_normal_key';
+  static String? get landingNormalKey => _p.getString(_kLandingNormalKey);
+  static Future<void> setLandingNormalKey(String key) =>
+      _p.setString(_kLandingNormalKey, key);
 }

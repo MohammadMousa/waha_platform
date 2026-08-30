@@ -3,12 +3,14 @@ class Store {
   final String name;
   final Map<String, String>? displayName; // {"ar": "...", "en": "..."} — raw i18n blob, pick key client-side
   final String? currency;
+  final int? imageResourceId;
 
   const Store({
     required this.id,
     required this.name,
     this.displayName,
     this.currency,
+    this.imageResourceId,
   });
 
   /// Picks the display name for the given language code, falling back to
@@ -25,5 +27,6 @@ class Store {
         displayName: (json['displayName'] as Map<String, dynamic>?)
             ?.map((k, v) => MapEntry(k, v as String)),
         currency: json['currency'] as String?,
+        imageResourceId: json['imageResourceId'] as int?,
       );
 }

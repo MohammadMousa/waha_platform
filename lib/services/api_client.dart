@@ -628,7 +628,7 @@ class ApiClient {
     if (resp.statusCode == 200) {
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       return ResourceAsset(
-        id: 0,
+        id: (body['resourceId'] as num).toInt(),
         name: body['name'] as String,
         mimeType: mimeType,
         sizeBytes: bytes.length,
@@ -644,6 +644,129 @@ class ApiClient {
           headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> moveAsset(String store, String dir, String name, String targetDir, String token) async {
+    final resp = await _send(
+      () => _http.patch(
+        _uri('/api/resources/$store/directories/$dir/$name/move'),
+        headers: _headers(token: token),
+        body: jsonEncode({'targetDir': targetDir}),
+      ),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> renameAsset(String store, String dir, String name, String newName, String token) async {
+    final resp = await _send(
+      () => _http.patch(
+        _uri('/api/resources/$store/directories/$dir/$name/rename'),
+        headers: _headers(token: token),
+        body: jsonEncode({'newName': newName}),
+      ),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // GET /api/stores/{id}/admin — full admin detail including active/public flags.
+  Future<Map<String, dynamic>?> getStoreAdminDetails(int storeId, {required String token}) async {
+    final resp = await _send(
+      () => _http.get(_uri('/api/stores/$storeId/admin'),
+          headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 404) return null;
+    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> addProductGalleryImage(int productId, int resourceId, {required String token}) async {
+    final resp = await _send(
+      () => _http.post(_uri('/api/products/$productId/images'),
+          headers: _headers(token: token),
+          body: jsonEncode({'resourceId': resourceId})),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  Future<void> removeProductGalleryImage(int productId, int resourceId, {required String token}) async {
+    final resp = await _send(
+      () => _http.delete(_uri('/api/products/$productId/images/$resourceId'),
+          headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // ---- Admin edit endpoints -------------------------------------------
+
+  // PATCH /api/products/{id}
+  Future<void> patchProduct(int id, Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.patch(_uri('/api/products/$id'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // PATCH /api/categories/{id}
+  Future<void> patchCategory(int id, Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.patch(_uri('/api/categories/$id'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // PATCH /api/stores/{id}
+  Future<void> patchStore(int id, Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.patch(_uri('/api/stores/$id'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // GET /api/receipt-info
+  Future<ReceiptInfoData?> getReceiptInfo({int? storeId, String? token}) async {
+    final resp = await _send(
+      () => _http.get(
+        _uri('/api/receipt-info').replace(
+          queryParameters: storeId != null ? {'storeId': '$storeId'} : null,
+        ),
+        headers: _headers(token: token),
+      ),
+    );
+    if (resp.statusCode == 404) return null;
+    if (resp.statusCode == 200) {
+      return ReceiptInfoData.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // PATCH /api/receipt-info
+  Future<void> patchReceiptInfo(Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.patch(_uri('/api/receipt-info'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // GET arbitrary resource URL (relative path) — downloads raw text content.
+  // Used to fetch landing page HTML for local caching.
+  Future<String> fetchResourceContent(String resourceUrl, String? token) async {
+    final resp = await _send(
+      () => _http.get(_uri(resourceUrl), headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) return utf8.decode(resp.bodyBytes);
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
@@ -740,6 +863,44 @@ class ResourceAsset {
   bool get isImage => mimeType.startsWith('image/');
   bool get isHtml => mimeType == 'text/html';
   String publicUrl(String store, String dir) => '/resource/$store/$dir/$name';
+}
+
+class ReceiptInfoData {
+  final int storeId;
+  final String? nameAr;
+  final String? nameEn;
+  final String? addressText;
+  final String? vatNumber;
+  final String? crNumber;
+  final int? logoResourceId;
+  final String? unpaidInvoiceTitle;
+  final String? paidInvoiceTitle;
+
+  const ReceiptInfoData({
+    required this.storeId,
+    this.nameAr,
+    this.nameEn,
+    this.addressText,
+    this.vatNumber,
+    this.crNumber,
+    this.logoResourceId,
+    this.unpaidInvoiceTitle,
+    this.paidInvoiceTitle,
+  });
+
+  factory ReceiptInfoData.fromJson(Map<String, dynamic> json) => ReceiptInfoData(
+        storeId: (json['storeId'] as num).toInt(),
+        nameAr: json['nameAr'] as String?,
+        nameEn: json['nameEn'] as String?,
+        addressText: json['addressText'] as String?,
+        vatNumber: json['vatNumber'] as String?,
+        crNumber: json['crNumber'] as String?,
+        logoResourceId: json['logoResourceId'] == null
+            ? null
+            : (json['logoResourceId'] as num).toInt(),
+        unpaidInvoiceTitle: json['unpaidInvoiceTitle'] as String?,
+        paidInvoiceTitle: json['paidInvoiceTitle'] as String?,
+      );
 }
 
 class LandingPageInfo {

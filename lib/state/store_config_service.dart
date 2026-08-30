@@ -9,8 +9,9 @@ import '../services/local_prefs.dart';
 /// re-resolved at runtime via resolveDefaultStore / _applySession.
 class StoreConfigService extends ChangeNotifier {
   int? _storeId;
-  String? _storeName;   // human-readable display name (may be Arabic)
-  String? _storeSlug;   // URL-safe slug from stores.name — use for API calls
+  String? _storeName;                    // kept for legacy callers
+  Map<String, dynamic>? _storeDisplayName; // {"en": "...", "ar": "..."} — bilingual
+  String? _storeSlug;
   String? _storeCurrency;
   Map<String, dynamic>? _appName; // {"en": "Waha", "ar": "واحة"}
 
@@ -18,6 +19,7 @@ class StoreConfigService extends ChangeNotifier {
 
   int? get storeId => _storeId;
   String? get storeName => _storeName;
+  Map<String, dynamic>? get storeDisplayName => _storeDisplayName;
   /// The URL-safe slug (`stores.name`). Always use this for API calls.
   String? get storeSlug => _storeSlug;
   String? get storeCurrency => _storeCurrency;
@@ -30,9 +32,14 @@ class StoreConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setStore(int id, {String? name, String? slug, String? currency, bool persist = true}) {
+  void setStore(int id, {String? name, Map<String, dynamic>? displayName, String? slug, String? currency, bool persist = true}) {
     _storeId = id;
-    _storeName = name;
+    if (displayName != null) {
+      _storeDisplayName = displayName;
+      _storeName = null;
+    } else if (name != null) {
+      _storeName = name;
+    }
     if (slug != null) _storeSlug = slug;
     _storeCurrency = currency;
     if (persist) LocalPrefs.setStoreId(id);
@@ -42,9 +49,14 @@ class StoreConfigService extends ChangeNotifier {
   /// Updates the active store in-memory only — never writes to LocalPrefs.
   /// Use this for session switches and startup resolution; only "Make Default"
   /// in the store picker should ever write to LocalPrefs.
-  void applySessionStore(int id, {String? name, String? slug, String? currency}) {
+  void applySessionStore(int id, {String? name, Map<String, dynamic>? displayName, String? slug, String? currency}) {
     _storeId = id;
-    if (name != null) _storeName = name;
+    if (displayName != null) {
+      _storeDisplayName = displayName;
+      _storeName = null;
+    } else if (name != null) {
+      _storeName = name;
+    }
     if (slug != null) _storeSlug = slug;
     if (currency != null) _storeCurrency = currency;
     notifyListeners();

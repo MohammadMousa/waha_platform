@@ -280,6 +280,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => Navigator.of(context).pushNamed(Routes.odooAdmin),
             ),
           ],
+          if (context.watch<PermissionService>().can('MANAGE_STORES')) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.receipt_outlined),
+              label: const Text('Edit Receipt Info'),
+              onPressed: () => Navigator.of(context).pushNamed(Routes.receiptInfoEdit),
+            ),
+          ],
           if (context.watch<PermissionService>().can('EDIT_RESOURCES')) ...[
             const SizedBox(height: 10),
             OutlinedButton.icon(

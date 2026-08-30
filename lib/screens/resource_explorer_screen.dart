@@ -1,12 +1,20 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../config/app_config.dart';
 import '../services/api_client.dart';
 import '../state/auth_service.dart';
 import '../state/store_config_service.dart';
+import '../widgets/batch_upload_dialog.dart';
+
+bool get _supportsWebView =>
+    kIsWeb || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
 
 // ── Layout modes ───────────────────────────────────────────────────────────────
 
@@ -123,6 +131,131 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
     }
   }
 
+  Future<void> _uploadMultiple() async {
+    final dir = _selectedDir;
+    if (dir == null) return;
+
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.file_copy_outlined),
+              title: const Text('Pick files'),
+              subtitle: const Text('Choose one or more files'),
+              onTap: () => Navigator.pop(context, 'files'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Pick folder'),
+              subtitle: const Text('Upload all files in a directory'),
+              onTap: () => Navigator.pop(context, 'folder'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    List<UploadItem> items;
+    if (source == 'files') {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.any);
+      if (result == null || result.files.isEmpty || !mounted) return;
+      items = result.files
+          .where((f) => f.path != null)
+          .map((f) => (path: f.path!, name: f.name))
+          .toList();
+    } else {
+      final dirPath = await FilePicker.platform.getDirectoryPath();
+      if (dirPath == null || !mounted) return;
+      final entities = await Directory(dirPath).list(recursive: true, followLinks: false).toList();
+      items = entities.whereType<File>().map((f) {
+        final name = f.path.split(Platform.pathSeparator).last;
+        return (path: f.path, name: name);
+      }).toList();
+    }
+
+    if (items.isEmpty || !mounted) return;
+
+    final done = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => BatchUploadDialog(
+        items: items,
+        destinationDir: dir.name,
+        storeSlug: _storeSlug,
+        token: _token,
+        client: context.read<ApiClient>(),
+      ),
+    );
+
+    if (done == true && mounted) await _selectDir(dir);
+  }
+
+  Future<void> _rename(ResourceAsset asset) async {
+    final dir = _selectedDir;
+    if (dir == null) return;
+    final api = context.read<ApiClient>();
+    final messenger = ScaffoldMessenger.of(context);
+    final newName = await _showNameDialog(context, title: 'Rename', hint: asset.name);
+    if (newName == null || newName.isEmpty || newName == asset.name) return;
+    try {
+      await api.renameAsset(_storeSlug, dir.name, asset.name, newName, _token);
+      if (mounted) await _selectDir(dir);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Rename failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _move(ResourceAsset asset) async {
+    final dir = _selectedDir;
+    if (dir == null) return;
+    if (_dirs.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No other directories to move to')),
+      );
+      return;
+    }
+    final targets = _dirs.where((d) => d.id != dir.id).toList();
+    final picked = await showDialog<ResourceDirectory>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Move to directory'),
+        children: [
+          for (final d in targets)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, d),
+              child: ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(d.name),
+                dense: true,
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final api = context.read<ApiClient>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await api.moveAsset(_storeSlug, dir.name, asset.name, picked.name, _token);
+      if (mounted) {
+        await _selectDir(dir);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Moved "${asset.name}" to ${picked.name}')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Move failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _delete(ResourceAsset asset) async {
     final dir = _selectedDir;
     if (dir == null) return;
@@ -203,7 +336,8 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
                   const VerticalDivider(width: 1),
                   Expanded(child: _AssetPanel(
                     dir: _selectedDir, assets: _assets, loading: _loadingAssets,
-                    onUpload: _upload, onDelete: _delete, onCopyUrl: _copyUrl,
+                    onUpload: _upload, onUploadMultiple: _uploadMultiple,
+                    onDelete: _delete, onCopyUrl: _copyUrl, onMove: _move, onRename: _rename,
                     storeName: _storeSlug, layout: _layout, onLayoutChange: _setLayout,
                   )),
                 ])
@@ -221,7 +355,8 @@ class _ResourceExplorerScreenState extends State<ResourceExplorerScreen> {
                       const Divider(height: 1),
                       Expanded(child: _AssetPanel(
                         dir: _selectedDir, assets: _assets, loading: _loadingAssets,
-                        onUpload: _upload, onDelete: _delete, onCopyUrl: _copyUrl,
+                        onUpload: _upload, onUploadMultiple: _uploadMultiple,
+                        onDelete: _delete, onCopyUrl: _copyUrl, onMove: _move, onRename: _rename,
                         storeName: _storeSlug, layout: _layout, onLayoutChange: _setLayout,
                       )),
                     ]),
@@ -287,15 +422,20 @@ class _AssetPanel extends StatelessWidget {
   final List<ResourceAsset> assets;
   final bool loading;
   final VoidCallback onUpload;
+  final VoidCallback onUploadMultiple;
   final ValueChanged<ResourceAsset> onDelete;
   final ValueChanged<ResourceAsset> onCopyUrl;
+  final ValueChanged<ResourceAsset> onMove;
+  final ValueChanged<ResourceAsset> onRename;
   final String storeName;
   final _AssetLayout layout;
   final ValueChanged<_AssetLayout> onLayoutChange;
 
   const _AssetPanel({
     required this.dir, required this.assets, required this.loading,
-    required this.onUpload, required this.onDelete, required this.onCopyUrl,
+    required this.onUpload, required this.onUploadMultiple,
+    required this.onDelete, required this.onCopyUrl, required this.onMove,
+    required this.onRename,
     required this.storeName, required this.layout, required this.onLayoutChange,
   });
 
@@ -324,8 +464,18 @@ class _AssetPanel extends StatelessWidget {
               // Upload
               TextButton.icon(
                 icon: const Icon(Icons.upload_file_outlined, size: 16),
-                label: const Text('Upload'),
+                label: const Text('Upload file'),
                 onPressed: onUpload,
+                style: TextButton.styleFrom(
+                  foregroundColor: scheme.primary,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 4),
+              TextButton.icon(
+                icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
+                label: const Text('Upload files'),
+                onPressed: onUploadMultiple,
                 style: TextButton.styleFrom(
                   foregroundColor: scheme.primary,
                   visualDensity: VisualDensity.compact,
@@ -358,6 +508,8 @@ class _AssetPanel extends StatelessWidget {
       showThumb: false,
       onDelete: () => onDelete(assets[i]),
       onCopyUrl: () => onCopyUrl(assets[i]),
+      onMove: () => onMove(assets[i]),
+      onRename: () => onRename(assets[i]),
     ),
   );
 
@@ -368,6 +520,8 @@ class _AssetPanel extends StatelessWidget {
       showThumb: true,
       onDelete: () => onDelete(assets[i]),
       onCopyUrl: () => onCopyUrl(assets[i]),
+      onMove: () => onMove(assets[i]),
+      onRename: () => onRename(assets[i]),
     ),
   );
 
@@ -384,6 +538,8 @@ class _AssetPanel extends StatelessWidget {
       asset: assets[i], dir: dir!, storeName: storeName,
       onDelete: () => onDelete(assets[i]),
       onCopyUrl: () => onCopyUrl(assets[i]),
+      onMove: () => onMove(assets[i]),
+      onRename: () => onRename(assets[i]),
     ),
   );
 }
@@ -425,10 +581,13 @@ class _AssetRow extends StatelessWidget {
   final bool showThumb;
   final VoidCallback onDelete;
   final VoidCallback onCopyUrl;
+  final VoidCallback onMove;
+  final VoidCallback onRename;
 
   const _AssetRow({
     required this.asset, required this.dir, required this.storeName,
     required this.showThumb, required this.onDelete, required this.onCopyUrl,
+    required this.onMove, required this.onRename,
   });
 
   @override
@@ -437,15 +596,9 @@ class _AssetRow extends StatelessWidget {
 
     Widget leading;
     if (showThumb) {
-      leading = _AssetThumb(
-        asset: asset, storeName: storeName, dirName: dir.name, size: 52,
-      );
+      leading = _AssetThumb(asset: asset, storeName: storeName, dirName: dir.name, size: 52);
     } else {
-      leading = Icon(
-        _typeIcon(asset),
-        color: scheme.primary,
-        size: 22,
-      );
+      leading = Icon(_typeIcon(asset), color: scheme.primary, size: 22);
     }
 
     return ListTile(
@@ -453,17 +606,9 @@ class _AssetRow extends StatelessWidget {
       title: Text(asset.name, overflow: TextOverflow.ellipsis),
       subtitle: Text('${_fmtSize(asset.sizeBytes)} · ${asset.mimeType}',
           style: TextStyle(color: scheme.outline, fontSize: 11)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: Icon(Icons.open_in_new_outlined, size: 18, color: scheme.primary),
-            tooltip: 'Preview',
-            onPressed: () => _openPreview(context, asset, dir, storeName),
-          ),
-          IconButton(icon: const Icon(Icons.copy_outlined, size: 18), tooltip: 'Copy URL', onPressed: onCopyUrl),
-          IconButton(icon: Icon(Icons.delete_outline, size: 18, color: scheme.error), tooltip: 'Delete', onPressed: onDelete),
-        ],
+      trailing: _AssetMenu(
+        asset: asset, dir: dir, storeName: storeName,
+        onCopyUrl: onCopyUrl, onMove: onMove, onRename: onRename, onDelete: onDelete,
       ),
       onTap: () => _openPreview(context, asset, dir, storeName),
     );
@@ -478,10 +623,13 @@ class _AssetCard extends StatelessWidget {
   final String storeName;
   final VoidCallback onDelete;
   final VoidCallback onCopyUrl;
+  final VoidCallback onMove;
+  final VoidCallback onRename;
 
   const _AssetCard({
     required this.asset, required this.dir, required this.storeName,
-    required this.onDelete, required this.onCopyUrl,
+    required this.onDelete, required this.onCopyUrl, required this.onMove,
+    required this.onRename,
   });
 
   @override
@@ -510,7 +658,7 @@ class _AssetCard extends StatelessWidget {
               border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: const EdgeInsets.fromLTRB(6, 2, 2, 2),
             child: Row(
               children: [
                 Expanded(
@@ -518,25 +666,109 @@ class _AssetCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 11)),
                 ),
-                GestureDetector(
-                  onTap: () => _openPreview(context, asset, dir, storeName),
-                  child: Icon(Icons.open_in_new_outlined, size: 13, color: scheme.primary),
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: onCopyUrl,
-                  child: Icon(Icons.copy_outlined, size: 13, color: scheme.outline),
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: onDelete,
-                  child: Icon(Icons.delete_outline, size: 13, color: scheme.error),
+                _AssetMenu(
+                  asset: asset, dir: dir, storeName: storeName, compact: true,
+                  onCopyUrl: onCopyUrl, onMove: onMove, onRename: onRename, onDelete: onDelete,
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Asset popup menu ──────────────────────────────────────────────────────────
+
+enum _AssetAction { view, copyUrl, move, rename, delete }
+
+class _AssetMenu extends StatelessWidget {
+  final ResourceAsset asset;
+  final ResourceDirectory dir;
+  final String storeName;
+  final VoidCallback onCopyUrl;
+  final VoidCallback onMove;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+  final bool compact; // smaller icon for grid cards
+
+  const _AssetMenu({
+    required this.asset, required this.dir, required this.storeName,
+    required this.onCopyUrl, required this.onMove,
+    required this.onRename, required this.onDelete,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final iconSize = compact ? 16.0 : 18.0;
+    return PopupMenuButton<_AssetAction>(
+      icon: Icon(Icons.more_vert, size: iconSize, color: scheme.outline),
+      padding: EdgeInsets.zero,
+      itemBuilder: (_) => [
+        if (asset.isHtml && _supportsWebView)
+          PopupMenuItem(
+            value: _AssetAction.view,
+            child: const ListTile(
+              leading: Icon(Icons.web_outlined),
+              title: Text('View in WebView'),
+              dense: true,
+            ),
+          ),
+        PopupMenuItem(
+          value: _AssetAction.copyUrl,
+          child: const ListTile(
+            leading: Icon(Icons.copy_outlined),
+            title: Text('Copy URL'),
+            dense: true,
+          ),
+        ),
+        PopupMenuItem(
+          value: _AssetAction.rename,
+          child: const ListTile(
+            leading: Icon(Icons.drive_file_rename_outline),
+            title: Text('Rename'),
+            dense: true,
+          ),
+        ),
+        PopupMenuItem(
+          value: _AssetAction.move,
+          child: const ListTile(
+            leading: Icon(Icons.drive_file_move_outlined),
+            title: Text('Move'),
+            dense: true,
+          ),
+        ),
+        PopupMenuItem(
+          value: _AssetAction.delete,
+          child: ListTile(
+            leading: Icon(Icons.delete_outline, color: scheme.error),
+            title: Text('Delete', style: TextStyle(color: scheme.error)),
+            dense: true,
+          ),
+        ),
+      ],
+      onSelected: (action) {
+        switch (action) {
+          case _AssetAction.view:
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => _HtmlWebViewScreen(
+                url: '${AppConfig.apiBaseUrl}${asset.publicUrl(storeName, dir.name)}',
+                title: asset.name,
+              ),
+            ));
+          case _AssetAction.copyUrl:
+            onCopyUrl();
+          case _AssetAction.rename:
+            onRename();
+          case _AssetAction.move:
+            onMove();
+          case _AssetAction.delete:
+            onDelete();
+        }
+      },
     );
   }
 }
@@ -681,12 +913,27 @@ class _PreviewDialogState extends State<_PreviewDialog> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     ),
+                    if (!widget.asset.isHtml) ...[
+                      const SizedBox(width: 8),
+                      _PreviewLayoutToggle(
+                        current: _layout,
+                        onChange: (l) => setState(() => _layout = l),
+                      ),
+                    ],
                     const SizedBox(width: 8),
-                    _PreviewLayoutToggle(
-                      current: _layout,
-                      onChange: (l) => setState(() => _layout = l),
-                    ),
-                    const SizedBox(width: 8),
+                    if (widget.asset.isHtml && _supportsWebView)
+                      IconButton(
+                        icon: const Icon(Icons.web_outlined, size: 18),
+                        tooltip: 'View in WebView',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => _HtmlWebViewScreen(
+                              url: _url, title: widget.asset.name),
+                          ));
+                        },
+                      ),
                     IconButton(
                       icon: const Icon(Icons.copy_outlined, size: 18),
                       tooltip: 'Copy URL',
@@ -806,6 +1053,58 @@ class _PreviewLayoutToggle extends StatelessWidget {
     onSelectionChanged: (s) => onChange(s.first),
     showSelectedIcon: false,
   );
+}
+
+// ── HTML WebView screen ────────────────────────────────────────────────────────
+
+class _HtmlWebViewScreen extends StatefulWidget {
+  final String url;
+  final String title;
+  const _HtmlWebViewScreen({required this.url, required this.title});
+
+  @override
+  State<_HtmlWebViewScreen> createState() => _HtmlWebViewScreenState();
+}
+
+class _HtmlWebViewScreenState extends State<_HtmlWebViewScreen> {
+  late final WebViewController _controller;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) { if (mounted) setState(() => _loading = false); },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_outlined),
+            tooltip: 'Reload',
+            onPressed: () {
+              setState(() => _loading = true);
+              _controller.reload();
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_loading) const LinearProgressIndicator(),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

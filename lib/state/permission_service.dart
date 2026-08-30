@@ -12,6 +12,9 @@ class PermissionService extends ChangeNotifier {
 
   bool can(String permission) => _permissions.contains(permission);
 
+  bool get canEditAnything =>
+      _permissions.any({'EDIT_PRODUCTS', 'MANAGE_CATEGORIES', 'MANAGE_STORES'}.contains);
+
   void update(Set<String> permissions) {
     _permissions = permissions;
     notifyListeners();

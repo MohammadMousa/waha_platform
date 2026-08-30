@@ -29,6 +29,10 @@ class OrderFlowController extends ChangeNotifier {
 
   final List<CartItem> cart = [];
   Quote? quote;
+  /// Set to the product ID every time a cart item is added or incremented.
+  /// Cart screen watches this to scroll to and highlight the affected row.
+  /// Reset to null after one frame so re-scans of the same item re-trigger.
+  int? lastTouchedProductId;
   String? orderId;
   WahaOrder? order;
   PayResult? lastPayResult;
@@ -111,6 +115,7 @@ class OrderFlowController extends ChangeNotifier {
           imageResourceId: product.imageResourceId));
     }
     ScanSoundService.playSuccess();
+    lastTouchedProductId = product.id;
   }
 
   /// Adds a product straight to the cart — used by Browse/Product Detail,

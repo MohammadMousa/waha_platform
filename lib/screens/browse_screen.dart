@@ -7,10 +7,13 @@ import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../state/auth_service.dart';
+import '../state/edit_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
+import '../state/permission_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
+import '../widgets/edit_mode_toggle.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/product_image.dart';
 import '../widgets/quantity_stepper.dart';
@@ -20,8 +23,10 @@ import '../widgets/waha_bottom_nav.dart';
 class BrowseScreen extends StatefulWidget {
   final int? categoryId;
   final String? browseTitle;
+  /// Pre-fill a search query — uses searchProducts API instead of getProducts.
+  final String? searchQuery;
 
-  const BrowseScreen({super.key, this.categoryId, this.browseTitle});
+  const BrowseScreen({super.key, this.categoryId, this.browseTitle, this.searchQuery});
 
   @override
   State<BrowseScreen> createState() => _BrowseScreenState();
@@ -60,12 +65,20 @@ class _BrowseScreenState extends State<BrowseScreen> {
       _error = null;
     });
     try {
-      final result = await context.read<ApiClient>().getProducts(
-            storeId: _sessionResolvesStore ? null : storeConfigService.storeId,
-            token: _sessionResolvesStore ? authService.token : null,
-            page: _page,
-            categoryId: widget.categoryId,
-          );
+      final api = context.read<ApiClient>();
+      final result = widget.searchQuery != null
+          ? await api.searchProducts(
+              q: widget.searchQuery!,
+              storeId: _sessionResolvesStore ? null : storeConfigService.storeId,
+              token: _sessionResolvesStore ? authService.token : null,
+              page: _page,
+            )
+          : await api.getProducts(
+              storeId: _sessionResolvesStore ? null : storeConfigService.storeId,
+              token: _sessionResolvesStore ? authService.token : null,
+              page: _page,
+              categoryId: widget.categoryId,
+            );
       setState(() {
         _products.addAll(result.products);
         _hasMore = result.hasMore;
@@ -100,6 +113,42 @@ class _BrowseScreenState extends State<BrowseScreen> {
     );
   }
 
+  Future<void> _refreshProduct(int productId) async {
+    try {
+      final updated = await context.read<ApiClient>().getProductDetail(productId);
+      if (!mounted) return;
+      setState(() {
+        final i = _products.indexWhere((p) => p.id == productId);
+        if (i >= 0) _products[i] = updated;
+      });
+    } catch (_) {}
+  }
+
+  void _editProduct(Product product) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit Product'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context)
+                    .pushNamed(Routes.productEdit, arguments: product.id)
+                    .then((updated) {
+                  if (updated == true) _refreshProduct(product.id);
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -109,12 +158,19 @@ class _BrowseScreenState extends State<BrowseScreen> {
     final currency = context.watch<StoreConfigService>().storeCurrency ??
         flow.order?.currency;
 
+    final canEditProducts = context.watch<PermissionService>().can('EDIT_PRODUCTS');
+
     return Scaffold(
-      appBar: WahaAppBar(title: widget.browseTitle ?? l10n.browseTitle),
+      appBar: WahaAppBar(
+        title: widget.browseTitle ?? widget.searchQuery ?? l10n.browseTitle,
+        extraActions: [
+          if (canEditProducts) const EditModeToggle(),
+        ],
+      ),
       bottomNavigationBar: const WahaBottomNav(current: BottomNavTab.home),
       body: Stack(
         children: [
-          _buildBody(l10n, flow),
+          _buildBody(l10n, flow, canEditProducts),
           if (cartCount > 0)
             Positioned(
               left: 16,
@@ -127,7 +183,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n, OrderFlowController flow) {
+  Widget _buildBody(AppLocalizations l10n, OrderFlowController flow, bool canEditProducts) {
     if (_products.isEmpty && _loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -193,6 +249,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
         final cartItem =
             flow.cart.where((c) => c.productId == product.id).firstOrNull;
         final qty = cartItem?.quantity ?? 0;
+        final isEditMode = context.watch<EditModeService>().isEditMode;
         return _ProductCell(
           product: product,
           qty: qty,
@@ -201,6 +258,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
           onRemoveOne: qty > 0
               ? () => flow.updateQuantity(product.id, qty - 1)
               : null,
+          isEditMode: isEditMode && canEditProducts,
+          onEdit: () => _editProduct(product),
         );
       },
     );
@@ -280,6 +339,8 @@ class _ProductCell extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onAdd;
   final VoidCallback? onRemoveOne;
+  final bool isEditMode;
+  final VoidCallback? onEdit;
 
   const _ProductCell({
     required this.product,
@@ -287,6 +348,8 @@ class _ProductCell extends StatelessWidget {
     required this.onTap,
     required this.onAdd,
     required this.onRemoveOne,
+    this.isEditMode = false,
+    this.onEdit,
   });
 
   @override
@@ -320,6 +383,25 @@ class _ProductCell extends StatelessWidget {
                     size: 28,
                   ),
                 ),
+                // Edit pen — top-right, only in edit mode
+                if (isEditMode)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: onEdit,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.edit_outlined,
+                            size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

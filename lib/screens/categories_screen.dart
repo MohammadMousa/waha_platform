@@ -6,8 +6,11 @@ import '../models/category.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../state/auth_service.dart';
+import '../state/edit_mode_service.dart';
+import '../state/permission_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
+import '../widgets/edit_mode_toggle.dart';
 import '../widgets/product_image.dart';
 import '../widgets/waha_app_bar.dart';
 import '../widgets/waha_bottom_nav.dart';
@@ -52,6 +55,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
     final lang = Localizations.localeOf(context).languageCode;
+
+    final canEditCats = context.watch<PermissionService>().can('MANAGE_CATEGORIES');
+    final isEditMode = context.watch<EditModeService>().isEditMode;
 
     Widget body;
     if (_loading) {
@@ -101,9 +107,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           return _CategoryCard(
             name: name,
             imageResourceId: cat.imageResourceId,
+            isEditMode: isEditMode && canEditCats,
             onTap: () => Navigator.of(context).pushNamed(
               Routes.browse,
               arguments: {'categoryId': cat.id, 'title': name},
+            ),
+            onEdit: () => Navigator.of(context).pushNamed(
+              Routes.categoryEdit,
+              arguments: cat,
             ),
           );
         },
@@ -111,7 +122,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     }
 
     return Scaffold(
-      appBar: WahaAppBar(title: l10n.categoriesTitle),
+      appBar: WahaAppBar(
+        title: l10n.categoriesTitle,
+        extraActions: [if (canEditCats) const EditModeToggle()],
+      ),
       bottomNavigationBar:
           const WahaBottomNav(current: BottomNavTab.categories),
       body: body,
@@ -122,12 +136,16 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 class _CategoryCard extends StatelessWidget {
   final String name;
   final int? imageResourceId;
+  final bool isEditMode;
   final VoidCallback onTap;
+  final VoidCallback? onEdit;
 
   const _CategoryCard({
     required this.name,
     required this.imageResourceId,
     required this.onTap,
+    this.isEditMode = false,
+    this.onEdit,
   });
 
   @override
@@ -157,6 +175,25 @@ class _CategoryCard extends StatelessWidget {
                 ),
               ),
             ),
+            // Edit pen — top-right, only in edit mode
+            if (isEditMode)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: onEdit,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.edit_outlined,
+                        size: 18, color: Colors.white),
+                  ),
+                ),
+              ),
             // Category name
             Positioned(
               bottom: 12,

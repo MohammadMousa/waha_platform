@@ -8,9 +8,11 @@ import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
+import '../state/edit_mode_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
 import '../state/store_config_service.dart';
+import '../widgets/edit_mode_toggle.dart';
 
 class StorePickerScreen extends StatefulWidget {
   const StorePickerScreen({super.key});
@@ -55,7 +57,9 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
         await authService.selectStore(api, store.id);
       }
       storeConfigService.applySessionStore(store.id,
-          name: store.label(languageCode), slug: store.name, currency: store.currency);
+          displayName: store.displayName?.cast<String, dynamic>(),
+          slug: store.name,
+          currency: store.currency);
       if (hadItems) _clearCartIfNeeded();
       if (mounted) {
         final returnTo = ModalRoute.of(context)?.settings.arguments as String?;
@@ -84,7 +88,9 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
         await authService.selectStore(api, store.id);
       }
       storeConfigService.applySessionStore(store.id,
-          name: store.label(languageCode), slug: store.name, currency: store.currency);
+          displayName: store.displayName?.cast<String, dynamic>(),
+          slug: store.name,
+          currency: store.currency);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -124,6 +130,8 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
     final l10n = AppLocalizations.of(context)!;
     final languageCode = Localizations.localeOf(context).languageCode;
     final scheme = Theme.of(context).colorScheme;
+    final canManageStores = context.watch<PermissionService>().can('MANAGE_STORES');
+    final isEditMode = context.watch<EditModeService>().isEditMode;
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
@@ -132,6 +140,9 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
         automaticallyImplyLeading: _hasCurrentStore,
+        actions: [
+          if (canManageStores) const EditModeToggle(),
+        ],
       ),
       body: FutureBuilder<List<Store>>(
         future: _future,
@@ -234,6 +245,21 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                                           store, languageCode, l10n),
                                 ),
                               const Spacer(),
+                              // Edit button — only in edit mode with MANAGE_STORES
+                              if (isEditMode && canManageStores) ...[
+                                IconButton(
+                                  icon: Icon(Icons.edit_outlined,
+                                      color: scheme.primary, size: 20),
+                                  tooltip: 'Edit store',
+                                  onPressed: _busy
+                                      ? null
+                                      : () => Navigator.of(context).pushNamed(
+                                            Routes.storeEdit,
+                                            arguments: store,
+                                          ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
                               // Right: refresh if current, go-to if not
                               if (isCurrentStore)
                                 OutlinedButton.icon(

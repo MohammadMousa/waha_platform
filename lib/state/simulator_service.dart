@@ -10,19 +10,25 @@ class SimulatorService extends ChangeNotifier {
   bool _enabled = true;
   bool _clusterVisible;
   bool _devToolsHidden;
+  bool _autoCache;
+  int _cacheLimit;
   final Map<SimScanType, List<String>> _cachedCodes = {
     SimScanType.product: [],
   };
 
   SimulatorService()
       : _devToolsHidden = !LocalPrefs.simDevToolsVisible,
-        _clusterVisible = LocalPrefs.simDevToolsVisible {
+        _clusterVisible = LocalPrefs.simDevToolsVisible,
+        _autoCache = LocalPrefs.simAutoCache,
+        _cacheLimit = LocalPrefs.simCacheLimit {
     _cachedCodes[SimScanType.product] = List.of(LocalPrefs.simProductCodes);
   }
 
   bool get enabled => _enabled;
   bool get clusterVisible => _enabled && _clusterVisible && !_devToolsHidden;
   bool get devToolsHidden => _devToolsHidden;
+  bool get autoCache => _autoCache;
+  int get cacheLimit => _cacheLimit;
 
   // Returns a random code from the saved list, or null if the list is empty.
   String? cachedCode(SimScanType type) {
@@ -58,6 +64,30 @@ class SimulatorService extends ChangeNotifier {
     final list = List<String>.of(_cachedCodes[type] ?? <String>[]);
     if (!list.contains(code)) list.add(code);
     setCachedCodes(type, list);
+  }
+
+  // Auto-cache hook: called after every simulator-fired scan (tap,
+  // long-press manual entry, camera-via-simulator) when autoCache is on.
+  // No-ops when autoCache is off, the code is empty, already present, or
+  // the list has already reached cacheLimit — full just means full, new
+  // entries are silently dropped rather than evicting older ones.
+  void tryAutoCache(SimScanType type, String code) {
+    if (!_autoCache || code.isEmpty) return;
+    final list = _cachedCodes[type] ?? const <String>[];
+    if (list.contains(code) || list.length >= _cacheLimit) return;
+    addCachedCode(type, code);
+  }
+
+  void setAutoCache(bool value) {
+    _autoCache = value;
+    LocalPrefs.setSimAutoCache(value);
+    notifyListeners();
+  }
+
+  void setCacheLimit(int value) {
+    _cacheLimit = value;
+    LocalPrefs.setSimCacheLimit(value);
+    notifyListeners();
   }
 
   void setEnabled(bool value) {

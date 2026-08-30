@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../models/auth_session.dart';
+import '../models/store.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../services/local_prefs.dart';
@@ -185,22 +186,35 @@ class AuthService extends ChangeNotifier {
     await resolveDefaultStore(api);
   }
 
-  /// Fetches the server's default store list and resolves currency in-memory.
-  /// Prefers the store already selected (from LocalPrefs or session) so it
-  /// doesn't overwrite the user's configured default. Never writes to LocalPrefs.
+  /// Fetches the server's store list and resolves currency + display name in-memory.
+  /// Honors the preferred store (from LocalPrefs). If it's a non-public store
+  /// (parent/admin node), falls back to the admin store list when logged in.
+  /// Never writes to LocalPrefs.
   Future<void> resolveDefaultStore(ApiClient api) async {
     if (storeConfigService.storeCurrency != null) return;
     try {
-      final stores = await api.getStores();
-      if (stores.isNotEmpty) {
-        final currentId = storeConfigService.storeId;
-        final candidates =
-            currentId != null ? stores.where((s) => s.id == currentId) : null;
-        final s = (candidates != null && candidates.isNotEmpty)
-            ? candidates.first
-            : stores.first;
+      final preferredId = storeConfigService.storeId;
+      List<Store> stores = await api.getStores();
+
+      Store? preferred = preferredId != null
+          ? stores.where((s) => s.id == preferredId).firstOrNull
+          : null;
+
+      // Preferred store not in public list (e.g. admin/parent node) — try admin list.
+      if (preferred == null && preferredId != null && token != null) {
+        try {
+          final adminStores = await api.getAdminStores(token!);
+          preferred = adminStores.where((s) => s.id == preferredId).firstOrNull;
+          if (stores.isEmpty) stores = adminStores;
+        } catch (_) {}
+      }
+
+      final Store? s = preferred ?? (stores.isNotEmpty ? stores.first : null);
+      if (s != null) {
         storeConfigService.applySessionStore(s.id,
-            name: s.label('en'), slug: s.name, currency: s.currency);
+            displayName: s.displayName?.cast<String, dynamic>(),
+            slug: s.name,
+            currency: s.currency);
       }
     } catch (_) {
       // Non-fatal — user hits StorePicker if they try to browse with no store.

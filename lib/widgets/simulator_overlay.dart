@@ -119,11 +119,20 @@ class SimulatorOverlay extends StatelessWidget {
     }
   }
 
-  static Future<void> _fireScan(BuildContext context, String code) async {
+  static Future<void> _fireScan(
+    BuildContext context,
+    String code, {
+    SimScanType type = SimScanType.product,
+  }) async {
     final flow = context.read<OrderFlowController>();
     final messenger = ScaffoldMessenger.of(context);
     try {
       final product = await flow.scanBarcode(code);
+      // Auto-cache hook: covers every simulator trigger (tap-cached,
+      // long-press manual entry, camera-via-simulator) from one place, and
+      // only caches codes that actually resolved — the point is a library
+      // of known-good test codes, not failed attempts.
+      if (context.mounted) context.read<SimulatorService>().tryAutoCache(type, code);
       if (LocalPrefs.showScanSuccessToast && context.mounted) {
         final name = localeName(product.name, localeService.locale.languageCode);
         messenger.showSnackBar(SnackBar(content: Text('Scanned: $name')));
@@ -151,7 +160,7 @@ class _ScanTypeBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final sim = context.watch<SimulatorService>();
     return GestureDetector(
-      onLongPress: () => _openManualEntry(context, sim),
+      onLongPress: () => _openManualEntry(context),
       child: _IconBtn(
         icon: icon,
         tooltip: '$tooltip (tap: fire cached, long-press: set code)',
@@ -164,21 +173,22 @@ class _ScanTypeBtn extends StatelessWidget {
           if (cached == null || cached.isEmpty) {
             // Nothing cached yet — go straight to manual entry rather than
             // firing a blank code or silently doing nothing.
-            await _openManualEntry(context, sim);
+            await _openManualEntry(context);
           } else {
-            await SimulatorOverlay._fireScan(context, cached);
+            await SimulatorOverlay._fireScan(context, cached, type: type);
           }
         },
       ),
     );
   }
 
-  Future<void> _openManualEntry(BuildContext context, SimulatorService sim) async {
+  Future<void> _openManualEntry(BuildContext context) async {
     final code = await showManualCodeDialog(context, title: 'Set Product Code');
     if (code == null || code.isEmpty) return;
-    sim.addCachedCode(type, code);
+    // Saving to the list now happens inside _fireScan's auto-cache hook
+    // (gated by the Cache checkbox/limit), not unconditionally here.
     if (context.mounted) {
-      await SimulatorOverlay._fireScan(context, code);
+      await SimulatorOverlay._fireScan(context, code, type: type);
     }
   }
 }
