@@ -100,6 +100,16 @@ class WahaAdminDrawer extends StatelessWidget {
                     },
                   ),
                   const Divider(),
+                  _Section('Administration'),
+                  _Tile(
+                    icon: Icons.store_mall_directory_outlined,
+                    label: 'Stores',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).pushNamed(Routes.storePicker);
+                    },
+                  ),
+                  const Divider(),
                   _Section('Catalog'),
                   _Tile(
                     icon: Icons.grid_view_outlined,

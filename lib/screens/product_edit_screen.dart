@@ -24,9 +24,11 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   final _nameEnCtrl = TextEditingController();
   final _descArCtrl = TextEditingController();
   final _descEnCtrl = TextEditingController();
+  final _tagInputCtrl = TextEditingController();
   int? _imageResourceId;
   bool _removeAvatar = false;
   List<int> _galleryIds = [];
+  List<String> _tags = [];
 
   @override
   void initState() {
@@ -40,6 +42,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
     _nameEnCtrl.dispose();
     _descArCtrl.dispose();
     _descEnCtrl.dispose();
+    _tagInputCtrl.dispose();
     super.dispose();
   }
 
@@ -54,6 +57,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
         _descEnCtrl.text = (product.description?['en'] as String?) ?? '';
         _imageResourceId = product.imageResourceId;
         _galleryIds = List<int>.from(product.imageResourceIds);
+        _tags = List<String>.from(product.tags);
         _loading = false;
       });
     } catch (e) {
@@ -77,6 +81,15 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
     setState(() => _galleryIds.add(result.resourceId));
   }
 
+  void _addTag() {
+    final tag = _tagInputCtrl.text.trim();
+    if (tag.isEmpty || _tags.contains(tag)) return;
+    setState(() {
+      _tags.add(tag);
+      _tagInputCtrl.clear();
+    });
+  }
+
   Future<void> _save() async {
     final token = authService.token;
     if (token == null) return;
@@ -91,6 +104,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
           'description': {'ar': _descArCtrl.text.trim(), 'en': _descEnCtrl.text.trim()},
           if (_removeAvatar) 'imageResourceId': null
           else if (_imageResourceId != null) 'imageResourceId': _imageResourceId,
+          'tags': _tags,
         },
         token: token,
       );
@@ -291,6 +305,50 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
                         border: OutlineInputBorder(),
                         alignLabelWithHint: true,
                       ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Tags
+                    Text('Tags', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final tag in _tags)
+                          Chip(
+                            label: Text(tag),
+                            onDeleted: () => setState(() => _tags.remove(tag)),
+                            deleteIconColor: scheme.onSurface.withAlpha(150),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _tagInputCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              hintText: 'Add a tag…',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding:
+                                  EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                            onSubmitted: (_) => _addTag(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          icon: const Icon(Icons.add),
+                          tooltip: 'Add tag',
+                          onPressed: _addTag,
+                        ),
+                      ],
                     ),
 
                     if (_error != null) ...[

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../config/app_config.dart';
@@ -12,9 +13,6 @@ import '../services/api_client.dart';
 import '../state/auth_service.dart';
 import '../state/store_config_service.dart';
 import '../widgets/batch_upload_dialog.dart';
-
-bool get _supportsWebView =>
-    kIsWeb || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
 
 // ── Layout modes ───────────────────────────────────────────────────────────────
 
@@ -461,25 +459,20 @@ class _AssetPanel extends StatelessWidget {
               // Layout toggle
               _LayoutToggle(current: layout, onChange: onLayoutChange),
               const Spacer(),
-              // Upload
-              TextButton.icon(
-                icon: const Icon(Icons.upload_file_outlined, size: 16),
-                label: const Text('Upload file'),
+              // Upload actions — compact icons to avoid overflow on narrow screens
+              IconButton(
+                icon: const Icon(Icons.upload_file_outlined, size: 20),
+                tooltip: 'Upload file',
+                visualDensity: VisualDensity.compact,
+                color: scheme.primary,
                 onPressed: onUpload,
-                style: TextButton.styleFrom(
-                  foregroundColor: scheme.primary,
-                  visualDensity: VisualDensity.compact,
-                ),
               ),
-              const SizedBox(width: 4),
-              TextButton.icon(
-                icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
-                label: const Text('Upload files'),
+              IconButton(
+                icon: const Icon(Icons.drive_folder_upload_outlined, size: 20),
+                tooltip: 'Upload files (folder)',
+                visualDensity: VisualDensity.compact,
+                color: scheme.primary,
                 onPressed: onUploadMultiple,
-                style: TextButton.styleFrom(
-                  foregroundColor: scheme.primary,
-                  visualDensity: VisualDensity.compact,
-                ),
               ),
             ],
           ),
@@ -708,12 +701,12 @@ class _AssetMenu extends StatelessWidget {
       icon: Icon(Icons.more_vert, size: iconSize, color: scheme.outline),
       padding: EdgeInsets.zero,
       itemBuilder: (_) => [
-        if (asset.isHtml && _supportsWebView)
+        if (asset.isHtml)
           PopupMenuItem(
             value: _AssetAction.view,
-            child: const ListTile(
-              leading: Icon(Icons.web_outlined),
-              title: Text('View in WebView'),
+            child: ListTile(
+              leading: const Icon(Icons.open_in_browser_outlined),
+              title: Text(kIsWeb ? 'Open in new tab' : 'View in WebView'),
               dense: true,
             ),
           ),
@@ -753,12 +746,14 @@ class _AssetMenu extends StatelessWidget {
       onSelected: (action) {
         switch (action) {
           case _AssetAction.view:
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => _HtmlWebViewScreen(
-                url: '${AppConfig.apiBaseUrl}${asset.publicUrl(storeName, dir.name)}',
-                title: asset.name,
-              ),
-            ));
+            final assetUrl = '${AppConfig.apiBaseUrl}${asset.publicUrl(storeName, dir.name)}';
+            if (kIsWeb) {
+              launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
+            } else {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => _HtmlWebViewScreen(url: assetUrl, title: asset.name),
+              ));
+            }
           case _AssetAction.copyUrl:
             onCopyUrl();
           case _AssetAction.rename:
@@ -921,17 +916,22 @@ class _PreviewDialogState extends State<_PreviewDialog> {
                       ),
                     ],
                     const SizedBox(width: 8),
-                    if (widget.asset.isHtml && _supportsWebView)
+                    if (widget.asset.isHtml)
                       IconButton(
-                        icon: const Icon(Icons.web_outlined, size: 18),
-                        tooltip: 'View in WebView',
+                        icon: const Icon(Icons.open_in_browser_outlined, size: 18),
+                        tooltip: kIsWeb ? 'Open in new tab' : 'View in WebView',
                         visualDensity: VisualDensity.compact,
                         onPressed: () {
                           Navigator.pop(context);
-                          Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => _HtmlWebViewScreen(
-                              url: _url, title: widget.asset.name),
-                          ));
+                          if (kIsWeb) {
+                            launchUrl(Uri.parse(_url),
+                                mode: LaunchMode.externalApplication);
+                          } else {
+                            Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => _HtmlWebViewScreen(
+                                  url: _url, title: widget.asset.name),
+                            ));
+                          }
                         },
                       ),
                     IconButton(
@@ -981,6 +981,7 @@ class _ImageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final isExpanded = layout != _PreviewLayout.fitWidth;
     final imgWidget = InteractiveViewer(
       minScale: 0.5,
@@ -988,8 +989,28 @@ class _ImageContent extends StatelessWidget {
       child: Image.network(
         url,
         fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) =>
-            const Center(child: Text('Image unavailable')),
+        loadingBuilder: (_, child, progress) => progress == null
+            ? child
+            : Center(
+                child: CircularProgressIndicator(
+                  value: progress.expectedTotalBytes != null
+                      ? progress.cumulativeBytesLoaded /
+                          progress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+        errorBuilder: (_, __, ___) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.broken_image_outlined,
+                  size: 48, color: scheme.onSurfaceVariant),
+              const SizedBox(height: 8),
+              Text('Image unavailable',
+                  style: TextStyle(color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
       ),
     );
 
@@ -997,6 +1018,7 @@ class _ImageContent extends StatelessWidget {
         ? Expanded(child: imgWidget)
         : ConstrainedBox(
             constraints: BoxConstraints(
+              minHeight: 200,
               maxHeight: MediaQuery.of(context).size.height * 0.6,
             ),
             child: imgWidget,
@@ -1037,22 +1059,28 @@ class _PreviewLayoutToggle extends StatelessWidget {
 
   const _PreviewLayoutToggle({required this.current, required this.onChange});
 
+  static const _icons = {
+    _PreviewLayout.fitWidth:   (Icons.fit_screen_outlined,   'Fit width'),
+    _PreviewLayout.fitHeight:  (Icons.height_outlined,        'Fit height'),
+    _PreviewLayout.fullscreen: (Icons.fullscreen_outlined,    'Full screen'),
+  };
+
+  _PreviewLayout _next() => switch (current) {
+    _PreviewLayout.fitWidth   => _PreviewLayout.fitHeight,
+    _PreviewLayout.fitHeight  => _PreviewLayout.fullscreen,
+    _PreviewLayout.fullscreen => _PreviewLayout.fitWidth,
+  };
+
   @override
-  Widget build(BuildContext context) => SegmentedButton<_PreviewLayout>(
-    style: SegmentedButton.styleFrom(
+  Widget build(BuildContext context) {
+    final (icon, tooltip) = _icons[current]!;
+    return IconButton(
+      icon: Icon(icon, size: 18),
+      tooltip: tooltip,
       visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      iconSize: 14,
-    ),
-    segments: const [
-      ButtonSegment(value: _PreviewLayout.fitWidth,    icon: Icon(Icons.fit_screen_outlined),    tooltip: 'Fit width'),
-      ButtonSegment(value: _PreviewLayout.fitHeight,   icon: Icon(Icons.height_outlined),         tooltip: 'Fit height'),
-      ButtonSegment(value: _PreviewLayout.fullscreen,  icon: Icon(Icons.fullscreen_outlined),     tooltip: 'Full screen'),
-    ],
-    selected: {current},
-    onSelectionChanged: (s) => onChange(s.first),
-    showSelectedIcon: false,
-  );
+      onPressed: () => onChange(_next()),
+    );
+  }
 }
 
 // ── HTML WebView screen ────────────────────────────────────────────────────────
@@ -1073,35 +1101,66 @@ class _HtmlWebViewScreenState extends State<_HtmlWebViewScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    final initialUri = Uri.parse(widget.url);
+    _controller = WebViewController();
+    if (!kIsWeb) {
+      _controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    }
+    _controller
       ..setNavigationDelegate(NavigationDelegate(
         onPageFinished: (_) { if (mounted) setState(() => _loading = false); },
+        // Block in-page JS redirects/link-clicks — only the initial loadRequest
+        // is allowed (it doesn't go through the delegate on Android/iOS).
+        // Without this, landing HTML with JS redirects would navigate the WebView
+        // to the API server root and display a Spring Boot Whitelabel error.
+        onNavigationRequest: (req) {
+          final uri = Uri.tryParse(req.url);
+          if (uri != null && uri.host == initialUri.host && uri.port == initialUri.port) {
+            return NavigationDecision.navigate; // allow same-server links
+          }
+          return NavigationDecision.prevent;
+        },
       ))
-      ..loadRequest(Uri.parse(widget.url));
+      ..loadRequest(initialUri);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title, overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_outlined),
-            tooltip: 'Reload',
-            onPressed: () {
-              setState(() => _loading = true);
-              _controller.reload();
-            },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _controller.canGoBack()) {
+          _controller.goBack();
+        } else if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+            onPressed: () => Navigator.of(context).pop(),
           ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_loading) const LinearProgressIndicator(),
-        ],
+          title: Text(widget.title, overflow: TextOverflow.ellipsis),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_outlined),
+              tooltip: 'Reload',
+              onPressed: () {
+                setState(() => _loading = true);
+                _controller.reload();
+              },
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_loading) const LinearProgressIndicator(),
+          ],
+        ),
       ),
     );
   }

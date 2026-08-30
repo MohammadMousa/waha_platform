@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../models/store.dart';
+import '../widgets/product_image.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
@@ -28,12 +29,20 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
   @override
   void initState() {
     super.initState();
+    _future = _buildFuture();
+  }
+
+  Future<List<Store>> _buildFuture() {
+    final api = context.read<ApiClient>();
     final token = authService.token;
-    if (permissionService.can('MANAGE_STORES') && token != null) {
-      _future = context.read<ApiClient>().getAdminStores(token);
-    } else {
-      _future = context.read<ApiClient>().getStores();
-    }
+    return (permissionService.can('MANAGE_STORES') && token != null)
+        ? api.getAdminStores(token)
+        : api.getStores();
+  }
+
+  void _reload() {
+    final f = _buildFuture();
+    setState(() { _future = f; });
   }
 
   bool get _hasCurrentStore =>
@@ -125,6 +134,95 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
     );
   }
 
+  Future<void> _createStore() async {
+    final nameCtrl = TextEditingController();
+    final nameArCtrl = TextEditingController();
+    final nameEnCtrl = TextEditingController();
+    final currencyCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Store'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Slug (e.g. my-store)',
+                  helperText: 'URL-safe identifier, letters/digits/hyphens only',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameArCtrl,
+                textDirection: TextDirection.rtl,
+                decoration: const InputDecoration(
+                  labelText: 'Display Name – Arabic',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameEnCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Display Name – English',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: currencyCtrl,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Currency (e.g. SAR)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final token = authService.token;
+    if (token == null) return;
+
+    final slug = nameCtrl.text.trim();
+    if (slug.isEmpty) return;
+
+    final api = context.read<ApiClient>();
+
+    setState(() => _busy = true);
+    try {
+      final body = <String, dynamic>{
+        'name': slug,
+        'displayName': {'ar': nameArCtrl.text.trim(), 'en': nameEnCtrl.text.trim()},
+        if (currencyCtrl.text.trim().isNotEmpty) 'currency': currencyCtrl.text.trim().toUpperCase(),
+      };
+      await api.createStore(body, token: token);
+      if (!mounted) return;
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create store: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -144,6 +242,13 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
           if (canManageStores) const EditModeToggle(),
         ],
       ),
+      floatingActionButton: (canManageStores && isEditMode)
+          ? FloatingActionButton.extended(
+              onPressed: _busy ? null : _createStore,
+              icon: const Icon(Icons.add),
+              label: const Text('New Store'),
+            )
+          : null,
       body: FutureBuilder<List<Store>>(
         future: _future,
         builder: (context, snapshot) {
@@ -179,14 +284,22 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                           // Header row: icon + name + status badges
                           Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: scheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(Icons.storefront_outlined,
-                                    color: scheme.onSurfaceVariant, size: 22),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: store.imageResourceId != null
+                                    ? ProductImage(
+                                        imageResourceId: store.imageResourceId,
+                                        width: 44,
+                                        height: 44,
+                                      )
+                                    : Container(
+                                        width: 44,
+                                        height: 44,
+                                        color: scheme.surfaceContainerHighest,
+                                        child: Icon(Icons.storefront_outlined,
+                                            color: scheme.onSurfaceVariant,
+                                            size: 22),
+                                      ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(

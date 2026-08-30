@@ -733,6 +733,18 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
+  Future<int> createStore(Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.post(_uri('/api/stores'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) {
+      final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      return (json['id'] as num).toInt();
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
   // GET /api/receipt-info
   Future<ReceiptInfoData?> getReceiptInfo({int? storeId, String? token}) async {
     final resp = await _send(
@@ -861,7 +873,11 @@ class ResourceAsset {
     sha256: json['sha256'] as String,
   );
   bool get isImage => mimeType.startsWith('image/');
-  bool get isHtml => mimeType == 'text/html';
+  bool get isHtml {
+    if (mimeType == 'text/html') return true;
+    final n = name.toLowerCase();
+    return n.endsWith('.html') || n.endsWith('.htm');
+  }
   String publicUrl(String store, String dir) => '/resource/$store/$dir/$name';
 }
 

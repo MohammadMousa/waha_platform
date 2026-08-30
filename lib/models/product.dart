@@ -12,6 +12,8 @@ class Product {
   /// Gallery images (additional product photos beyond the avatar).
   /// Populated from GET /api/products/{id} — empty on list responses.
   final List<int> imageResourceIds;
+  /// Free-form tags. Populated from GET /api/products/{id} — empty on list responses.
+  final List<String> tags;
 
   const Product({
     required this.id,
@@ -25,6 +27,7 @@ class Product {
     this.categoryId,
     this.imageResourceId,
     this.imageResourceIds = const [],
+    this.tags = const [],
   });
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -42,6 +45,10 @@ class Product {
                 ?.map((e) => (e as num).toInt())
                 .toList() ??
             const [],
+        tags: (json['tags'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            const [],
       );
 
   Product copyWith({
@@ -54,6 +61,7 @@ class Product {
     int? imageResourceId,
     bool clearAvatar = false,
     List<int>? imageResourceIds,
+    List<String>? tags,
   }) =>
       Product(
         id: id,
@@ -67,5 +75,6 @@ class Product {
         categoryId: categoryId ?? this.categoryId,
         imageResourceId: clearAvatar ? null : (imageResourceId ?? this.imageResourceId),
         imageResourceIds: imageResourceIds ?? this.imageResourceIds,
+        tags: tags ?? this.tags,
       );
 }

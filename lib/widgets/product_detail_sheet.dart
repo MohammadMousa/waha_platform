@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../models/product.dart';
+import '../services/api_client.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
@@ -10,21 +11,44 @@ import '../utils/locale_name.dart';
 import 'product_image.dart';
 import 'quantity_stepper.dart';
 
-class ProductDetailSheet extends StatelessWidget {
+class ProductDetailSheet extends StatefulWidget {
   final Product product;
   const ProductDetailSheet({super.key, required this.product});
+
+  @override
+  State<ProductDetailSheet> createState() => _ProductDetailSheetState();
+}
+
+class _ProductDetailSheetState extends State<ProductDetailSheet> {
+  late Product _product;
+
+  @override
+  void initState() {
+    super.initState();
+    _product = widget.product;
+    _loadDetail();
+  }
+
+  Future<void> _loadDetail() async {
+    // Only fetch if gallery or tags are missing (list products have empty lists)
+    if (_product.imageResourceIds.isNotEmpty && _product.tags.isNotEmpty) return;
+    try {
+      final full = await context.read<ApiClient>().getProductDetail(_product.id);
+      if (mounted) setState(() => _product = full);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
     final lang = localeService.locale.languageCode;
-    final name = localeName(product.name, lang);
-    final description = localeName(product.description, lang);
+    final name = localeName(_product.name, lang);
+    final description = localeName(_product.description, lang);
     final currency = context.watch<StoreConfigService>().storeCurrency;
     final flow = context.watch<OrderFlowController>();
     final qty = flow.cart
-        .where((c) => c.productId == product.id)
+        .where((c) => c.productId == _product.id)
         .fold(0, (s, c) => s + c.quantity);
 
     return DraggableScrollableSheet(
@@ -67,13 +91,33 @@ class ProductDetailSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Product image
+                      // Avatar
                       ProductImage(
-                        imageResourceId: product.imageResourceId,
+                        imageResourceId: _product.imageResourceId,
                         width: double.infinity,
                         height: 200,
                         borderRadius: BorderRadius.circular(16),
                       ),
+                      // Gallery strip (only when extra images exist)
+                      if (_product.imageResourceIds.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 72,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _product.imageResourceIds.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            itemBuilder: (_, i) => ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: ProductImage(
+                                imageResourceId: _product.imageResourceIds[i],
+                                width: 72,
+                                height: 72,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       // Name
                       Text(
@@ -86,30 +130,48 @@ class ProductDetailSheet extends StatelessWidget {
                       const SizedBox(height: 8),
                       // Price
                       Text(
-                        product.active
-                            ? _formatPrice(product.price, currency)
+                        _product.active
+                            ? _formatPrice(_product.price, currency)
                             : l10n.productDetailUnavailable,
                         style: Theme.of(context)
                             .textTheme
                             .headlineSmall
                             ?.copyWith(
-                              color: product.active
+                              color: _product.active
                                   ? scheme.primary
                                   : Colors.red,
                               fontWeight: FontWeight.bold,
                             ),
                       ),
-                      // Description — always shown (empty placeholder keeps space)
+                      // Description
                       const SizedBox(height: 16),
                       Text(
                         description.isEmpty ? '—' : description,
                         style: TextStyle(
                           color: description.isEmpty
                               ? scheme.outlineVariant
-                              : scheme.onSurface.withOpacity(0.7),
+                              : scheme.onSurface.withValues(alpha: 0.7),
                           height: 1.5,
                         ),
                       ),
+                      // Tags
+                      if (_product.tags.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: _product.tags
+                              .map((t) => Chip(
+                                    label: Text(t,
+                                        style: const TextStyle(fontSize: 12)),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ))
+                              .toList(),
+                        ),
+                      ],
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -119,7 +181,7 @@ class ProductDetailSheet extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.fromLTRB(
                     24, 8, 24, MediaQuery.of(context).padding.bottom + 16),
-                child: product.active
+                child: _product.active
                     ? (qty == 0
                         ? SizedBox(
                             width: double.infinity,
@@ -134,8 +196,7 @@ class ProductDetailSheet extends StatelessWidget {
                                     const EdgeInsets.symmetric(vertical: 16),
                               ),
                               onPressed: () {
-                                flow.addProduct(product);
-                                // Don't close — let user adjust qty
+                                flow.addProduct(_product);
                               },
                             ),
                           )
@@ -143,9 +204,9 @@ class ProductDetailSheet extends StatelessWidget {
                             width: double.infinity,
                             child: QuantityStepper(
                               qty: qty,
-                              onAdd: () => flow.addProduct(product),
+                              onAdd: () => flow.addProduct(_product),
                               onRemove: () =>
-                                  flow.updateQuantity(product.id, qty - 1),
+                                  flow.updateQuantity(_product.id, qty - 1),
                               size: 52,
                               fullWidth: true,
                             ),
@@ -169,7 +230,6 @@ class ProductDetailSheet extends StatelessWidget {
     );
   }
 }
-
 
 String _formatPrice(double amount, String? currency) {
   final s = amount.toStringAsFixed(2);

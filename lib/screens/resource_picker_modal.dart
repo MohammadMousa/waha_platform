@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
 import '../services/api_client.dart';
 import '../widgets/batch_upload_dialog.dart';
 import '../widgets/resource_picker_sheet.dart';
@@ -433,7 +434,6 @@ class _AssetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final url = asset.publicUrl(storeSlug, dirName);
-    final baseUrl = '${Uri.base.scheme}://${Uri.base.host}:${Uri.base.hasPort ? Uri.base.port : 80}';
 
     return GestureDetector(
       onTap: onTap,
@@ -444,7 +444,7 @@ class _AssetTile extends StatelessWidget {
           children: [
             if (asset.isImage)
               Image.network(
-                '$baseUrl$url',
+                '${AppConfig.apiBaseUrl}$url',
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => _fallbackIcon(scheme),
               )

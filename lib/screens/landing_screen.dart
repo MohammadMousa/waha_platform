@@ -196,9 +196,10 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  // WebView requires Android/iOS/Web — not available on Linux/Windows/Mac desktop.
+  // WebView supported on web (iframe), Android, and iOS.
+  // Not available on Linux/Windows/Mac desktop.
   static bool get _supportsWebView =>
-      kIsWeb || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
+      kIsWeb || Platform.isAndroid || Platform.isIOS;
 
   @override
   Widget build(BuildContext context) {
@@ -247,22 +248,31 @@ class _WebViewLandingState extends State<_WebViewLanding> {
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    final resolved =
+        LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
+    _controller = WebViewController();
+    // setJavaScriptMode is not implemented on webview_flutter_web.
+    if (!kIsWeb) {
+      _controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    }
+    _controller
       ..setNavigationDelegate(NavigationDelegate(
         onPageFinished: (_) => _applyLang(widget.lang),
         onNavigationRequest: (req) {
+          // Only /screen?name=... links should navigate — handle them in Flutter.
+          // Block everything else so the WebView doesn't navigate away to the
+          // API server (which returns Spring Boot Whitelabel errors).
           final uri = Uri.tryParse(req.url);
           if (uri != null && uri.path == '/screen') {
             _handleScreenLink(uri.queryParameters);
-            return NavigationDecision.prevent;
           }
-          return NavigationDecision.navigate;
+          return NavigationDecision.prevent;
         },
       ))
-      ..loadHtmlString(
-          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl),
-          baseUrl: widget.baseUrl);
+      // No baseUrl — resolveAbsolutePaths already made every /... path absolute.
+      // Passing baseUrl caused Android WebView to emit a navigation request for
+      // the base URL itself on load, hitting the API server and showing a 404.
+      ..loadHtmlString(resolved);
   }
 
   @override
@@ -270,8 +280,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
     super.didUpdateWidget(old);
     if (old.htmlContent != widget.htmlContent) {
       _controller.loadHtmlString(
-          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl),
-          baseUrl: widget.baseUrl);
+          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl));
     } else if (old.lang != widget.lang) {
       _applyLang(widget.lang);
     }
