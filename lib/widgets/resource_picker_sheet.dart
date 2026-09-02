@@ -16,7 +16,8 @@ class PickedResource {
 
 /// Opens a bottom sheet with Camera / Gallery / Resource Manager options.
 /// Returns the selected [PickedResource], or null if the user cancels.
-Future<PickedResource?> showResourcePickerSheet(BuildContext context) async {
+Future<PickedResource?> showResourcePickerSheet(BuildContext context,
+    {bool imagesOnly = true}) async {
   final slug = context.read<StoreConfigService>().storeSlug;
   final token = authService.token;
   if (slug == null || token == null) {
@@ -28,14 +29,15 @@ Future<PickedResource?> showResourcePickerSheet(BuildContext context) async {
 
   return showModalBottomSheet<PickedResource>(
     context: context,
-    builder: (ctx) => _Sheet(storeSlug: slug, token: token),
+    builder: (ctx) => _Sheet(storeSlug: slug, token: token, imagesOnly: imagesOnly),
   );
 }
 
 class _Sheet extends StatelessWidget {
   final String storeSlug;
   final String token;
-  const _Sheet({required this.storeSlug, required this.token});
+  final bool imagesOnly;
+  const _Sheet({required this.storeSlug, required this.token, required this.imagesOnly});
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +102,7 @@ class _Sheet extends StatelessWidget {
     final nav = Navigator.of(context);
     final result = await showDialog<PickedResource>(
       context: context,
-      builder: (_) => ResourcePickerModal(storeSlug: storeSlug, token: token),
+      builder: (_) => ResourcePickerModal(storeSlug: storeSlug, token: token, imagesOnly: imagesOnly),
     );
     nav.pop(result);
   }

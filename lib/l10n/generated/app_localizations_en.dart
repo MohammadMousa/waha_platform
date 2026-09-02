@@ -179,6 +179,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authAdminLogin => 'Admin Login';
 
   @override
+  String get stores => 'Stores';
+
+  @override
   String get storePickerTitle => 'Choose a Store';
 
   @override

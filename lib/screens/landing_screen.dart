@@ -41,6 +41,35 @@ class _LandingScreenState extends State<LandingScreen> {
   bool _updateDispatched = false;
   int? _lastStoreId;    // detects store switches → re-run background update
 
+  // ── Dev logging ───────────────────────────────────────────────────────────
+  static const _tag = '[LandingUpdate]';
+
+  void _log(String msg) {
+    debugPrint('$_tag $msg');
+    if (LocalPrefs.devToolsUnlocked && mounted) _showDevToast(msg);
+  }
+
+  OverlayEntry? _toastEntry;
+  void _showDevToast(String message) {
+    _toastEntry?.remove();
+    _toastEntry = null;
+    final entry = OverlayEntry(
+      builder: (_) => Positioned(
+        top: 48,
+        right: 12,
+        child: _DevToast(message: message),
+      ),
+    );
+    _toastEntry = entry;
+    Overlay.of(context).insert(entry);
+    Future.delayed(const Duration(seconds: 5), () {
+      if (_toastEntry == entry) {
+        entry.remove();
+        _toastEntry = null;
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +86,8 @@ class _LandingScreenState extends State<LandingScreen> {
 
   @override
   void dispose() {
+    _toastEntry?.remove();
+    _toastEntry = null;
     authService.removeListener(_onConfigChanged);
     storeConfigService.removeListener(_onConfigChanged);
     super.dispose();
@@ -102,15 +133,20 @@ class _LandingScreenState extends State<LandingScreen> {
     if (!mounted) return;
     final currentStore = storeConfigService.storeId;
     if (currentStore != _lastStoreId && currentStore != null) {
-      // Store switched — re-run update for store-specific pages
       _lastStoreId = currentStore;
       _updateDispatched = false;
+      _log('🔄 Store changed → scheduling re-fetch');
     }
-    if (!_updateDispatched &&
-        authService.token != null &&
-        storeConfigService.storeId != null) {
-      _updateDispatched = true;
-      _backgroundUpdateLanding();
+    if (!_updateDispatched) {
+      final hasToken = authService.token != null;
+      final hasStore = storeConfigService.storeId != null;
+      if (hasToken && hasStore) {
+        _updateDispatched = true;
+        _backgroundUpdateLanding();
+      } else {
+        _log('⏳ Waiting — token=${hasToken ? "ready" : "missing"}'
+            '  store=${hasStore ? "ready" : "missing"}');
+      }
     }
   }
 
@@ -124,11 +160,14 @@ class _LandingScreenState extends State<LandingScreen> {
     }
 
     if (!mounted) return;
+    _log('▶ Fetching $pageKey from server…');
+
     final api = context.read<ApiClient>();
     try {
       final info = await api.getLandingPage(pageKey, authService.token);
 
       if (info == null) {
+        _log('⚠ $pageKey — no page configured on server (404)');
         // No page configured — clear stale state if showing a different key.
         if (mounted && _shownKey != null && _shownKey != pageKey) {
           setState(() { _html = null; _shownKey = null; });
@@ -142,23 +181,35 @@ class _LandingScreenState extends State<LandingScreen> {
       final keyChanged = _shownKey != pageKey;
       final hashChanged = info.contentHash != savedHash;
 
-      if (!keyChanged && !hashChanged) return;
+      _log('↕ $pageKey — server hash: ${info.contentHash.substring(0, 8)}…'
+          '  cached: ${savedHash?.substring(0, 8) ?? 'none'}'
+          '  keyChanged=$keyChanged hashChanged=$hashChanged');
+
+      if (!keyChanged && !hashChanged) {
+        _log('✓ $pageKey — already up to date, keeping cached version');
+        return;
+      }
 
       String html;
       if (hashChanged) {
+        _log('⬇ $pageKey — downloading updated HTML…');
         html = await api.fetchResourceContent(info.resourceUrl, authService.token);
         await LandingCache.writeHtml(pageKey, html, info.contentHash);
+        _log('✅ $pageKey — new version saved (${html.length} chars), updating display');
       } else {
+        _log('📂 $pageKey — hash same but key changed, loading from cache…');
         html = await LandingCache.readHtml(pageKey) ?? '';
         if (html.isEmpty) {
+          _log('⬇ $pageKey — cache miss, downloading…');
           html = await api.fetchResourceContent(info.resourceUrl, authService.token);
           await LandingCache.writeHtml(pageKey, html, info.contentHash);
+          _log('✅ $pageKey — downloaded and cached (${html.length} chars)');
         }
       }
 
       if (mounted) setState(() { _html = html; _shownKey = pageKey; });
     } catch (e) {
-      debugPrint('[LandingScreen] background update failed: $e');
+      _log('❌ $pageKey — background update failed: $e');
     }
   }
 
@@ -212,10 +263,13 @@ class _LandingScreenState extends State<LandingScreen> {
     final html = _html;
     if (html != null && _supportsWebView) {
       final lang = Localizations.localeOf(context).languageCode;
+      final modeM = RegExp(r'<meta name="waha-mode" content="([^"]+)"').firstMatch(html);
+      final isFullscreen = modeM?.group(1) == 'fullscreen';
       return _WebViewLanding(
         htmlContent: html,
         baseUrl: AppConfig.apiBaseUrl,
         lang: lang,
+        fullscreen: isFullscreen,
       );
     }
 
@@ -232,10 +286,12 @@ class _WebViewLanding extends StatefulWidget {
   final String htmlContent;
   final String baseUrl;
   final String lang;
+  final bool fullscreen;
   const _WebViewLanding({
     required this.htmlContent,
     required this.baseUrl,
     required this.lang,
+    this.fullscreen = false,
   });
 
   @override
@@ -340,6 +396,10 @@ class _WebViewLandingState extends State<_WebViewLanding> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.fullscreen) {
+      return Scaffold(body: WebViewWidget(controller: _controller));
+    }
+
     final storeConfig = context.watch<StoreConfigService>();
     final l10n = AppLocalizations.of(context)!;
     final mode = context.watch<BrowsingModeService>().mode;
@@ -849,4 +909,73 @@ String _formatPrice(double amount, String? currency) {
   if (upper == 'USD') return '\$$formatted';
   if (upper == 'EUR') return '€$formatted';
   return '$formatted $currency';
+}
+
+// ── Dev-mode overlay toast ─────────────────────────────────────────────────────
+
+class _DevToast extends StatefulWidget {
+  final String message;
+  const _DevToast({required this.message});
+
+  @override
+  State<_DevToast> createState() => _DevToastState();
+}
+
+class _DevToastState extends State<_DevToast>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 250));
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _ctrl.forward();
+    // Fade out at 4 s
+    Future.delayed(const Duration(milliseconds: 3500), () {
+      if (mounted) _ctrl.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 320),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xDD1A1A2E),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF5C6BC0), width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.bug_report_outlined,
+                  size: 14, color: Color(0xFF7986CB)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  widget.message,
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 11, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

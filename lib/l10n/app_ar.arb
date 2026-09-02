@@ -68,6 +68,7 @@
   "authSendOtp": "إرسال الرمز",
   "authAdminLogin": "دخول المشرف",
 
+  "stores": "المتاجر",
   "storePickerTitle": "اختر متجرًا",
   "storePickerEmpty": "لا توجد متاجر متاحة",
   "storePickerSetDefault": "تعيين كمتجر افتراضي",

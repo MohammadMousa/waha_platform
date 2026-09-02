@@ -179,6 +179,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authAdminLogin => 'دخول المشرف';
 
   @override
+  String get stores => 'المتاجر';
+
+  @override
   String get storePickerTitle => 'اختر متجرًا';
 
   @override

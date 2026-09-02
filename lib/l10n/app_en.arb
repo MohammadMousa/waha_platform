@@ -68,6 +68,7 @@
   "authSendOtp": "Send OTP",
   "authAdminLogin": "Admin Login",
 
+  "stores": "Stores",
   "storePickerTitle": "Choose a Store",
   "storePickerEmpty": "No stores available",
   "storePickerSetDefault": "Set as Default Store",

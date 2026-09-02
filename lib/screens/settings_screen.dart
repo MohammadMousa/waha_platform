@@ -39,12 +39,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _storeId;
   String? _storeIdError;
 
-  // Dev tools — register form
-  final _regUsername = TextEditingController();
-  final _regPassword = TextEditingController();
-  String? _regResult;
-  bool _registering = false;
-
   @override
   void initState() {
     super.initState();
@@ -71,8 +65,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _afterWarn.dispose();
     _afterCountdown.dispose();
     _storeId.dispose();
-    _regUsername.dispose();
-    _regPassword.dispose();
     super.dispose();
   }
 
@@ -167,27 +159,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? 'Store updated — cart cleared (items were scoped to old store).'
             : 'Store updated.'),
       ));
-    }
-  }
-
-  Future<void> _register() async {
-    final u = _regUsername.text.trim();
-    final p = _regPassword.text.trim();
-    if (u.isEmpty || p.isEmpty) {
-      setState(() => _regResult = 'Username and password are required.');
-      return;
-    }
-    setState(() {
-      _registering = true;
-      _regResult = null;
-    });
-    try {
-      await authService.register(context.read<ApiClient>(), u, p);
-      if (mounted) setState(() => _regResult = 'Registered and logged in as $u.');
-    } catch (e) {
-      if (mounted) setState(() => _regResult = 'Failed: $e');
-    } finally {
-      if (mounted) setState(() => _registering = false);
     }
   }
 
@@ -321,11 +292,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               storeIdController: _storeId,
               storeIdError: _storeIdError,
               onSaveStoreId: _saveStoreId,
-              regUsername: _regUsername,
-              regPassword: _regPassword,
-              regResult: _regResult,
-              registering: _registering,
-              onRegister: _register,
               onHide: _hideDevTools,
             ),
           ],
@@ -345,22 +311,12 @@ class _DevToolsPanel extends StatefulWidget {
   final TextEditingController storeIdController;
   final String? storeIdError;
   final VoidCallback onSaveStoreId;
-  final TextEditingController regUsername;
-  final TextEditingController regPassword;
-  final String? regResult;
-  final bool registering;
-  final VoidCallback onRegister;
   final VoidCallback onHide;
 
   const _DevToolsPanel({
     required this.storeIdController,
     required this.storeIdError,
     required this.onSaveStoreId,
-    required this.regUsername,
-    required this.regPassword,
-    required this.regResult,
-    required this.registering,
-    required this.onRegister,
     required this.onHide,
   });
 
@@ -370,7 +326,6 @@ class _DevToolsPanel extends StatefulWidget {
 
 class _DevToolsPanelState extends State<_DevToolsPanel> {
   bool _expanded = false;
-  bool _obscurePass = true;
   bool _showScanToast = LocalPrefs.showScanSuccessToast;
 
   @override
@@ -483,60 +438,6 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     ),
                     onPressed: () => Navigator.of(context).pushNamed(Routes.storePicker),
                   ),
-
-                  const Divider(height: 32),
-
-                  // Register new account
-                  const Text('Register account',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: widget.regUsername,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: widget.regPassword,
-                    obscureText: _obscurePass,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setState(() => _obscurePass = !_obscurePass),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: widget.registering ? null : widget.onRegister,
-                      child: widget.registering
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Register & Login'),
-                    ),
-                  ),
-                  if (widget.regResult != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.regResult!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: widget.regResult!.startsWith('Failed')
-                            ? Colors.red
-                            : Colors.green.shade700,
-                      ),
-                    ),
-                  ],
 
                   // Simulator settings (if available)
                   if (AppConfig.simulatorAvailable) ...[

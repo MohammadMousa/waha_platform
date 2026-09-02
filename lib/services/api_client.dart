@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import '../models/account_user.dart';
 import '../models/auth_session.dart';
 import '../models/cart_item.dart';
 import '../models/category.dart';
@@ -696,6 +697,53 @@ class ApiClient {
     final resp = await _send(
       () => _http.delete(_uri('/api/products/$productId/images/$resourceId'),
           headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // ---- Admin user endpoints ------------------------------------------
+
+  // GET /api/admin/users?accountType=
+  Future<List<AccountUser>> getAdminAccounts(String token, {String? accountType}) async {
+    final uri = _uri('/api/admin/users').replace(
+      queryParameters: accountType != null ? {'accountType': accountType} : null,
+    );
+    final resp = await _send(() => _http.get(uri, headers: _headers(token: token)));
+    if (resp.statusCode == 200) {
+      final list = jsonDecode(utf8.decode(resp.bodyBytes)) as List<dynamic>;
+      return list.map((e) => AccountUser.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // POST /api/admin/users
+  Future<int> createAdminAccount(Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.post(_uri('/api/admin/users'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) {
+      final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      return (json['id'] as num).toInt();
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // PATCH /api/admin/users/{id}
+  Future<void> patchAdminAccount(int id, Map<String, dynamic> body, {required String token}) async {
+    final resp = await _send(
+      () => _http.patch(_uri('/api/admin/users/$id'),
+          headers: _headers(token: token), body: jsonEncode(body)),
+    );
+    if (resp.statusCode == 200) return;
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // DELETE /api/admin/users/{id}
+  Future<void> deleteAdminAccount(int id, {required String token}) async {
+    final resp = await _send(
+      () => _http.delete(_uri('/api/admin/users/$id'), headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) return;
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));

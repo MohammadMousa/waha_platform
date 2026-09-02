@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../models/account_user.dart';
 import '../models/store.dart';
 import '../screens/browse_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/categories_screen.dart';
 import '../screens/checkout_screen.dart';
 import '../screens/debug_admin_stub_screen.dart';
+import '../screens/account_edit_screen.dart';
+import '../screens/accounts_screen.dart';
+import '../screens/landing_editor_screen.dart';
 import '../screens/odoo_admin_screen.dart';
 import '../screens/invoice_screen.dart';
 import '../screens/landing_screen.dart';
@@ -62,6 +66,9 @@ class Routes {
   /// lock observable; see debug_admin_stub_screen.dart.
   static const debugAdminStub = '/debug/admin-stub';
   static const odooAdmin = '/admin/odoo';
+  static const landingEditor = '/admin/landing-editor';
+  static const accounts = '/admin/accounts';
+  static const accountEdit = '/admin/accounts/edit';
 
   /// Screens reachable while navigation is restricted. Applies to BOTH
   /// Kiosk and Shopping — per the actual product model, "customer already
@@ -154,6 +161,9 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
       case Routes.odooAdmin:
         page = const OdooAdminScreen();
         break;
+      case Routes.landingEditor:
+        page = const LandingEditorScreen();
+        break;
       case Routes.resourceExplorer:
         page = const ResourceExplorerScreen();
         break;
@@ -171,8 +181,18 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.storeEdit:
         final storeArg = settings.arguments;
-        page = storeArg is Store
-            ? StoreEditScreen(store: storeArg)
+        // null argument = create mode; Store argument = edit mode
+        page = (storeArg is Store || storeArg == null)
+            ? StoreEditScreen(store: storeArg is Store ? storeArg : null)
+            : const LandingScreen();
+        break;
+      case Routes.accounts:
+        page = const AccountsScreen();
+        break;
+      case Routes.accountEdit:
+        final accountArg = settings.arguments;
+        page = accountArg is AccountUser || accountArg == null
+            ? AccountEditScreen(account: accountArg is AccountUser ? accountArg : null)
             : const LandingScreen();
         break;
       case Routes.paymentMethods:

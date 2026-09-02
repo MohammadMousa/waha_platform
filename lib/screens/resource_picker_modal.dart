@@ -13,11 +13,13 @@ import '../widgets/resource_picker_sheet.dart';
 class ResourcePickerModal extends StatefulWidget {
   final String storeSlug;
   final String token;
+  final bool imagesOnly;
 
   const ResourcePickerModal({
     super.key,
     required this.storeSlug,
     required this.token,
+    this.imagesOnly = false,
   });
 
   @override
@@ -376,25 +378,40 @@ class _ResourcePickerModalState extends State<ResourcePickerModal> {
                                           child: Text('No assets',
                                               style: TextStyle(color: scheme.outline)),
                                         )
-                                      : GridView.builder(
-                                          padding: const EdgeInsets.all(12),
-                                          gridDelegate:
-                                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: 3,
-                                            crossAxisSpacing: 8,
-                                            mainAxisSpacing: 8,
-                                          ),
-                                          itemCount: _assets!.length,
-                                          itemBuilder: (ctx, i) {
-                                            final asset = _assets![i];
-                                            return _AssetTile(
-                                              asset: asset,
-                                              storeSlug: widget.storeSlug,
-                                              dirName: _selectedDir!.name,
-                                              onTap: () => _pick(asset),
+                                      : Builder(builder: (ctx) {
+                                          final visible = widget.imagesOnly
+                                              ? _assets!.where((a) => a.isImage).toList()
+                                              : _assets!;
+                                          if (visible.isEmpty) {
+                                            return Center(
+                                              child: Text(
+                                                widget.imagesOnly
+                                                    ? 'No images in this directory'
+                                                    : 'No assets',
+                                                style: TextStyle(color: Theme.of(ctx).colorScheme.outline),
+                                              ),
                                             );
-                                          },
-                                        ),
+                                          }
+                                          return GridView.builder(
+                                            padding: const EdgeInsets.all(12),
+                                            gridDelegate:
+                                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                              crossAxisCount: 3,
+                                              crossAxisSpacing: 8,
+                                              mainAxisSpacing: 8,
+                                            ),
+                                            itemCount: visible.length,
+                                            itemBuilder: (ctx, i) {
+                                              final asset = visible[i];
+                                              return _AssetTile(
+                                                asset: asset,
+                                                storeSlug: widget.storeSlug,
+                                                dirName: _selectedDir!.name,
+                                                onTap: () => _pick(asset),
+                                              );
+                                            },
+                                          );
+                                        }),
                             ),
                           ],
                         ),

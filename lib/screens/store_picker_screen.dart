@@ -134,93 +134,10 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
     );
   }
 
-  Future<void> _createStore() async {
-    final nameCtrl = TextEditingController();
-    final nameArCtrl = TextEditingController();
-    final nameEnCtrl = TextEditingController();
-    final currencyCtrl = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New Store'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Slug (e.g. my-store)',
-                  helperText: 'URL-safe identifier, letters/digits/hyphens only',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameArCtrl,
-                textDirection: TextDirection.rtl,
-                decoration: const InputDecoration(
-                  labelText: 'Display Name – Arabic',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameEnCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Display Name – English',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: currencyCtrl,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Currency (e.g. SAR)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    final token = authService.token;
-    if (token == null) return;
-
-    final slug = nameCtrl.text.trim();
-    if (slug.isEmpty) return;
-
-    final api = context.read<ApiClient>();
-
-    setState(() => _busy = true);
-    try {
-      final body = <String, dynamic>{
-        'name': slug,
-        'displayName': {'ar': nameArCtrl.text.trim(), 'en': nameEnCtrl.text.trim()},
-        if (currencyCtrl.text.trim().isNotEmpty) 'currency': currencyCtrl.text.trim().toUpperCase(),
-      };
-      await api.createStore(body, token: token);
-      if (!mounted) return;
-      _reload();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create store: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+  void _openCreateStore() {
+    Navigator.of(context)
+        .pushNamed(Routes.storeEdit, arguments: null)
+        .then((result) { if (result == true && mounted) _reload(); });
   }
 
   @override
@@ -234,7 +151,7 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: Text(l10n.storePickerTitle),
+        title: Text(l10n.stores),
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
         automaticallyImplyLeading: _hasCurrentStore,
@@ -244,7 +161,7 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
       ),
       floatingActionButton: (canManageStores && isEditMode)
           ? FloatingActionButton.extended(
-              onPressed: _busy ? null : _createStore,
+              onPressed: _busy ? null : _openCreateStore,
               icon: const Icon(Icons.add),
               label: const Text('New Store'),
             )
@@ -366,10 +283,9 @@ class _StorePickerScreenState extends State<StorePickerScreen> {
                                   tooltip: 'Edit store',
                                   onPressed: _busy
                                       ? null
-                                      : () => Navigator.of(context).pushNamed(
-                                            Routes.storeEdit,
-                                            arguments: store,
-                                          ),
+                                      : () => Navigator.of(context)
+                                            .pushNamed(Routes.storeEdit, arguments: store)
+                                            .then((r) { if (r == true && mounted) _reload(); }),
                                 ),
                                 const SizedBox(width: 4),
                               ],

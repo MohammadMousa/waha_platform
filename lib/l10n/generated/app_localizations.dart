@@ -434,6 +434,12 @@ abstract class AppLocalizations {
   /// **'Admin Login'**
   String get authAdminLogin;
 
+  /// No description provided for @stores.
+  ///
+  /// In en, this message translates to:
+  /// **'Stores'**
+  String get stores;
+
   /// No description provided for @storePickerTitle.
   ///
   /// In en, this message translates to:
