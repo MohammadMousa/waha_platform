@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
@@ -30,16 +31,13 @@ class ProductImage extends StatelessWidget {
   }
 
   Widget _build(BuildContext context, double w, double h) {
-    final scheme     = Theme.of(context).colorScheme;
-    final br         = borderRadius ?? BorderRadius.zero;
-    final iconSize   = (w * 0.38).clamp(18.0, 40.0);
-    final spinnerOut = (w * 0.46).clamp(22.0, 52.0);
-    final spinnerIn  = spinnerOut * 0.58;
+    final scheme    = Theme.of(context).colorScheme;
+    final br        = borderRadius ?? BorderRadius.zero;
+    final iconSize  = (w * 0.38).clamp(18.0, 40.0);
+    final spinnerSz = (w * 0.46).clamp(22.0, 52.0);
 
-    // Tinted background shared by placeholder and loading states.
     Widget background = Container(
-      width: w,
-      height: h,
+      width: w, height: h,
       decoration: BoxDecoration(
         color: scheme.primaryContainer.withValues(alpha: 0.3),
         borderRadius: br,
@@ -59,55 +57,36 @@ class ProductImage extends StatelessWidget {
       return SizedBox(width: w, height: h, child: placeholder);
     }
 
-    // Two concentric spinning rings — outer: primary, inner: secondary.
-    Widget spinner = Stack(
+    Widget loadingWidget = Stack(
       alignment: Alignment.center,
       children: [
         background,
         SizedBox(
-          width: spinnerOut,
-          height: spinnerOut,
-          child: CircularProgressIndicator(
-            strokeWidth: 3,
-            color: scheme.primary,
-          ),
+          width: spinnerSz, height: spinnerSz,
+          child: CircularProgressIndicator(strokeWidth: 3, color: scheme.primary),
         ),
         SizedBox(
-          width: spinnerIn,
-          height: spinnerIn,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: scheme.secondary,
-          ),
+          width: spinnerSz * 0.58, height: spinnerSz * 0.58,
+          child: CircularProgressIndicator(strokeWidth: 2, color: scheme.secondary),
         ),
       ],
     );
 
     final url = '${AppConfig.apiBaseUrl}/api/resources/$imageResourceId';
 
-    // Stack the spinner below the image. The image renders opaque once loaded,
-    // covering the spinner — no loadingBuilder constraint issues in Flutter web.
-    Widget result = SizedBox(
-      width: w,
-      height: h,
+    return SizedBox(
+      width: w, height: h,
       child: ClipRRect(
         borderRadius: br,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            spinner,
-            Image.network(
-              url,
-              width: w,
-              height: h,
-              fit: fit,
-              errorBuilder: (_, __, ___) => placeholder,
-            ),
-          ],
+        child: CachedNetworkImage(
+          imageUrl: url,
+          width: w, height: h,
+          fit: fit,
+          // Disk + memory cache — survives app restarts
+          placeholder: (_, __) => loadingWidget,
+          errorWidget: (_, __, ___) => placeholder,
         ),
       ),
     );
-
-    return result;
   }
 }

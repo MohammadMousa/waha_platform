@@ -38,8 +38,17 @@ class _LandingScreenState extends State<LandingScreen> {
   String? _html;      // HTML string loaded from cache (or freshly downloaded)
   String? _shownKey;  // which page key is currently displayed
   bool _cacheChecked = false; // true once local file I/O is done
+
+  // ── update gate ──────────────────────────────────────────────────────────
+  // _updateDispatched prevents redundant back-to-back fetches within the same
+  // "session" (same token + same store). It resets whenever the token or store
+  // changes, so a re-login (expired token → fresh token) or a store switch
+  // triggers a new update check. This gives pages an implicit expiry: a kiosk
+  // that re-authenticates mid-day will always pull the latest version rather
+  // than serving a stale cache indefinitely.
   bool _updateDispatched = false;
-  int? _lastStoreId;    // detects store switches → re-run background update
+  int?    _lastStoreId;   // detects store switches   → re-check
+  String? _lastToken;     // detects token refresh    → re-check
 
   // ── Dev logging ───────────────────────────────────────────────────────────
   static const _tag = '[LandingUpdate]';
@@ -127,19 +136,35 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
-  // ── background update: fires once per session when auth + store are ready ─
+  // ── background update ────────────────────────────────────────────────────
+  // Fires whenever auth or store config changes. The gate (_updateDispatched)
+  // resets on any meaningful identity change — new token (re-login / expiry)
+  // or store switch — so the page is always re-validated after those events.
 
   void _onConfigChanged() {
     if (!mounted) return;
     final currentStore = storeConfigService.storeId;
-    if (currentStore != _lastStoreId && currentStore != null) {
+    final currentToken = authService.token;
+
+    // Store switched → re-check (different store may have a different page).
+    if (currentStore != null && currentStore != _lastStoreId) {
       _lastStoreId = currentStore;
       _updateDispatched = false;
       _log('🔄 Store changed → scheduling re-fetch');
     }
+
+    // Token changed (fresh login, expiry + re-auth) → re-check.
+    // This is the main guard against serving a stale cache indefinitely:
+    // whenever the kiosk has to re-authenticate, it will pull the latest page.
+    if (currentToken != null && currentToken != _lastToken) {
+      _lastToken = currentToken;
+      _updateDispatched = false;
+      _log('🔄 Token refreshed → scheduling re-fetch');
+    }
+
     if (!_updateDispatched) {
-      final hasToken = authService.token != null;
-      final hasStore = storeConfigService.storeId != null;
+      final hasToken = currentToken != null;
+      final hasStore = currentStore != null;
       if (hasToken && hasStore) {
         _updateDispatched = true;
         _backgroundUpdateLanding();
@@ -300,43 +325,91 @@ class _WebViewLanding extends StatefulWidget {
 
 class _WebViewLandingState extends State<_WebViewLanding> {
   late final WebViewController _controller;
+  bool _loaded = false;
+  bool _errored = false;
+  OrderFlowController? _flow;
 
   @override
   void initState() {
     super.initState();
-    final resolved =
-        LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
+
     _controller = WebViewController();
-    // setJavaScriptMode is not implemented on webview_flutter_web.
     if (!kIsWeb) {
       _controller.setJavaScriptMode(JavaScriptMode.unrestricted);
     }
-    _controller
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (_) => _applyLang(widget.lang),
-        onNavigationRequest: (req) {
-          // Only /screen?name=... links should navigate — handle them in Flutter.
-          // Block everything else so the WebView doesn't navigate away to the
-          // API server (which returns Spring Boot Whitelabel errors).
-          final uri = Uri.tryParse(req.url);
-          if (uri != null && uri.path == '/screen') {
-            _handleScreenLink(uri.queryParameters);
-          }
-          return NavigationDecision.prevent;
-        },
-      ))
-      // No baseUrl — resolveAbsolutePaths already made every /... path absolute.
-      // Passing baseUrl caused Android WebView to emit a navigation request for
-      // the base URL itself on load, hitting the API server and showing a 404.
-      ..loadHtmlString(resolved);
+    _controller.setNavigationDelegate(NavigationDelegate(
+      onPageFinished: (_) {
+        _applyLang(widget.lang);
+        if (mounted) setState(() { _loaded = true; _errored = false; });
+      },
+      onWebResourceError: (e) {
+        // Only treat main-frame errors as fatal (sub-resource failures are normal)
+        if (e.isForMainFrame == true && mounted) {
+          setState(() => _errored = true);
+        }
+      },
+      onNavigationRequest: (req) {
+        final uri = Uri.tryParse(req.url);
+        if (uri != null && uri.path == '/screen') {
+          _handleScreenLink(uri.queryParameters);
+        }
+        return NavigationDecision.prevent;
+      },
+    ));
+
+    // Defer loading until after the WebView platform view is attached.
+    // Loading synchronously in initState() can cause a black surface on
+    // Android because the SurfaceProducer / EGL context isn't ready yet.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final resolved =
+          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
+      _controller.loadHtmlString(resolved);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Wire up the OrderFlowController listener once context is ready.
+    // didChangeDependencies is called before the first build, so this is safe.
+    final newFlow = context.read<OrderFlowController>();
+    if (_flow != newFlow) {
+      _flow?.removeListener(_onFlowChanged);
+      _flow = newFlow;
+      _flow!.addListener(_onFlowChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _flow?.removeListener(_onFlowChanged);
+    super.dispose();
+  }
+
+  bool _dismissing = false;
+
+  // Dismiss to cart as soon as the first item is added — scan or simulator.
+  // Uses pushReplacement so the landing screen (and its ScanCaptureField) is
+  // fully removed from the stack, preventing focus stealing on subsequent scans.
+  // _dismissing guards against the navigator assertion that fires when this is
+  // called multiple times while the navigator is already mid-transition.
+  void _onFlowChanged() {
+    if (!mounted || _dismissing) return;
+    if (_flow!.cart.isNotEmpty) {
+      _dismissing = true;
+      Navigator.of(context).pushReplacementNamed(Routes.cart);
+    }
   }
 
   @override
   void didUpdateWidget(_WebViewLanding old) {
     super.didUpdateWidget(old);
     if (old.htmlContent != widget.htmlContent) {
-      _controller.loadHtmlString(
-          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl));
+      setState(() { _loaded = false; _errored = false; });
+      final resolved =
+          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
+      _controller.loadHtmlString(resolved);
     } else if (old.lang != widget.lang) {
       _applyLang(widget.lang);
     }
@@ -397,7 +470,50 @@ class _WebViewLandingState extends State<_WebViewLanding> {
   @override
   Widget build(BuildContext context) {
     if (widget.fullscreen) {
-      return Scaffold(body: WebViewWidget(controller: _controller));
+      return Scaffold(
+        body: Stack(
+          children: [
+            // Invisible ScanCaptureField so HID barcode scanners work on the landing page.
+            // When scan succeeds, cart fills → _onFlowChanged() navigates away.
+            const ScanCaptureField(visible: false),
+            WebViewWidget(controller: _controller),
+            if (!_loaded && !_errored)
+              const ColoredBox(
+                color: Colors.black,
+                child: Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              ),
+            if (_errored)
+              ColoredBox(
+                color: Colors.black,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.broken_image_outlined,
+                          color: Colors.white54, size: 64),
+                      const SizedBox(height: 16),
+                      const Text('Could not load page',
+                          style: TextStyle(color: Colors.white54)),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () {
+                          setState(() { _loaded = false; _errored = false; });
+                          final resolved = LandingCache.resolveAbsolutePaths(
+                              widget.htmlContent, widget.baseUrl);
+                          _controller.loadHtmlString(resolved);
+                        },
+                        child: const Text('Retry',
+                            style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
     }
 
     final storeConfig = context.watch<StoreConfigService>();
