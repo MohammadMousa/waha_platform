@@ -18,6 +18,7 @@ import 'store_config_service.dart';
 class AuthService extends ChangeNotifier {
   String? token;
   int? userId;
+  int? deviceId;
   String? username;
   int? sessionStoreId;
   int? defaultStoreId;
@@ -25,6 +26,7 @@ class AuthService extends ChangeNotifier {
 
   bool get isLoggedIn => token != null;
   bool get hasSelectedStore => sessionStoreId != null;
+  bool get isDeviceSession => deviceId != null;
 
   void _applyConfig(Map<String, String> config) {
     final appNameJson = config['appName'];
@@ -39,6 +41,7 @@ class AuthService extends ChangeNotifier {
   void _applySession(AuthSession session, {String? tokenOverride}) {
     if (tokenOverride != null) token = tokenOverride;
     userId = session.userId;
+    deviceId = session.deviceId;
     username = session.username;
     sessionStoreId = session.storeId;
     defaultStoreId = session.defaultStoreId;
@@ -50,7 +53,13 @@ class AuthService extends ChangeNotifier {
     final defaultFromProps = propsDefaultStore != null
         ? int.tryParse(propsDefaultStore)
         : null;
-    final effectiveDefault = defaultFromProps ?? session.defaultStoreId;
+    // Falls back to the session's own bound storeId last — the Kiosk device
+    // login response has no defaultStoreId at all (a device is pinned to
+    // one store, not "defaulted" to one), so without this fallback a fresh
+    // device login would leave storeConfigService (and therefore the
+    // displayed currency/name) resolving to whichever store happens to
+    // come first from GET /api/stores, not the device's own store.
+    final effectiveDefault = defaultFromProps ?? session.defaultStoreId ?? session.storeId;
     if (storeConfigService.storeId == null && effectiveDefault != null) {
       storeConfigService.setStoreId(effectiveDefault, persist: false);
     }
@@ -96,12 +105,30 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Device identity for Kiosk mode — a fixed terminal login, not a
+  /// per-customer one. Credentials are cached (same as login()) so
+  /// resolveStartupAuth can re-authenticate this device on every launch:
+  /// there's no device-session equivalent of GET /api/auth/me to validate
+  /// a cached token against, only login, so startup always re-logs-in
+  /// rather than trying the token first.
+  Future<void> loginKiosk(ApiClient api, String username, String pinCode) async {
+    final session = await api.kioskLogin(username, pinCode);
+    _applySession(session, tokenOverride: session.token);
+    await LocalPrefs.setAuthToken(session.token!);
+    await LocalPrefs.setKioskCredentials(username, pinCode);
+    notifyListeners();
+  }
+
   /// Explicit user-initiated logout. Not reachable from locked Kiosk/
-  /// Shopping sessions (those routes are outside the allowlists).
+  /// Shopping sessions (those routes are outside the allowlists) — Kiosk
+  /// devices stay logged in permanently once provisioned; see
+  /// resolveStartupAuth.
   Future<void> logout(ApiClient api) async {
     final t = token;
+    final wasDeviceSession = isDeviceSession;
     token = null;
     userId = null;
+    deviceId = null;
     username = null;
     sessionStoreId = null;
     defaultStoreId = null;
@@ -109,10 +136,15 @@ class AuthService extends ChangeNotifier {
     permissionService.clear();
     await LocalPrefs.clearAuthToken();
     await LocalPrefs.clearAuthCredentials();
+    await LocalPrefs.clearKioskCredentials();
     notifyListeners();
     if (t != null) {
       try {
-        await api.logout(t);
+        if (wasDeviceSession) {
+          await api.kioskLogout(t);
+        } else {
+          await api.logout(t);
+        }
       } catch (_) {
         // Already logged out locally — server-side failure doesn't undo that.
       }
@@ -130,15 +162,38 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Full startup auth resolution:
-  ///   1. Try cached token via GET /api/auth/me.
-  ///   2. If rejected, re-authenticate with cached credentials.
-  ///   3. Shopping mode: mint a fresh guest account via POST /api/auth/guest.
-  ///      Normal/Kiosk: stay logged out.
-  ///   4. Always: if no store configured after auth, resolve from server default.
+  ///   Kiosk: a separate identity domain entirely (POST /api/kiosk/auth/login,
+  ///     device/PIN — see docs/roles-permissions.md) — re-login with the
+  ///     cached device username/PIN, or stay logged out if the device has
+  ///     never been provisioned. Never anonymous, never the customer
+  ///     /api/auth/* domain below — the router gates every route behind
+  ///     isDeviceSession until the Device Login screen succeeds.
+  ///   Normal/Shopping:
+  ///     1. Try cached token via GET /api/auth/me.
+  ///     2. If rejected, re-authenticate with cached credentials.
+  ///     3. Shopping mode: mint a fresh guest account via POST /api/auth/guest.
+  ///        Normal: stay logged out (anonymous browsing is allowed there).
+  ///   Always: if no store configured after auth, resolve from server default.
   Future<void> resolveStartupAuth(ApiClient api, BrowsingMode mode) async {
     // Load public system config (appName, etc.) before any auth so the title
     // shows immediately even in kiosk mode with no cached login.
     _applyConfig(await api.getConfig());
+
+    if (mode == BrowsingMode.kiosk) {
+      final devUsername = LocalPrefs.kioskUsername;
+      final devPin = LocalPrefs.kioskPin;
+      if (devUsername != null && devPin != null) {
+        try {
+          await loginKiosk(api, devUsername, devPin);
+        } catch (_) {
+          // Stale/rejected PIN, or backend unreachable — stays logged out;
+          // the router sends the device to Routes.kioskLogin until a
+          // successful manual login replaces these cached credentials.
+        }
+      }
+      await resolveDefaultStore(api);
+      return;
+    }
 
     final cachedToken = LocalPrefs.authToken;
     final cachedUsername = LocalPrefs.authUsername;

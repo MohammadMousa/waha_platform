@@ -67,6 +67,9 @@
   "authPhoneLabel": "Phone Number",
   "authSendOtp": "Send OTP",
   "authAdminLogin": "Admin Login",
+  "authDeviceLogin": "Device Login",
+  "authPinCode": "PIN",
+  "authDeviceLoginSubtitle": "Sign in with this device's kiosk account",
 
   "stores": "Stores",
   "storePickerTitle": "Choose a Store",

@@ -12,6 +12,7 @@ import '../screens/accounts_screen.dart';
 import '../screens/landing_editor_screen.dart';
 import '../screens/odoo_admin_screen.dart';
 import '../screens/invoice_screen.dart';
+import '../screens/kiosk_login_screen.dart';
 import '../screens/landing_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/orders_screen.dart';
@@ -32,6 +33,7 @@ import '../screens/store_picker_screen.dart';
 import '../screens/success_screen.dart';
 import '../models/category.dart';
 import '../models/product.dart';
+import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../widgets/kiosk_idle_guard.dart';
 import '../widgets/mode_badge.dart';
@@ -50,6 +52,7 @@ class Routes {
   static const productDetail = '/browse/product';
   static const register = '/register';
   static const login = '/login';
+  static const kioskLogin = '/kiosk-login';
   static const storePicker = '/store-picker';
   static const invoice = '/invoice';
   static const orders = '/orders';
@@ -127,7 +130,13 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
   final isKiosk = mode == BrowsingMode.kiosk;
 
   Widget page;
-  if (isRestrictedNav && !Routes.kioskAllowlist.contains(name)) {
+  // Kiosk is never anonymous: every route (including Landing itself) is
+  // gated behind a device session. Checked before the allowlist below —
+  // an unauthenticated device shouldn't even reach Landing's "start
+  // scanning" entry point, let alone the routes that allowlist opens up.
+  if (isKiosk && !authService.isDeviceSession && name != Routes.kioskLogin) {
+    page = const KioskLoginScreen();
+  } else if (isRestrictedNav && !Routes.kioskAllowlist.contains(name)) {
     page = const LandingScreen();
   } else {
     switch (name) {
@@ -219,6 +228,9 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.login:
         page = const LoginScreen();
+        break;
+      case Routes.kioskLogin:
+        page = const KioskLoginScreen();
         break;
       case Routes.storePicker:
         page = const StorePickerScreen();

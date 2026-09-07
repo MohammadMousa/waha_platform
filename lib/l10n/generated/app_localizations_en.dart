@@ -179,6 +179,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authAdminLogin => 'Admin Login';
 
   @override
+  String get authDeviceLogin => 'Device Login';
+
+  @override
+  String get authPinCode => 'PIN';
+
+  @override
+  String get authDeviceLoginSubtitle =>
+      'Sign in with this device\'s kiosk account';
+
+  @override
   String get stores => 'Stores';
 
   @override

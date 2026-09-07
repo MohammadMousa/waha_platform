@@ -1,7 +1,9 @@
 class AuthSession {
   final String? token; // present on register/login/guest, not on /me
-  final int userId;
-  final String username;
+  final int? userId; // absent on a Kiosk device session (see deviceId)
+  final int? deviceId; // present only on a Kiosk device session
+  final String? username; // absent on device/employee login responses —
+  // those identify by id, not username; callers pass usernameOverride.
   final int? storeId;
   final int? defaultStoreId; // system-configured fallback store
   final String? mode; // NORMAL | KIOSK | SHOPPING
@@ -10,8 +12,9 @@ class AuthSession {
 
   const AuthSession({
     this.token,
-    required this.userId,
-    required this.username,
+    this.userId,
+    this.deviceId,
+    this.username,
     this.storeId,
     this.defaultStoreId,
     this.mode,
@@ -19,7 +22,11 @@ class AuthSession {
     this.permissions = const {},
   });
 
-  factory AuthSession.fromJson(Map<String, dynamic> json) {
+  /// [usernameOverride] fills in `username` when the backend response
+  /// doesn't carry one — the Kiosk device login response identifies by
+  /// `deviceId`, not username (see docs/roles-permissions.md), so the
+  /// caller passes back the username it just logged in with.
+  factory AuthSession.fromJson(Map<String, dynamic> json, {String? usernameOverride}) {
     final rawProps = json['properties'];
     Map<String, String>? properties;
     if (rawProps is Map) {
@@ -31,8 +38,9 @@ class AuthSession {
         : const {};
     return AuthSession(
       token: json['token'] as String?,
-      userId: json['userId'] as int,
-      username: json['username'] as String,
+      userId: json['userId'] as int?,
+      deviceId: json['deviceId'] as int?,
+      username: (json['username'] as String?) ?? usernameOverride,
       storeId: json['storeId'] as int?,
       defaultStoreId: json['defaultStoreId'] as int?,
       mode: json['mode'] as String?,

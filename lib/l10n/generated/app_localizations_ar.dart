@@ -179,6 +179,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authAdminLogin => 'دخول المشرف';
 
   @override
+  String get authDeviceLogin => 'دخول الجهاز';
+
+  @override
+  String get authPinCode => 'الرمز السري';
+
+  @override
+  String get authDeviceLoginSubtitle =>
+      'سجّل الدخول بحساب الكشك الخاص بهذا الجهاز';
+
+  @override
   String get stores => 'المتاجر';
 
   @override

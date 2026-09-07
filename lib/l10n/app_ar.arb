@@ -67,6 +67,9 @@
   "authPhoneLabel": "رقم الهاتف",
   "authSendOtp": "إرسال الرمز",
   "authAdminLogin": "دخول المشرف",
+  "authDeviceLogin": "دخول الجهاز",
+  "authPinCode": "الرمز السري",
+  "authDeviceLoginSubtitle": "سجّل الدخول بحساب الكشك الخاص بهذا الجهاز",
 
   "stores": "المتاجر",
   "storePickerTitle": "اختر متجرًا",

@@ -434,6 +434,24 @@ abstract class AppLocalizations {
   /// **'Admin Login'**
   String get authAdminLogin;
 
+  /// No description provided for @authDeviceLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Device Login'**
+  String get authDeviceLogin;
+
+  /// No description provided for @authPinCode.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN'**
+  String get authPinCode;
+
+  /// No description provided for @authDeviceLoginSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with this device\'s kiosk account'**
+  String get authDeviceLoginSubtitle;
+
   /// No description provided for @stores.
   ///
   /// In en, this message translates to:

@@ -2,6 +2,8 @@
 
 Flutter frontend for Waha, a multi-store retail and self-service kiosk system. Consumes the [Waha backend](https://github.com/mohammad_mousa79/waha) REST API.
 
+---
+
 ## Stack
 
 - **Flutter / Dart** — Android, iOS, Linux desktop (kiosk), Web
@@ -213,3 +215,20 @@ Generated files go to `lib/l10n/generated/` — do not edit by hand. The active 
 - URL is `{API_BASE_URL}/api/resources/{imageResourceId}` — served directly from the backend
 
 Gallery images in the product detail sheet are loaded as a horizontal strip via the same widget.
+
+---
+
+## Screenshots
+
+### Browse & Cart
+
+| Browse with quantity stepper | Invoice (unpaid) | Invoice (paid) |
+|---|---|---|
+| ![Browse](docs/screenshots/ui/browse-stepper.png) | ![Unpaid](docs/screenshots/ui/invoice-unpaid.png) | ![Paid](docs/screenshots/ui/invoice-paid.png) |
+
+### Odoo Integration
+
+| Admin Dashboard | Order Push (Odoo) | e-Invoice |
+|---|---|---|
+| ![Dashboard](docs/screenshots/odoo/admin-dashboard.png) | ![Orders](docs/screenshots/odoo/order-push.png) | ![Invoice](docs/screenshots/odoo/e-invoice.png) |
+

@@ -102,6 +102,35 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
+  // POST /api/kiosk/auth/login — device identity, separate auth domain from
+  // /api/auth/* (no FK to users; devices/PIN, not username/password). See
+  // docs/roles-permissions.md in the backend repo. organizationId defaults
+  // to 1 server-side (single-org deployment) if omitted.
+  Future<AuthSession> kioskLogin(String username, String pinCode) async {
+    final resp = await _send(
+      () => _http.post(
+        _uri('/api/kiosk/auth/login'),
+        headers: _headers(),
+        body: jsonEncode({'username': username, 'pinCode': pinCode}),
+      ),
+    );
+    if (resp.statusCode == 200) {
+      return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>,
+          usernameOverride: username);
+    }
+    final msg = _extractMessage(resp);
+    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
+    throw UnknownApiException(resp.statusCode, msg);
+  }
+
+  // POST /api/kiosk/auth/logout
+  Future<void> kioskLogout(String token) async {
+    final resp = await _send(
+      () => _http.post(_uri('/api/kiosk/auth/logout'), headers: _headers(token: token)),
+    );
+    if (resp.statusCode != 200) throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
   // POST /api/auth/logout
   Future<void> logout(String token) async {
     final resp = await _send(

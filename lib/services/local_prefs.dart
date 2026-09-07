@@ -52,6 +52,24 @@ class LocalPrefs {
   static String? get kioskUsername => _p.getString(_kKioskUsername);
   static Future<void> setKioskUsername(String value) => _p.setString(_kKioskUsername, value);
 
+  static const _kKioskPin = 'waha.kiosk_pin';
+  /// Cached device username/PIN — the Kiosk-mode equivalent of
+  /// authUsername/authPassword above (same plaintext-storage tradeoff:
+  /// this is the device's own credential, re-used to re-authenticate on
+  /// every app start since there's no session-check endpoint for device
+  /// sessions, only login). Deliberately separate from setKioskUsername
+  /// above, which is unrelated leftover state from IdentityService.
+  static String? get kioskPin => _p.getString(_kKioskPin);
+  static Future<void> setKioskCredentials(String username, String pin) async {
+    await _p.setString(_kKioskUsername, username);
+    await _p.setString(_kKioskPin, pin);
+  }
+
+  static Future<void> clearKioskCredentials() async {
+    await _p.remove(_kKioskUsername);
+    await _p.remove(_kKioskPin);
+  }
+
   static String? get locale => _p.getString(_kLocale);
   static Future<void> setLocale(String value) => _p.setString(_kLocale, value);
 
