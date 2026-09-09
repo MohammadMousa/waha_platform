@@ -20,7 +20,6 @@ import '../utils/locale_name.dart';
 import '../utils/scan_actions.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/product_image.dart';
-import '../widgets/scan_capture_field.dart';
 import '../widgets/admin_drawer.dart';
 import '../widgets/waha_app_bar.dart';
 import '../services/server_discovery.dart';
@@ -390,8 +389,6 @@ class _WebViewLandingState extends State<_WebViewLanding> {
   bool _dismissing = false;
 
   // Dismiss to cart as soon as the first item is added — scan or simulator.
-  // Uses pushReplacement so the landing screen (and its ScanCaptureField) is
-  // fully removed from the stack, preventing focus stealing on subsequent scans.
   // _dismissing guards against the navigator assertion that fires when this is
   // called multiple times while the navigator is already mid-transition.
   void _onFlowChanged() {
@@ -473,9 +470,6 @@ class _WebViewLandingState extends State<_WebViewLanding> {
       return Scaffold(
         body: Stack(
           children: [
-            // Invisible ScanCaptureField so HID barcode scanners work on the landing page.
-            // When scan succeeds, cart fills → _onFlowChanged() navigates away.
-            const ScanCaptureField(visible: false),
             WebViewWidget(controller: _controller),
             if (!_loaded && !_errored)
               const ColoredBox(
@@ -992,7 +986,6 @@ class _ScanLandingState extends State<_ScanLanding> {
               ),
             ),
           ),
-          if (mode == BrowsingMode.kiosk) const ScanCaptureField(visible: false),
         ],
       ),
     );

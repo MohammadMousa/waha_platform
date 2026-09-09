@@ -1,6 +1,6 @@
 # Waha Platform — Flutter Frontend
 
-Flutter frontend for Waha, a multi-store retail and self-service kiosk system. Consumes the [Waha backend](https://github.com/mohammad_mousa79/waha) REST API.
+Flutter frontend for Waha, a multi-store retail and self-service kiosk system. Consumes the [Waha backend](github.com/MohammadMousa/waha) REST API.
 
 ---
 

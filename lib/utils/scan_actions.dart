@@ -24,7 +24,15 @@ Future<void> openCameraAndAddToCart(BuildContext context) async {
     MaterialPageRoute(builder: (_) => const CameraScanScreen()),
   );
   if (barcode == null || !context.mounted) return;
+  await addScannedBarcodeToCart(context, barcode);
+}
 
+/// Adds a scanned [barcode] to the cart with the shared scan UX: a quiet
+/// optional toast on success, a blocking dialog on failure. Used by both
+/// the camera flow above and the ambient hardware-scanner listener
+/// (`HardwareScanListener`) so every scan path — camera or hardware —
+/// looks and behaves identically to the customer.
+Future<void> addScannedBarcodeToCart(BuildContext context, String barcode) async {
   final flow = context.read<OrderFlowController>();
   final messenger = ScaffoldMessenger.of(context);
   try {

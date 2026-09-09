@@ -3,18 +3,17 @@ import 'package:provider/provider.dart';
 
 import '../router/app_router.dart';
 import '../state/order_flow_controller.dart';
-import '../widgets/scan_capture_field.dart';
 import '../widgets/waha_app_bar.dart';
 
-/// Normal mode's explicit "Scan" entry. `ScanCaptureField` runs
-/// invisibly here now, not as a visible typeable text box — a real
-/// hardware scanner (USB/BT keyboard-wedge) still works exactly the same
-/// underneath, but nothing on screen invites a customer to manually type
+/// Normal mode's explicit "Scan" entry. A real hardware scanner (USB/BT
+/// keyboard-wedge) works ambiently here — `HardwareScanListener` is
+/// mounted by the router for every product/cart route, this one
+/// included, so nothing on screen invites a customer to manually type
 /// barcode digits. Manual entry is a dev/testing need, and that's
-/// already covered by the Simulator overlay's Product-scan button — it
-/// doesn't belong on a screen real customers see. Kiosk and Shopping
-/// don't route through this screen at all: Kiosk captures scans
-/// ambiently on Landing, Shopping opens the camera directly.
+/// already covered by the Simulator overlay's Product-scan button.
+/// Kiosk and Shopping don't route through this screen at all: Kiosk
+/// scans ambiently on Landing/Cart/etc., Shopping opens the camera
+/// directly.
 class ScanScreen extends StatelessWidget {
   const ScanScreen({super.key});
 
@@ -30,9 +29,6 @@ class ScanScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
         child: Column(
           children: [
-            // Invisible capture point for a real hardware scanner —
-            // present and focused, never shown.
-            const ScanCaptureField(visible: false),
             Container(
               width: 96,
               height: 96,

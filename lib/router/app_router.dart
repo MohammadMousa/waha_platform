@@ -35,6 +35,7 @@ import '../models/category.dart';
 import '../models/product.dart';
 import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
+import '../widgets/hardware_scan_listener.dart';
 import '../widgets/kiosk_idle_guard.dart';
 import '../widgets/mode_badge.dart';
 import '../widgets/simulator_overlay.dart';
@@ -91,6 +92,12 @@ class Routes {
   // by the nav guard.  Settings, profile, admin, and auth routes remain locked.
   static const kioskAllowlist = {landing, scan, cart, checkout, invoice, pay, success,
       browse, categories, search, productDetail};
+
+  /// Also reused (see onGenerateRoute) to decide where the ambient
+  /// hardware-scanner listener mounts: the same product/cart screens are
+  /// exactly where a barcode scan should always be accepted, in every
+  /// mode — not just Kiosk/Shopping's restricted set.
+  static const scanEnabledRoutes = kioskAllowlist;
 
   /// Which non-Landing routes represent "after invoice" for idle-timer
   /// purposes (shorter, display-oriented countdown vs. the general
@@ -272,6 +279,10 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
     builder: (_) => Stack(
       children: [
         page,
+        // Ambient hardware-scanner capture — mounted directly on whichever
+        // product/cart screen is on top, not dependent on any TextField
+        // holding focus, so it survives navigation away from Landing.
+        if (Routes.scanEnabledRoutes.contains(name)) const HardwareScanListener(),
         const SimulatorOverlay(),
         const ModeBadge(),
       ],
