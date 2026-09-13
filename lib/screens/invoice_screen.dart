@@ -9,14 +9,18 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/order.dart';
 import '../models/payment_method.dart';
+import '../models/terminal_session.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
+import '../services/geidea_terminal_bridge.dart';
+import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
+import '../widgets/timer_footer_sheet.dart';
 import 'qr_payment_screen.dart';
 
 enum _Phase { loading, loaded, paying, waiting, paid, cancelled }
@@ -44,6 +48,13 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   int _pollAttempts = 0;
   static const _maxPollAttempts = 150; // ~5 min at 2s
 
+  // Auto-select when there's only one payment method — skips the pointless
+  // extra tap. Only armed on the initial load (see _loadOrder); a decline
+  // or a cancelled redirect returning to _Phase.loaded does NOT re-arm it,
+  // so a customer is never silently re-charged after backing out once.
+  static const _autoSelectDelaySeconds = 4;
+  Timer? _autoSelectTimer;
+  int? _autoSelectSecondsLeft;
 
   @override
   void initState() {
@@ -54,7 +65,31 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _autoSelectTimer?.cancel();
     super.dispose();
+  }
+
+  void _maybeStartAutoSelect() {
+    if (_methods.length != 1) return;
+    setState(() => _autoSelectSecondsLeft = _autoSelectDelaySeconds);
+    _autoSelectTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final left = _autoSelectSecondsLeft! - 1;
+      if (left <= 0) {
+        _cancelAutoSelect();
+        _handleMethod(_methods.first);
+      } else {
+        setState(() => _autoSelectSecondsLeft = left);
+      }
+    });
+  }
+
+  void _cancelAutoSelect() {
+    _autoSelectTimer?.cancel();
+    _autoSelectTimer = null;
+    if (mounted && _autoSelectSecondsLeft != null) {
+      setState(() => _autoSelectSecondsLeft = null);
+    }
   }
 
   Future<void> _loadOrder() async {
@@ -82,6 +117,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       } else {
         await _loadMethods();
         if (mounted) setState(() => _phase = _Phase.loaded);
+        _maybeStartAutoSelect();
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -103,6 +139,12 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   void _onPaid(WahaOrder order) {
     _order = order;
+    // Every payment path funnels through here — the single choke point to
+    // keep OrderFlowController.order in sync, which KioskIdleGuard reads to
+    // suspend its own timer once paid. pay()/refreshOrder() already do this
+    // for simulated/redirect/QR flows; terminal payment resolves its own
+    // paid order locally and never touches the controller otherwise.
+    context.read<OrderFlowController>().setOrder(order);
     setState(() => _phase = _Phase.paid);
     if (browsingModeService.mode == BrowsingMode.kiosk) {
       // Delay one frame so the Scaffold beneath the dialog is fully built.
@@ -485,7 +527,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   IconData _iconForMethod(PaymentMethod method) {
     if (method.isPaymentUrl) return Icons.phone_android_outlined;
-    if (method.provider == 'TERMINAL') return Icons.contactless_outlined;
+    if (method.provider == 'TERMINAL') return Icons.point_of_sale_outlined;
     return switch (method.key.replaceAll('_qr', '')) {
       'simulated' => Icons.phone_android_outlined,
       'stripe' => Icons.credit_card,
@@ -691,6 +733,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                       onTap: _launchingSession
                           ? null
                           : () {
+                              _cancelAutoSelect();
                               if (method.isPaymentUrl) {
                                 _handlePaymentUrl(method);
                               } else if (method.provider == 'TERMINAL') {
@@ -706,6 +749,15 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                 ],
               ),
             ),
+          if (_autoSelectSecondsLeft != null) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                l10n.autoSelectingIn(_autoSelectSecondsLeft!),
+                style: TextStyle(color: scheme.outline, fontSize: 13),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 24),
 
@@ -885,7 +937,6 @@ class _KioskPaidDialogState extends State<_KioskPaidDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
     final url = widget.order.invoiceUrl;
 
     return PopScope(
@@ -893,116 +944,85 @@ class _KioskPaidDialogState extends State<_KioskPaidDialog> {
       child: Dialog.fullscreen(
         backgroundColor: Colors.black87,
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // PAID stamp
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green.shade600,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.green.withOpacity(0.4),
-                        blurRadius: 32,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 62),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  l10n.kioskPaidTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // QR section
-                if (url != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: QrImageView(
-                      data: url,
-                      version: QrVersions.auto,
-                      size: 200,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.kioskPaidScanHint,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 15),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-
-                // Countdown
-                Text(
-                  l10n.kioskPaidClosingIn(_secondsLeft),
-                  style: TextStyle(
-                    color: _secondsLeft <= 5
-                        ? Colors.red.shade300
-                        : Colors.white54,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white30),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+          bottom: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // PAID stamp
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.green.shade600,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.green.withValues(alpha: 0.4),
+                                blurRadius: 32,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.check_rounded,
+                              color: Colors.white, size: 62),
                         ),
-                        onPressed: _resetTimer,
-                        child: Text(l10n.kioskPaidResetTimer),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: scheme.primary,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: _doNewOrder,
-                        child: Text(
-                          l10n.kioskPaidNewOrder,
+                        const SizedBox(height: 16),
+                        Text(
+                          l10n.kioskPaidTitle,
                           style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 16),
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 32),
+
+                        // QR section
+                        if (url != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: QrImageView(
+                              data: url,
+                              version: QrVersions.auto,
+                              size: 200,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.kioskPaidScanHint,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70, fontSize: 15),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+              // Footer sheet — same visual language as the idle-warning
+              // sheet, floating on the dark celebratory background instead
+              // of a plain countdown line + button row.
+              TimerFooterSheet(
+                message: l10n.kioskPaidClosingIn(_secondsLeft),
+                secondsLeft: _secondsLeft,
+                primaryLabel: l10n.kioskPaidNewOrder,
+                primaryColor: Colors.green.shade600,
+                onPrimary: _doNewOrder,
+                secondaryLabel: l10n.kioskPaidResetTimer,
+                onSecondary: _resetTimer,
+              ),
+            ],
           ),
         ),
       ),
@@ -1741,103 +1761,138 @@ class _TerminalPaymentScreen extends StatefulWidget {
   State<_TerminalPaymentScreen> createState() => _TerminalPaymentScreenState();
 }
 
+// Synchronous USB flow (Geidea): create the backend session, hand the
+// amount to the terminal via GeideaTerminalBridge, and act on whatever
+// comes back directly — no polling. This dialog used to poll
+// GET /terminal-sessions/{id} waiting for a second device (the waha_terminal
+// NFC companion app) to confirm over HTTP; that app is retired, Geidea
+// replaces it, and the Kiosk itself already knows the result the moment
+// the SDK callback returns.
 class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
-  String? _sessionId;
-  String _statusLabel = 'Connecting to terminal…';
-  bool _timedOut = false;
-  bool _cancelled = false;
-  Timer? _poll;
-
-  static const _pollInterval = Duration(seconds: 2);
-  static const _timeoutDuration = Duration(seconds: 95);
+  String? _statusLabel;
+  bool _failed = false;
+  TerminalSession? _session;
+  bool _started = false;
 
   @override
-  void initState() {
-    super.initState();
-    _createSession();
-  }
-
-  Future<void> _createSession() async {
-    try {
-      final id = await widget.apiClient.createTerminalSession(widget.orderId);
-      setState(() {
-        _sessionId = id;
-        _statusLabel = 'Please tap your card on the terminal';
-      });
-      _startPolling();
-      Future.delayed(_timeoutDuration, _onTimeout);
-    } catch (e) {
-      if (mounted) setState(() => _statusLabel = 'Failed to start session: $e');
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // l10n needs an inherited widget lookup, unavailable in initState — set
+    // the initial label here instead (runs once, before the first build, so
+    // a direct field write is safe with no setState needed) and kick off
+    // the actual flow. Guarded so a later dependency change (e.g. locale
+    // switch) can't restart it.
+    if (!_started) {
+      _started = true;
+      _statusLabel = AppLocalizations.of(context)!.terminalConnecting;
+      _run();
     }
   }
 
-  void _startPolling() {
-    _poll = Timer.periodic(_pollInterval, (_) => _checkStatus());
-  }
+  Future<void> _run() async {
+    final l10n = AppLocalizations.of(context)!;
+    final bridge = GeideaTerminalBridge.instance;
 
-  Future<void> _checkStatus() async {
-    final id = _sessionId;
-    if (id == null) return;
+    final connected = await bridge.checkCommunication();
+    if (!mounted) return;
+    if (!connected) {
+      setState(() {
+        _failed = true;
+        _statusLabel = l10n.terminalNotConnected;
+      });
+      return;
+    }
+
+    final TerminalSession session;
     try {
-      final status = await widget.apiClient.getTerminalSessionStatus(id);
-      if (!mounted) return;
-      if (status == 'CONFIRMED') {
-        _poll?.cancel();
+      session = await widget.apiClient.createTerminalSession(widget.orderId);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = l10n.terminalSessionStartFailed(e.toString());
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _session = session;
+      _statusLabel = l10n.terminalSwipeCard;
+    });
+
+    final result = await bridge.startPayment(
+      amount: session.amount,
+      reference: session.orderId,
+      timeout: Duration(seconds: LocalPrefs.terminalTimeoutSeconds),
+    );
+    if (!mounted) return;
+
+    if (result.approved && result.approvalCode != null) {
+      try {
+        await widget.apiClient.confirmTerminalSession(
+          session.id,
+          authCode: result.approvalCode!,
+          notes: {...result.details, 'vendor': 'geidea'},
+        );
         final order = await widget.apiClient.getOrder(widget.orderId);
         if (mounted) Navigator.pop(context, order);
-      } else if (status == 'TIMEOUT') {
-        _poll?.cancel();
-        setState(() { _timedOut = true; _statusLabel = 'Session timed out'; });
-      } else if (status == 'CANCELLED') {
-        _poll?.cancel();
-        setState(() { _cancelled = true; _statusLabel = 'Payment cancelled'; });
+      } catch (e) {
+        // Card was charged but the backend couldn't be told — do NOT show
+        // this as a plain decline, the customer's card was already debited.
+        if (mounted) {
+          setState(() {
+            _failed = true;
+            _statusLabel = l10n.terminalApprovedNotRecorded(e.toString());
+          });
+        }
       }
-    } catch (_) {}
+    } else {
+      try { await widget.apiClient.cancelTerminalSession(session.id); } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = result.errorMessage ?? l10n.paymentDeclined;
+        });
+      }
+    }
   }
 
-  void _onTimeout() {
-    if (!mounted || _timedOut || _cancelled) return;
-    _poll?.cancel();
-    setState(() { _timedOut = true; _statusLabel = 'No response from terminal'; });
-  }
-
+  // Best-effort: the native SDK call already in flight can't actually be
+  // aborted mid-transaction (it's a single platform-channel Future, not a
+  // cancellable operation) — this closes the dialog and cancels the
+  // backend session, but a transaction the terminal already approved will
+  // still go through underneath.
   Future<void> _cancel() async {
-    _poll?.cancel();
-    final id = _sessionId;
+    final id = _session?.id;
     if (id != null) {
       try { await widget.apiClient.cancelTerminalSession(id); } catch (_) {}
     }
+    unawaited(GeideaTerminalBridge.instance.cancelPayment());
     if (mounted) Navigator.pop(context, null);
   }
 
   @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
-    final done = _timedOut || _cancelled;
+    final done = _failed;
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            done ? Icons.error_outline : Icons.contactless_outlined,
-            size: 72,
-            color: done ? scheme.error : scheme.primary,
-          ),
+          done
+              ? Icon(Icons.error_outline, size: 72, color: scheme.error)
+              : _TerminalIcon(color: scheme.primary),
           const SizedBox(height: 24),
           Text(
-            done ? 'Payment Failed' : 'Card Terminal',
+            done ? l10n.terminalPaymentFailedTitle : l10n.terminalTitle,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
           Text(
-            _statusLabel,
+            _statusLabel ?? '',
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.outline),
           ),
@@ -1847,14 +1902,51 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           ],
           const SizedBox(height: 32),
           if (done)
-            FilledButton(onPressed: () => Navigator.pop(context, null), child: const Text('Close'))
+            FilledButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: Text(l10n.terminalClose))
           else
             OutlinedButton.icon(
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Cancel'),
+              label: Text(l10n.cartClearCancel),
               onPressed: _cancel,
               style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+// A plain point-of-sale icon reads as "cash register" — this pairs it with
+// a small overlapping card badge so it reads as "card + terminal" instead,
+// without needing a custom asset.
+class _TerminalIcon extends StatelessWidget {
+  final Color color;
+  const _TerminalIcon({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 88,
+      height: 80,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.point_of_sale_outlined, size: 72, color: color),
+          Positioned(
+            right: 0,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: Icon(Icons.credit_card, size: 20, color: color),
+            ),
+          ),
         ],
       ),
     );

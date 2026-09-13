@@ -62,5 +62,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Geidea vendor reference material (PDF doc + their own sample project) —
+# not a build dependency, the real SDK resolves via Maven (see
+# android/build.gradle.kts). Kept locally for reference/decompilation only.
+/android/app/libs/
 devtools_options.yaml
 .frontend_sidekick_status

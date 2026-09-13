@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../screens/camera_scan_screen.dart';
 import '../services/api_exceptions.dart';
 import '../services/local_prefs.dart';
@@ -34,6 +35,16 @@ Future<void> openCameraAndAddToCart(BuildContext context) async {
 /// looks and behaves identically to the customer.
 Future<void> addScannedBarcodeToCart(BuildContext context, String barcode) async {
   final flow = context.read<OrderFlowController>();
+
+  // An order has already been placed and isn't paid yet (customer is sitting
+  // on the Invoice screen, or anywhere else mid-payment) — a scan here would
+  // silently try to add to a cart that's no longer what's being paid for.
+  // Block it with an explicit message instead.
+  if (flow.orderId != null && flow.order?.status != 'PAID') {
+    await showUnpaidOrderBlockedDialog(context);
+    return;
+  }
+
   final messenger = ScaffoldMessenger.of(context);
   try {
     final product = await flow.scanBarcode(barcode);
@@ -48,6 +59,28 @@ Future<void> addScannedBarcodeToCart(BuildContext context, String barcode) async
   } catch (e) {
     if (context.mounted) await showBlockingScanError(context, 'Scan failed: $e');
   }
+}
+
+/// Blocks a scan attempt while an order has been placed but not yet paid —
+/// shown instead of silently adding to (or failing to add to) a cart that
+/// no longer reflects what's being paid for.
+Future<void> showUnpaidOrderBlockedDialog(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      icon: const Icon(Icons.info_outline, color: Colors.orange),
+      title: Text(l10n.scanBlockedUnpaidTitle),
+      content: Text(l10n.scanBlockedUnpaidMessage),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// A dialog the user must tap through, not a toast that can be missed —

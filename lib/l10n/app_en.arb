@@ -22,7 +22,12 @@
   "cartSubtotal": "Subtotal",
   "cartTax": "Tax",
   "cartTotal": "Total",
-  "checkoutButton": "Checkout",
+  "checkoutButton": "Buy & Pay",
+
+  "scanBlockedUnpaidTitle": "Order not paid yet",
+  "scanBlockedUnpaidMessage": "You haven't paid for this order yet. Please complete payment first.",
+
+  "settingsShowCartMenuKiosk": "Show cart menu in Kiosk mode",
 
   "payButton": "Pay",
   "payRetry": "Retry Payment",
@@ -186,6 +191,32 @@
   },
   "kioskPaidResetTimer": "Give me more time",
   "kioskPaidNewOrder": "New Order",
+
+  "terminalTitle": "Card Terminal",
+  "terminalConnecting": "Connecting to terminal…",
+  "terminalNotConnected": "Terminal not connected — check the USB cable.",
+  "terminalSwipeCard": "Tap or swipe your card on the terminal",
+  "terminalSessionStartFailed": "Failed to start session: {error}",
+  "@terminalSessionStartFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "terminalApprovedNotRecorded": "Approved on the terminal but could not be recorded ({error}) — do not retry, contact support.",
+  "@terminalApprovedNotRecorded": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "terminalPaymentFailedTitle": "Payment Failed",
+  "terminalClose": "Close",
+
+  "autoSelectingIn": "Auto-selecting in {seconds}s — tap to pay now",
+  "@autoSelectingIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
 
   "invoiceDueLabel": "Due",
   "adminPaymentMethods": "Payment Methods",

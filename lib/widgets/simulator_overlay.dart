@@ -125,6 +125,14 @@ class SimulatorOverlay extends StatelessWidget {
     SimScanType type = SimScanType.product,
   }) async {
     final flow = context.read<OrderFlowController>();
+
+    // Same guard as the real scan paths (scan_actions.dart) — an order placed
+    // but not yet paid must block a scan here too, not just from hardware.
+    if (flow.orderId != null && flow.order?.status != 'PAID') {
+      await showUnpaidOrderBlockedDialog(context);
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     try {
       final product = await flow.scanBarcode(code);

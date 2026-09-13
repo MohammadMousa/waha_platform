@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:audioplayers/audioplayers.dart';
@@ -10,6 +11,7 @@ import 'config/app_config.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'router/app_router.dart';
 import 'services/api_client.dart';
+import 'services/geidea_terminal_bridge.dart';
 import 'services/local_prefs.dart';
 import 'services/server_discovery.dart';
 import 'state/auth_service.dart';
@@ -111,6 +113,15 @@ Future<void> _resolveStartupConfig() async {
   // flashing a logged-out state for a moment first. Mode must already be
   // resolved by this point — Shopping's auto-account behavior depends on it.
   await authService.resolveStartupAuth(ApiClient(), browsingModeService.mode);
+
+  // Geidea USB terminal (card-present payment) — Kiosk-only, matching
+  // payment_methods.available_modes for the 'terminal' row. Fire-and-forget:
+  // USB connection is inherently async/best-effort (the terminal may not be
+  // plugged in yet, or this may be a dev device with no hardware at all)
+  // and shouldn't block or fail app startup either way.
+  if (browsingModeService.mode == BrowsingMode.kiosk) {
+    unawaited(GeideaTerminalBridge.instance.initialize());
+  }
 }
 
 class WahaApp extends StatelessWidget {

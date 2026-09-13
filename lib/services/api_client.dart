@@ -13,6 +13,7 @@ import '../models/product.dart';
 import '../models/product_page.dart';
 import '../models/quote.dart';
 import '../models/store.dart';
+import '../models/terminal_session.dart';
 import 'api_exceptions.dart';
 
 class ApiClient {
@@ -500,28 +501,47 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-  // ── Terminal payment endpoints ────────────────────────────────────────────
 
-  Future<String> createTerminalSession(String orderId) async {
+  // ── Terminal payment endpoints (card-present, e.g. Geidea) ────────────────
+  //
+  // Same endpoints originally built for the waha_terminal NFC companion
+  // app's create → poll → confirm flow; now called directly by the Kiosk
+  // itself for Geidea's synchronous USB flow, skipping the polling step —
+  // the Kiosk already knows the transaction result the moment the Geidea
+  // SDK callback returns, so it confirms/cancels immediately instead of
+  // waiting for a second device to do it over HTTP.
+
+  Future<TerminalSession> createTerminalSession(String orderId) async {
     final resp = await _send(
       () => _http.post(_uri('/api/orders/$orderId/terminal-session'), headers: _headers()),
     );
     if (resp.statusCode == 200) {
-      return (jsonDecode(resp.body) as Map<String, dynamic>)['id'] as String;
+      return TerminalSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
+    if (resp.statusCode == 404) throw OrderNotFoundException(404, msg);
     if (resp.statusCode == 409) throw OrderAlreadyPaidException(409, msg);
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-  Future<String> getTerminalSessionStatus(String sessionId) async {
-    final resp = await _send(() => _http.get(_uri('/api/terminal-sessions/$sessionId')));
-    if (resp.statusCode == 200) {
-      return (jsonDecode(resp.body) as Map<String, dynamic>)['status'] as String;
-    }
+  // Terminal approved the transaction; marks the order PAID. notes carries
+  // the full terminal transaction JSON (rrn, masked card number, terminal
+  // id, ...) for audit/receipt purposes — free-form JSON server-side.
+  Future<void> confirmTerminalSession(String sessionId,
+      {required String authCode, required Map<String, dynamic> notes}) async {
+    final resp = await _send(
+      () => _http.post(
+        _uri('/api/terminal-sessions/$sessionId/confirm'),
+        headers: _headers(),
+        body: jsonEncode({'authCode': authCode, 'notes': notes}),
+      ),
+    );
+    if (resp.statusCode == 200) return;
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
+  // Declined/error/gave up. Closes the PENDING record; does not preserve a
+  // decline reason server-side (flagged to backend, accepted as-is for now).
   Future<void> cancelTerminalSession(String sessionId) async {
     await _send(() => _http.post(_uri('/api/terminal-sessions/$sessionId/cancel'), headers: _headers()));
   }

@@ -22,7 +22,12 @@
   "cartSubtotal": "المجموع الفرعي",
   "cartTax": "الضريبة",
   "cartTotal": "الإجمالي",
-  "checkoutButton": "إتمام الشراء",
+  "checkoutButton": "الشراء والدفع",
+
+  "scanBlockedUnpaidTitle": "لم يتم الدفع بعد",
+  "scanBlockedUnpaidMessage": "لم تدفع قيمة هذا الطلب بعد. يرجى إتمام الدفع أولاً.",
+
+  "settingsShowCartMenuKiosk": "إظهار قائمة السلة في وضع الكشك",
 
   "payButton": "ادفع",
   "payRetry": "إعادة محاولة الدفع",
@@ -186,6 +191,32 @@
   },
   "kioskPaidResetTimer": "أعطني مزيداً من الوقت",
   "kioskPaidNewOrder": "طلب جديد",
+
+  "terminalTitle": "جهاز الدفع",
+  "terminalConnecting": "جارٍ الاتصال بجهاز الدفع…",
+  "terminalNotConnected": "جهاز الدفع غير متصل — تحقق من كابل USB.",
+  "terminalSwipeCard": "مرر أو قرّب البطاقة على جهاز الدفع",
+  "terminalSessionStartFailed": "فشل بدء الجلسة: {error}",
+  "@terminalSessionStartFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "terminalApprovedNotRecorded": "تمت الموافقة على الجهاز لكن تعذّر تسجيلها ({error}) — لا تُعد المحاولة، تواصل مع الدعم.",
+  "@terminalApprovedNotRecorded": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "terminalPaymentFailedTitle": "فشلت عملية الدفع",
+  "terminalClose": "إغلاق",
+
+  "autoSelectingIn": "الاختيار التلقائي خلال {seconds} ث — اضغط للدفع الآن",
+  "@autoSelectingIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
 
   "invoiceDueLabel": "المستحق",
   "adminPaymentMethods": "وسائل الدفع",

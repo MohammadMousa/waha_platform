@@ -363,7 +363,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
       if (!mounted) return;
       final resolved =
           LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
-      _controller.loadHtmlString(resolved);
+      _controller.loadHtmlString(resolved, baseUrl: widget.baseUrl);
     });
   }
 
@@ -406,7 +406,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
       setState(() { _loaded = false; _errored = false; });
       final resolved =
           LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
-      _controller.loadHtmlString(resolved);
+      _controller.loadHtmlString(resolved, baseUrl: widget.baseUrl);
     } else if (old.lang != widget.lang) {
       _applyLang(widget.lang);
     }
@@ -496,7 +496,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
                           setState(() { _loaded = false; _errored = false; });
                           final resolved = LandingCache.resolveAbsolutePaths(
                               widget.htmlContent, widget.baseUrl);
-                          _controller.loadHtmlString(resolved);
+                          _controller.loadHtmlString(resolved, baseUrl: widget.baseUrl);
                         },
                         child: const Text('Retry',
                             style: TextStyle(color: Colors.white)),

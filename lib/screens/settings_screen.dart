@@ -31,9 +31,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _afterCountdown;
   String? _timerError;
 
+  // Terminal (Geidea) payment timeout
+  late final TextEditingController _terminalTimeout;
+  String? _terminalTimeoutError;
+
   // Dev tools unlock: tap the version line 10 times
   int _tapCount = 0;
   bool _devUnlocked = false;
+
+  // Cart's bottom nav bar visibility in Kiosk mode — hidden by default.
+  bool _showCartMenuInKiosk = false;
 
   // Dev tools — store ID override
   late final TextEditingController _storeId;
@@ -55,7 +62,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: '${kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds}',
     );
     _storeId = TextEditingController(text: storeConfigService.storeId?.toString() ?? '');
+    _terminalTimeout =
+        TextEditingController(text: '${LocalPrefs.terminalTimeoutSeconds}');
     _devUnlocked = LocalPrefs.devToolsUnlocked;
+    _showCartMenuInKiosk = LocalPrefs.showCartMenuInKiosk;
   }
 
   @override
@@ -65,6 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _afterWarn.dispose();
     _afterCountdown.dispose();
     _storeId.dispose();
+    _terminalTimeout.dispose();
     super.dispose();
   }
 
@@ -121,6 +132,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _timerError = null);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context)!.settingsSaveTimers)),
+    );
+  }
+
+  // Clamped to [10, 80]s — the backend's own PENDING→TIMEOUT window for a
+  // terminal session is a fixed 90s (TerminalSessionService.java); keeping
+  // this comfortably under that means the Kiosk always gives up and cancels
+  // its own session before the backend's window can lapse mid-transaction,
+  // so a value here can never trigger that race.
+  static const _minTerminalTimeout = 10;
+  static const _maxTerminalTimeout = 80;
+
+  void _saveTerminalTimeout() {
+    final v = _parseSeconds(_terminalTimeout.text);
+    if (v == null || v < _minTerminalTimeout || v > _maxTerminalTimeout) {
+      setState(() => _terminalTimeoutError =
+          'Must be between $_minTerminalTimeout and $_maxTerminalTimeout seconds.');
+      return;
+    }
+    LocalPrefs.setTerminalTimeoutSeconds(v);
+    setState(() => _terminalTimeoutError = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Terminal payment timeout saved.')),
     );
   }
 
@@ -235,6 +268,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             alignment: Alignment.centerRight,
             child: FilledButton(onPressed: _saveTimers, child: Text(l10n.settingsSaveTimers)),
           ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsShowCartMenuKiosk),
+            value: _showCartMenuInKiosk,
+            onChanged: (value) {
+              setState(() => _showCartMenuInKiosk = value);
+              LocalPrefs.setShowCartMenuInKiosk(value);
+            },
+          ),
+
+          const Divider(height: 40),
+
+          // ── Terminal Payment (Geidea) ───────────────────────────────────
+          // How long the Kiosk waits on a card-present terminal transaction
+          // before giving up — see _saveTerminalTimeout for why it's capped.
+          Text('Terminal Payment', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 14),
+          _SecondsField(
+            label: 'Wait for terminal — timeout (s)',
+            controller: _terminalTimeout,
+          ),
+          if (_terminalTimeoutError != null) ...[
+            const SizedBox(height: 6),
+            Text(_terminalTimeoutError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+          ],
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _saveTerminalTimeout,
+              child: const Text('Save'),
+            ),
+          ),
 
           // ── Admin: Payment Methods + Integrations ─────────────────────────
           if (context.watch<PermissionService>().can('MANAGE_STORES')) ...[
@@ -242,8 +309,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text('Admin', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             _AdminPaymentMethodsPanel(),
-            const SizedBox(height: 10),
-            _ServerConnectionPanel(),
             const SizedBox(height: 10),
             OutlinedButton.icon(
               icon: const Icon(Icons.sync_outlined),
@@ -286,7 +351,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
           // ── Dev Tools ─────────────────────────────────────────────────────
+          // No permission check here on purpose — Server Connection has to be
+          // reachable even when the device can't log in yet (e.g. right after
+          // the LAN IP changes and the configured server is now unreachable).
           if (_devUnlocked) ...[
+            const SizedBox(height: 20),
+            _ServerConnectionPanel(),
             const SizedBox(height: 20),
             _DevToolsPanel(
               storeIdController: _storeId,

@@ -61,7 +61,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cartTotal => 'Total';
 
   @override
-  String get checkoutButton => 'Checkout';
+  String get checkoutButton => 'Buy & Pay';
+
+  @override
+  String get scanBlockedUnpaidTitle => 'Order not paid yet';
+
+  @override
+  String get scanBlockedUnpaidMessage =>
+      'You haven\'t paid for this order yet. Please complete payment first.';
+
+  @override
+  String get settingsShowCartMenuKiosk => 'Show cart menu in Kiosk mode';
 
   @override
   String get payButton => 'Pay';
@@ -431,6 +441,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get kioskPaidNewOrder => 'New Order';
+
+  @override
+  String get terminalTitle => 'Card Terminal';
+
+  @override
+  String get terminalConnecting => 'Connecting to terminal…';
+
+  @override
+  String get terminalNotConnected =>
+      'Terminal not connected — check the USB cable.';
+
+  @override
+  String get terminalSwipeCard => 'Tap or swipe your card on the terminal';
+
+  @override
+  String terminalSessionStartFailed(String error) {
+    return 'Failed to start session: $error';
+  }
+
+  @override
+  String terminalApprovedNotRecorded(String error) {
+    return 'Approved on the terminal but could not be recorded ($error) — do not retry, contact support.';
+  }
+
+  @override
+  String get terminalPaymentFailedTitle => 'Payment Failed';
+
+  @override
+  String get terminalClose => 'Close';
+
+  @override
+  String autoSelectingIn(int seconds) {
+    return 'Auto-selecting in ${seconds}s — tap to pay now';
+  }
 
   @override
   String get invoiceDueLabel => 'Due';

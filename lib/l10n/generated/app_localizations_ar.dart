@@ -61,7 +61,17 @@ class AppLocalizationsAr extends AppLocalizations {
   String get cartTotal => 'الإجمالي';
 
   @override
-  String get checkoutButton => 'إتمام الشراء';
+  String get checkoutButton => 'الشراء والدفع';
+
+  @override
+  String get scanBlockedUnpaidTitle => 'لم يتم الدفع بعد';
+
+  @override
+  String get scanBlockedUnpaidMessage =>
+      'لم تدفع قيمة هذا الطلب بعد. يرجى إتمام الدفع أولاً.';
+
+  @override
+  String get settingsShowCartMenuKiosk => 'إظهار قائمة السلة في وضع الكشك';
 
   @override
   String get payButton => 'ادفع';
@@ -430,6 +440,39 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get kioskPaidNewOrder => 'طلب جديد';
+
+  @override
+  String get terminalTitle => 'جهاز الدفع';
+
+  @override
+  String get terminalConnecting => 'جارٍ الاتصال بجهاز الدفع…';
+
+  @override
+  String get terminalNotConnected => 'جهاز الدفع غير متصل — تحقق من كابل USB.';
+
+  @override
+  String get terminalSwipeCard => 'مرر أو قرّب البطاقة على جهاز الدفع';
+
+  @override
+  String terminalSessionStartFailed(String error) {
+    return 'فشل بدء الجلسة: $error';
+  }
+
+  @override
+  String terminalApprovedNotRecorded(String error) {
+    return 'تمت الموافقة على الجهاز لكن تعذّر تسجيلها ($error) — لا تُعد المحاولة، تواصل مع الدعم.';
+  }
+
+  @override
+  String get terminalPaymentFailedTitle => 'فشلت عملية الدفع';
+
+  @override
+  String get terminalClose => 'إغلاق';
+
+  @override
+  String autoSelectingIn(int seconds) {
+    return 'الاختيار التلقائي خلال $seconds ث — اضغط للدفع الآن';
+  }
 
   @override
   String get invoiceDueLabel => 'المستحق';

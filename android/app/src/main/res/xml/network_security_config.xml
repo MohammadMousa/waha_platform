@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A bundled native SDK dependency ships its own res/xml network security
+  config with a <domain-config> but no <base-config>. On modern Android, once
+  ANY network security config is present in the merged manifest, the implicit
+  base policy becomes cleartextTrafficPermitted="false" for everything not
+  explicitly listed — silently overriding android:usesCleartextTraffic="true"
+  in our own AndroidManifest.xml. That broke plain-HTTP image loads inside the
+  kiosk's landing-page WebView (net::ERR_CLEARTEXT_NOT_PERMITTED) while Dart's
+  own networking kept working, since dart:io sockets aren't subject to
+  Android's NetworkSecurityPolicy at all — only platform networking APIs and
+  WebView are.
+
+  This app talks to the backend over plain HTTP on the local LAN by design
+  (see AppConfig.apiBaseUrl), so cleartext must be allowed globally. Declaring
+  it explicitly here (a different resource name than the library's) wins the
+  manifest merge over the library-contributed one.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

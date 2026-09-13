@@ -203,8 +203,26 @@ abstract class AppLocalizations {
   /// No description provided for @checkoutButton.
   ///
   /// In en, this message translates to:
-  /// **'Checkout'**
+  /// **'Buy & Pay'**
   String get checkoutButton;
+
+  /// No description provided for @scanBlockedUnpaidTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Order not paid yet'**
+  String get scanBlockedUnpaidTitle;
+
+  /// No description provided for @scanBlockedUnpaidMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t paid for this order yet. Please complete payment first.'**
+  String get scanBlockedUnpaidMessage;
+
+  /// No description provided for @settingsShowCartMenuKiosk.
+  ///
+  /// In en, this message translates to:
+  /// **'Show cart menu in Kiosk mode'**
+  String get settingsShowCartMenuKiosk;
 
   /// No description provided for @payButton.
   ///
@@ -919,6 +937,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New Order'**
   String get kioskPaidNewOrder;
+
+  /// No description provided for @terminalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Card Terminal'**
+  String get terminalTitle;
+
+  /// No description provided for @terminalConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to terminal…'**
+  String get terminalConnecting;
+
+  /// No description provided for @terminalNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal not connected — check the USB cable.'**
+  String get terminalNotConnected;
+
+  /// No description provided for @terminalSwipeCard.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap or swipe your card on the terminal'**
+  String get terminalSwipeCard;
+
+  /// No description provided for @terminalSessionStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start session: {error}'**
+  String terminalSessionStartFailed(String error);
+
+  /// No description provided for @terminalApprovedNotRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'Approved on the terminal but could not be recorded ({error}) — do not retry, contact support.'**
+  String terminalApprovedNotRecorded(String error);
+
+  /// No description provided for @terminalPaymentFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Failed'**
+  String get terminalPaymentFailedTitle;
+
+  /// No description provided for @terminalClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get terminalClose;
+
+  /// No description provided for @autoSelectingIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-selecting in {seconds}s — tap to pay now'**
+  String autoSelectingIn(int seconds);
 
   /// No description provided for @invoiceDueLabel.
   ///

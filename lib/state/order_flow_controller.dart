@@ -254,6 +254,17 @@ class OrderFlowController extends ChangeNotifier {
     return order!;
   }
 
+  /// Pushes an order this controller didn't fetch itself into `order` —
+  /// for payment paths (terminal) that resolve the paid order through their
+  /// own dialog rather than via pay()/refreshOrder(). Without this,
+  /// KioskIdleGuard's `_isPaid` check (which reads `order.status` here)
+  /// never learns the order was paid, and its idle timer keeps running
+  /// straight through the paid screen.
+  void setOrder(WahaOrder value) {
+    order = value;
+    notifyListeners();
+  }
+
   /// Starts a Stripe/MyFatoorah session. For REDIRECT provider, returns a URL
   /// to open in the browser. For QR_LINK provider, also returns qrCodeDataUri
   /// and expiresAt for the kiosk QR screen.

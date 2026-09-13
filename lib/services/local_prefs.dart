@@ -142,11 +142,33 @@ class LocalPrefs {
   static Future<void> setShowScanSuccessToast(bool value) =>
       _p.setBool(_kShowScanSuccessToast, value);
 
+  // Cart's bottom nav bar (Home/Cart tabs) is hidden by default in Kiosk mode
+  // — the reference design has nothing below the summary card and the
+  // Buy&Pay/Cancel buttons there. This is an explicit opt-in to bring it back
+  // for a deployment that wants it.
+  static const _kShowCartMenuInKiosk = 'waha.show_cart_menu_kiosk';
+  static bool get showCartMenuInKiosk => _p.getBool(_kShowCartMenuInKiosk) ?? false;
+  static Future<void> setShowCartMenuInKiosk(bool value) =>
+      _p.setBool(_kShowCartMenuInKiosk, value);
+
   static const _kSimProductCodes = 'waha.sim_product_codes';
   static List<String> get simProductCodes =>
       _p.getStringList(_kSimProductCodes) ?? [];
   static Future<void> setSimProductCodes(List<String> codes) =>
       _p.setStringList(_kSimProductCodes, codes);
+
+  // How long the Kiosk waits for a card-present terminal (Geidea) response
+  // before giving up and cancelling its own session — a client-side
+  // watchdog, deliberately kept well under the backend's fixed 90s
+  // PENDING→TIMEOUT window (TerminalSessionService.java) so the Kiosk
+  // always cancels cleanly before that window can lapse out from under it.
+  // Settings screen clamps the value it accepts to enforce that margin.
+  static const _kTerminalTimeout = 'waha.terminal_timeout_s';
+  static const int defaultTerminalTimeoutSeconds = 60;
+  static int get terminalTimeoutSeconds =>
+      _p.getInt(_kTerminalTimeout) ?? defaultTerminalTimeoutSeconds;
+  static Future<void> setTerminalTimeoutSeconds(int value) =>
+      _p.setInt(_kTerminalTimeout, value);
 
   // Auto-cache: when on, every code the simulator fires (tap, long-press
   // manual entry, camera-via-simulator) gets appended to simProductCodes

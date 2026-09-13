@@ -40,6 +40,17 @@ kotlin {
     }
 }
 
+dependencies {
+    // Geidea POS terminal SDK (USB Serial). The archive at
+    // android/app/libs/Geidea_Android_SDK_v1.3.0.rar turned out to contain
+    // only docs + a sample app, no bundled binary — the sample's own
+    // build.gradle pulls the SDK from the Cloudsmith repo declared in the
+    // root build.gradle.kts, same as here. com.jcraft:jsch (kept in
+    // proguard-rules.pro) resolves transitively via this artifact's own
+    // POM — no need to declare it separately.
+    implementation("net.geidea.sdk:pos-comm-sdk-ksa:1.3.0")
+}
+
 flutter {
     source = "../.."
 }

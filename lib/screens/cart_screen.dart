@@ -7,13 +7,13 @@ import '../config/app_config.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/quote.dart';
 import '../router/app_router.dart';
+import '../services/local_prefs.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/scan_actions.dart';
 import '../widgets/cart_line_tile.dart';
-import '../widgets/checkout_bar.dart';
 import '../widgets/waha_bottom_nav.dart';
 
 class CartScreen extends StatefulWidget {
@@ -96,10 +96,15 @@ class _CartScreenState extends State<CartScreen> {
     final flow = context.watch<OrderFlowController>();
     final mode = context.watch<BrowsingModeService>().mode;
     final isShopping = mode == BrowsingMode.shopping;
+    final isKiosk = mode == BrowsingMode.kiosk;
     final quote = flow.quote;
     final l10n = AppLocalizations.of(context)!;
     final currency = context.watch<StoreConfigService>().storeCurrency
         ?? flow.order?.currency;
+
+    // Hidden by default in Kiosk mode — the polished design has nothing
+    // below the summary card and action buttons. Settings can opt back in.
+    final showBottomNav = !isKiosk || LocalPrefs.showCartMenuInKiosk;
 
     return Scaffold(
       appBar: AppBar(
@@ -134,7 +139,8 @@ class _CartScreenState extends State<CartScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: const WahaBottomNav(current: BottomNavTab.cart),
+      bottomNavigationBar:
+          showBottomNav ? const WahaBottomNav(current: BottomNavTab.cart) : null,
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _onBodyTap,
@@ -224,25 +230,163 @@ class _CartScreenState extends State<CartScreen> {
                     },
                   ),
           ),
-          if (quote != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Column(
-                children: [
-                  _SummaryRow(l10n.cartSubtotal, quote.subtotal, currency: currency),
-                  _SummaryRow(l10n.cartTax, quote.tax, currency: currency),
-                ],
-              ),
-            ),
-          CheckoutBar(
-            total: quote?.total,
+          _CartSummaryCard(
+            subtotal: quote?.subtotal ?? 0.0,
+            tax: quote?.tax ?? 0.0,
+            total: quote?.total ?? 0.0,
             currency: currency,
-            enabled: flow.cart.isNotEmpty && !flow.busy,
+            l10n: l10n,
+            canCheckout: flow.cart.isNotEmpty && !flow.busy,
+            onCancel: () {
+              context.read<OrderFlowController>().clearCart();
+              Navigator.of(context)
+                  .pushNamedAndRemoveUntil(Routes.landing, (r) => false);
+            },
             onCheckout: () => Navigator.of(context).pushNamed(Routes.checkout),
-            totalLabel: l10n.cartTotal,
-            checkoutLabel: l10n.checkoutButton,
           ),
         ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Summary card — collapsed shows only the grand total; subtotal/tax only
+// show once expanded. Always rendered (even on an empty cart, as 0.00) so
+// the layout never jumps between empty and non-empty states. ──────────────
+
+class _CartSummaryCard extends StatefulWidget {
+  final double subtotal;
+  final double tax;
+  final double total;
+  final String? currency;
+  final AppLocalizations l10n;
+  final bool canCheckout;
+  final VoidCallback onCancel;
+  final VoidCallback onCheckout;
+
+  const _CartSummaryCard({
+    required this.subtotal,
+    required this.tax,
+    required this.total,
+    required this.currency,
+    required this.l10n,
+    required this.canCheckout,
+    required this.onCancel,
+    required this.onCheckout,
+  });
+
+  @override
+  State<_CartSummaryCard> createState() => _CartSummaryCardState();
+}
+
+class _CartSummaryCardState extends State<_CartSummaryCard> {
+  bool _expanded = false;
+
+  // Wide/landscape screens: the card stops growing past this and centers
+  // instead, so the header and buttons don't stretch edge-to-edge forever.
+  static const _maxWidth = 480.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final l10n = widget.l10n;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Card(
+            elevation: 0,
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Text(
+                          l10n.cartTotal,
+                          style: TextStyle(color: scheme.outline, fontWeight: FontWeight.w600),
+                        ),
+                        const Spacer(),
+                        Text(
+                          _fmt(widget.total, widget.currency),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          _expanded ? Icons.expand_less : Icons.expand_more,
+                          color: scheme.outline,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_expanded) ...[
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                    child: Column(
+                      children: [
+                        _SummaryRow(l10n.cartSubtotal, widget.subtotal, currency: widget.currency),
+                        const SizedBox(height: 4),
+                        _SummaryRow(l10n.cartTax, widget.tax, currency: widget.currency),
+                      ],
+                    ),
+                  ),
+                ],
+                const Divider(height: 1),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: scheme.error,
+                            side: BorderSide.none,
+                            shape: const RoundedRectangleBorder(),
+                          ),
+                          onPressed: widget.onCancel,
+                          child: Text(
+                            l10n.cartClearCancel,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            disabledBackgroundColor: Colors.green.shade600.withValues(alpha: 0.4),
+                            shape: const RoundedRectangleBorder(),
+                          ),
+                          onPressed: widget.canCheckout ? widget.onCheckout : null,
+                          child: Text(
+                            l10n.checkoutButton,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -257,16 +401,12 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = null;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: style),
-          Text(_fmt(value, currency), style: style),
-        ],
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.outline)),
+        Text(_fmt(value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
+      ],
     );
   }
 }

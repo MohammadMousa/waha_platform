@@ -67,10 +67,15 @@ class LandingCache {
     return map[lang] ?? map['en'] ?? map.values.first;
   }
 
-  /// Rewrites absolute-path src/href/url() references in [html] to full URLs
-  /// so that WebView's loadHtmlString correctly loads images and stylesheets.
+  /// Rewrites relative src/href/url() references in [html] to full URLs so
+  /// that WebView's loadHtmlString correctly loads images and stylesheets.
+  /// Used as a fallback for platforms (e.g. Flutter Web) where loadHtmlString
+  /// ignores its baseUrl parameter and never gets a real document origin.
   ///
-  /// e.g. src="/resource/waha/..." → src="http://host:8081/resource/waha/..."
+  /// e.g. src="/resource/waha/..."  → src="http://host:8081/resource/waha/..."
+  ///      src="resource/waha/..."   → src="http://host:8081/resource/waha/..."
+  ///      src="//host/resource/..." → left untouched (already a full,
+  ///        protocol-relative URL — prefixing it would double the host).
   ///
   /// Must be called before loadHtmlString every time — the raw HTML stored on
   /// disk keeps the original relative paths so it stays portable across server
@@ -79,16 +84,30 @@ class LandingCache {
     final base = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)
         : baseUrl;
+
+    // Values that are already fully-resolvable and must not be touched:
+    // absolute URLs (http/https), protocol-relative (//host/...), data URIs,
+    // mailto/tel links, and same-page anchors.
+    bool isAlreadyResolvable(String value) => RegExp(
+          r'^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|//|#)',
+        ).hasMatch(value);
+
+    String rewrite(String value) {
+      if (isAlreadyResolvable(value)) return value;
+      final path = value.startsWith('/') ? value : '/$value';
+      return '$base$path';
+    }
+
     return html
-        // src="/...", href="/...", action="/..."
+        // src="...", href="...", action="..." (relative or absolute path)
         .replaceAllMapped(
-          RegExp(r'''((?:src|href|action)\s*=\s*["'])(/[^"']*)'''),
-          (m) => '${m[1]}$base${m[2]}',
+          RegExp(r'''((?:src|href|action)\s*=\s*["'])([^"']+)(["'])'''),
+          (m) => '${m[1]}${rewrite(m[2]!)}${m[3]}',
         )
-        // url('/...') or url("/...") or url(/...) in CSS
+        // url('...') or url("...") or url(...) in CSS
         .replaceAllMapped(
-          RegExp(r'''(url\s*\(\s*["']?)(/[^"')]+)'''),
-          (m) => '${m[1]}$base${m[2]}',
+          RegExp(r'''(url\s*\(\s*["']?)([^"')]+)(["']?\s*\))'''),
+          (m) => '${m[1]}${rewrite(m[2]!)}${m[3]}',
         );
   }
 }

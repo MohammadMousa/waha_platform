@@ -8,6 +8,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
+import 'timer_footer_sheet.dart';
 
 enum _IdleContext { beforeInvoice, afterInvoice }
 
@@ -70,7 +71,16 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   }
 
   void _onActivity() {
-    if (_warningShowing) return;
+    if (_warningShowing) {
+      // A pointer tap can't reach here — the warning's modal barrier
+      // absorbs it — but a hardware scanner's keystrokes (_onKeyEvent) and
+      // the resulting OrderFlowController notification both bypass hit-
+      // testing entirely. A scan while the warning is up is unambiguous
+      // proof the customer is present: dismiss it the same as tapping
+      // Continue, instead of silently ignoring the activity.
+      Navigator.of(context).pop(true);
+      return;
+    }
     if (_isPaid) {
       _idleTimer?.cancel();
       return;
@@ -91,10 +101,17 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
     }
     setState(() => _warningShowing = true);
 
-    final continued = await showDialog<bool>(
+    // A modal bottom sheet, not a centered dialog — same blocking behavior
+    // (isDismissible/enableDrag both off, so it only closes via its own
+    // buttons, a timeout, or _onActivity's programmatic pop above), just
+    // anchored to the bottom to match the paid-invoice countdown's look.
+    final continued = await showModalBottomSheet<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => _StillThereDialog(context: _ctx),
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _StillThereSheet(context: _ctx),
     );
 
     if (!mounted) return;
@@ -130,15 +147,15 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   }
 }
 
-class _StillThereDialog extends StatefulWidget {
+class _StillThereSheet extends StatefulWidget {
   final _IdleContext context;
-  const _StillThereDialog({required this.context});
+  const _StillThereSheet({required this.context});
 
   @override
-  State<_StillThereDialog> createState() => _StillThereDialogState();
+  State<_StillThereSheet> createState() => _StillThereSheetState();
 }
 
-class _StillThereDialogState extends State<_StillThereDialog> {
+class _StillThereSheetState extends State<_StillThereSheet> {
   late int _secondsLeft;
   Timer? _ticker;
 
@@ -168,24 +185,19 @@ class _StillThereDialogState extends State<_StillThereDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     final isAfter = widget.context == _IdleContext.afterInvoice;
-    return AlertDialog(
-      title: Text(l10n.kioskIdleTitle),
-      content: Text(
-        isAfter
-            ? l10n.kioskIdleAfterBody(_secondsLeft)
-            : l10n.kioskIdleBeforeBody(_secondsLeft),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(l10n.kioskIdleNewOrder),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(l10n.kioskIdleContinue),
-        ),
-      ],
+    return TimerFooterSheet(
+      title: l10n.kioskIdleTitle,
+      message: isAfter
+          ? l10n.kioskIdleAfterBody(_secondsLeft)
+          : l10n.kioskIdleBeforeBody(_secondsLeft),
+      secondsLeft: _secondsLeft,
+      primaryLabel: l10n.kioskIdleContinue,
+      primaryColor: scheme.primary,
+      onPrimary: () => Navigator.of(context).pop(true),
+      secondaryLabel: l10n.kioskIdleNewOrder,
+      onSecondary: () => Navigator.of(context).pop(false),
     );
   }
 }

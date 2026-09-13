@@ -96,10 +96,10 @@ class KioskTimerConfig extends ChangeNotifier {
   Duration _afterInvoiceWarningCountdown;
 
   KioskTimerConfig({
-    Duration beforeInvoiceIdleWarningAfter = const Duration(seconds: 45),
-    Duration beforeInvoiceWarningCountdown = const Duration(seconds: 15),
-    Duration afterInvoiceIdleWarningAfter = const Duration(seconds: 30),
-    Duration afterInvoiceWarningCountdown = const Duration(seconds: 15),
+    Duration beforeInvoiceIdleWarningAfter = const Duration(seconds: 60),
+    Duration beforeInvoiceWarningCountdown = const Duration(seconds: 60),
+    Duration afterInvoiceIdleWarningAfter = const Duration(seconds: 60),
+    Duration afterInvoiceWarningCountdown = const Duration(seconds: 60),
   })  : _beforeInvoiceIdleWarningAfter = beforeInvoiceIdleWarningAfter,
         _beforeInvoiceWarningCountdown = beforeInvoiceWarningCountdown,
         _afterInvoiceIdleWarningAfter = afterInvoiceIdleWarningAfter,
