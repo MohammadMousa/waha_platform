@@ -64,6 +64,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get checkoutButton => 'Buy & Pay';
 
   @override
+  String get devicePinDialogTitle => 'Device Settings';
+
+  @override
+  String get devicePinSignedInAs => 'Signed in as';
+
+  @override
+  String get devicePinLabel => 'Enter device PIN';
+
+  @override
+  String get devicePinIncorrect => 'Incorrect PIN';
+
+  @override
+  String get devicePinUnlock => 'Unlock';
+
+  @override
   String get scanBlockedUnpaidTitle => 'Order not paid yet';
 
   @override
@@ -392,16 +407,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareLinkCopied => 'Link copied to clipboard';
 
   @override
-  String get cartClearTitle => 'Clear cart?';
-
-  @override
-  String get cartClearMessage => 'Remove all items from the cart.';
-
-  @override
-  String get cartClearConfirm => 'Clear';
-
-  @override
-  String get cartClearCancel => 'Cancel';
+  String get commonCancel => 'Cancel';
 
   @override
   String get perUnit => 'per unit';

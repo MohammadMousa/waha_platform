@@ -134,6 +134,19 @@ class LocalPrefs {
   static Future<void> setDevToolsUnlocked(bool value) =>
       _p.setBool(_kDevToolsUnlocked, value);
 
+  // Runtime override that turns on the simulator dev-tools cluster even in a
+  // build compiled with ENABLE_SIMULATOR=false, once the operator has
+  // already unlocked Settings' Developer Tools panel via the 10-tap gesture.
+  // Kept as its own flag (not folded into AppConfig.simulatorAvailable)
+  // deliberately — that flag's own doc comment warns it must stay
+  // compile-time-only so it can never leak app-wide (e.g. the cart screen's
+  // own 10-tap reveal gesture). This override only ever affects whether the
+  // SimulatorOverlay widget itself renders, nothing else.
+  static const _kSimulatorForceEnabled = 'waha.simulator_force_enabled';
+  static bool get simulatorForceEnabled => _p.getBool(_kSimulatorForceEnabled) ?? false;
+  static Future<void> setSimulatorForceEnabled(bool value) =>
+      _p.setBool(_kSimulatorForceEnabled, value);
+
   // Footer toast after a successful camera-scan add. Off by default — the
   // scan sound already confirms success, so the toast is opt-in extra
   // feedback rather than something shown to every customer.
@@ -150,6 +163,17 @@ class LocalPrefs {
   static bool get showCartMenuInKiosk => _p.getBool(_kShowCartMenuInKiosk) ?? false;
   static Future<void> setShowCartMenuInKiosk(bool value) =>
       _p.setBool(_kShowCartMenuInKiosk, value);
+
+  // Which shortcut buttons show in the simulator cluster — 'home', 'settings',
+  // 'camera', 'productScan' (manual barcode entry/cached-code fire),
+  // 'browse'. Null (never saved) means "use the default set" rather than
+  // "empty" — see SimulatorService for what that default is; not baked in
+  // here so the default can evolve without a stale empty list looking
+  // identical to an intentional "hide everything" choice.
+  static const _kSimPinnedButtons = 'waha.sim_pinned_buttons';
+  static List<String>? get simPinnedButtons => _p.getStringList(_kSimPinnedButtons);
+  static Future<void> setSimPinnedButtons(List<String> ids) =>
+      _p.setStringList(_kSimPinnedButtons, ids);
 
   static const _kSimProductCodes = 'waha.sim_product_codes';
   static List<String> get simProductCodes =>

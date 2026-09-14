@@ -11,7 +11,7 @@
          real vendor PDF doesn't list one either); USB host access is
          granted at runtime by the SDK itself via UsbManager. -->
     <application
-        android:label="waha_platform"
+        android:label="Waha Kiosk"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
@@ -44,6 +44,38 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Falls back to the older Skia renderer instead of Impeller
+             (Flutter's current default on Android). A logcat capture from a
+             kiosk device showed repeated gralloc4 "unsupported format"
+             buffer-allocation failures immediately before the Flutter
+             engine's native side detached (FlutterJNI ... detached from
+             native C++) — the signature of a GPU driver that can't satisfy
+             whatever texture format Impeller's renderer requests on first
+             frame. This is a real, if narrow, class of device (low-end/old
+             SoC GPU drivers with incomplete gralloc HAL implementations),
+             not something app code can guard against — the standard,
+             documented mitigation is reverting to Skia for the affected
+             build. There is no dart-define equivalent for this; it's
+             manifest-only because it has to be baked into a shipped release
+             APK, not something toggled at runtime. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
+        <!-- ML Kit (pulled in transitively by mobile_scanner's barcode
+             scanning) auto-registers this provider to initialize itself at
+             app PROCESS startup — before any Activity, unconditionally,
+             whether or not the customer ever opens the scanner. On old/
+             low-end kiosk hardware that may not have Google Play Services
+             at all, that eager init is a plausible source of a startup-time
+             crash with no way to opt out except removing the provider
+             outright. Barcode scanning still works fine lazily-initialized
+             on first real use, which is what happens once this is gone. -->
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            tools:node="remove" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

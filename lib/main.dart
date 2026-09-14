@@ -46,7 +46,7 @@ Future<void> main() async {
 Future<void> _resolveStartupConfig() async {
   // Mode: URL override (web, ephemeral, never persisted) > persisted
   // value (survives restart/reboot) > dart-define (first-run seed,
-  // becomes persisted from here on) > Normal.
+  // becomes persisted from here on) > Kiosk (the constructed default).
   final urlMode = AppConfig.urlOverrideMode;
   if (urlMode != null) {
     browsingModeService.setMode(urlMode, persist: false);
@@ -59,7 +59,7 @@ Future<void> _resolveStartupConfig() async {
       if (defineMode != null) {
         browsingModeService.setMode(defineMode); // persists — becomes durable
       }
-      // else: stays at the BrowsingMode.normal it was constructed with.
+      // else: stays at the BrowsingMode.kiosk it was constructed with.
     }
   }
 
@@ -89,11 +89,13 @@ Future<void> _resolveStartupConfig() async {
     );
   }
 
-  // First-launch auto-discovery: if running on Android with no URL stored,
-  // probe the local subnet for a responding backend. If found, save the URL
-  // now so resolveStartupAuth below uses the correct host immediately.
-  // justDiscoveredUrl bridges the result to LandingScreen for the UI prompt.
-  if (!kIsWeb && Platform.isAndroid && LocalPrefs.apiBaseUrl == null) {
+  // First-launch auto-discovery: if running on Android with no server
+  // address already known — neither a stored one nor a build-time
+  // --dart-define=API_BASE_URL — probe the local subnet for a responding
+  // backend. If found, save the URL now so resolveStartupAuth below uses
+  // the correct host immediately. justDiscoveredUrl bridges the result to
+  // LandingScreen for the UI prompt.
+  if (!kIsWeb && Platform.isAndroid && !AppConfig.hasExplicitApiBaseUrl) {
     final found = await ServerDiscovery.discover();
     if (found != null) {
       await LocalPrefs.setApiBaseUrl(found);
@@ -150,7 +152,7 @@ class WahaApp extends StatelessWidget {
         builder: (context) {
           final locale = context.watch<LocaleService>().locale;
           return MaterialApp(
-            title: 'Waha',
+            title: 'Waha Kiosk',
             debugShowCheckedModeBanner: false,
             theme: ThemeData(
               colorSchemeSeed: const Color(0xFF6B1A2A),

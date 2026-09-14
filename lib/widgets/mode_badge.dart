@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../config/app_config.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/simulator_service.dart';
 
@@ -14,8 +13,12 @@ class ModeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool hidden = AppConfig.simulatorAvailable &&
-        context.watch<SimulatorService>().devToolsHidden;
+    // devToolsHidden already defaults to true (hidden) on a fresh install
+    // regardless of whether the simulator feature is compiled in — gating
+    // on AppConfig.simulatorAvailable here meant this expression was always
+    // false (badge stuck permanently visible) on any build with
+    // ENABLE_SIMULATOR=false, i.e. every real release build.
+    final bool hidden = context.watch<SimulatorService>().devToolsHidden;
 
     if (hidden) return const Positioned(bottom: 0, left: 0, child: SizedBox.shrink());
 

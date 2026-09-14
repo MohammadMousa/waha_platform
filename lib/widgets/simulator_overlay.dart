@@ -29,7 +29,13 @@ class SimulatorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!AppConfig.simulatorAvailable) return const SizedBox.shrink();
+    // LocalPrefs.simulatorForceEnabled lets an operator who has already
+    // unlocked Settings' Developer Tools panel (10-tap + PIN) turn this back
+    // on at runtime even in an ENABLE_SIMULATOR=false build — see its doc
+    // comment for why that's a separate flag from AppConfig.simulatorAvailable.
+    if (!AppConfig.simulatorAvailable && !LocalPrefs.simulatorForceEnabled) {
+      return const SizedBox.shrink();
+    }
 
     final sim = context.watch<SimulatorService>();
     // hideDevTools() hides everything — secret gesture on mode badge restores.
@@ -55,47 +61,64 @@ class SimulatorOverlay extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Close and "hide dev tools" are the panel's own meta
+              // controls, always present — not part of the configurable
+              // pinned-buttons set (see SimulatorSettingsScreen).
               _IconBtn(icon: Icons.close, tooltip: 'Collapse', onTap: sim.hideCluster),
               _IconBtn(
                 icon: Icons.visibility_off_outlined,
                 tooltip: 'Hide all dev tools\n(5-tap badge to restore)',
                 onTap: sim.hideDevTools,
               ),
-              _IconBtn(
-                icon: Icons.home,
-                tooltip: 'Home',
-                onTap: () => _goHome(context),
-              ),
-              _IconBtn(
-                icon: Icons.settings,
-                tooltip: 'Settings',
-                // Straight to the real Settings screen, not the dev
-                // simulator's own — this used to go the other way round
-                // (gear → Simulator Settings → a link out to real
-                // Settings), which was backwards: you want app config
-                // first, dev tooling is the nested, secondary thing, not
-                // the gate you have to walk through to reach it. Scan-code
-                // simulator settings are now reachable *from* Settings
-                // instead — see settings_screen.dart's Developer Tools link.
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              if (sim.isPinned(SimPinnedButton.home))
+                _IconBtn(
+                  icon: Icons.home,
+                  tooltip: 'Home',
+                  onTap: () => _goHome(context),
                 ),
-              ),
-              _IconBtn(
-                icon: Icons.camera_alt,
-                tooltip: 'Scan with camera',
-                onTap: () => _openCamera(context),
-              ),
-              _ScanTypeBtn(
-                type: SimScanType.product,
-                icon: Icons.qr_code,
-                tooltip: 'Product scan',
-              ),
+              if (sim.isPinned(SimPinnedButton.settings))
+                _IconBtn(
+                  icon: Icons.settings,
+                  tooltip: 'Settings',
+                  // Straight to the real Settings screen, not the dev
+                  // simulator's own — this used to go the other way round
+                  // (gear → Simulator Settings → a link out to real
+                  // Settings), which was backwards: you want app config
+                  // first, dev tooling is the nested, secondary thing, not
+                  // the gate you have to walk through to reach it. Scan-code
+                  // simulator settings are now reachable *from* Settings
+                  // instead — see settings_screen.dart's Developer Tools link.
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                ),
+              if (sim.isPinned(SimPinnedButton.camera))
+                _IconBtn(
+                  icon: Icons.camera_alt,
+                  tooltip: 'Scan with camera',
+                  onTap: () => _openCamera(context),
+                ),
+              if (sim.isPinned(SimPinnedButton.productScan))
+                _ScanTypeBtn(
+                  type: SimScanType.product,
+                  icon: Icons.qr_code,
+                  tooltip: 'Product scan',
+                ),
+              if (sim.isPinned(SimPinnedButton.browse))
+                _IconBtn(
+                  icon: Icons.grid_view_rounded,
+                  tooltip: 'Browse',
+                  onTap: () => _goBrowse(context),
+                ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _goBrowse(BuildContext context) {
+    Navigator.of(context).pushNamed(Routes.browse);
   }
 
   void _goHome(BuildContext context) {

@@ -38,9 +38,18 @@ class ApiClient {
     }
   }
 
+  // Bounds every request the same way getConfig() already bounds itself.
+  // Without this, a TCP connection that hangs rather than refuses (typical
+  // of a real public IP behind a firewall/NAT, unlike a local address that
+  // fails instantly) leaves `await request()` unresolved forever — no
+  // exception ever fires, so callers' try/catch never triggers. On kiosk
+  // startup that means main.dart's `await resolveStartupAuth(...)` (via
+  // kioskLogin) never returns, runApp() is never called, and the native
+  // splash stays up indefinitely — indistinguishable from a native crash,
+  // but reproducible on any device/hardware pointed at an unreachable host.
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     try {
-      return await request();
+      return await request().timeout(const Duration(seconds: 8));
     } catch (e) {
       throw NetworkException(e);
     }

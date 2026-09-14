@@ -84,9 +84,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_tapCount >= 10 && !_devUnlocked) {
       setState(() => _devUnlocked = true);
       LocalPrefs.setDevToolsUnlocked(true);
-      if (AppConfig.simulatorAvailable) {
-        context.read<SimulatorService>().showDevTools();
-      }
+      // Harmless no-op when the overlay is compiled/toggled off — see
+      // SimulatorOverlay's own gate.
+      context.read<SimulatorService>().showDevTools();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Developer tools unlocked')),
       );
@@ -397,6 +397,7 @@ class _DevToolsPanel extends StatefulWidget {
 class _DevToolsPanelState extends State<_DevToolsPanel> {
   bool _expanded = false;
   bool _showScanToast = LocalPrefs.showScanSuccessToast;
+  bool _simForceEnabled = LocalPrefs.simulatorForceEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -509,9 +510,43 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     onPressed: () => Navigator.of(context).pushNamed(Routes.storePicker),
                   ),
 
+                  const Divider(height: 32),
+
+                  // Simulator toggle — this is the only way to turn the
+                  // simulator dev-tools cluster on in a build compiled with
+                  // ENABLE_SIMULATOR=false (that flag stays compile-time-only
+                  // everywhere else in the app; this switch only affects
+                  // SimulatorOverlay's own visibility, gated behind this
+                  // already-PIN-unlocked panel — see LocalPrefs.simulatorForceEnabled).
+                  const Text('Simulator', style: TextStyle(fontWeight: FontWeight.w600)),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Enable simulator dev tools'),
+                    subtitle: Text(
+                      AppConfig.simulatorAvailable
+                          ? 'Always on — this build was compiled with ENABLE_SIMULATOR=true.'
+                          : 'This build was compiled with ENABLE_SIMULATOR=false; '
+                            'turning this on re-enables it at runtime.',
+                    ),
+                    value: AppConfig.simulatorAvailable || _simForceEnabled,
+                    onChanged: AppConfig.simulatorAvailable
+                        ? null
+                        : (value) {
+                            setState(() => _simForceEnabled = value);
+                            LocalPrefs.setSimulatorForceEnabled(value);
+                            final sim = context.read<SimulatorService>();
+                            if (value) {
+                              sim.showDevTools();
+                            } else {
+                              sim.hideDevTools();
+                            }
+                          },
+                  ),
+
                   // Simulator settings (if available)
-                  if (AppConfig.simulatorAvailable) ...[
-                    const Divider(height: 32),
+                  if (AppConfig.simulatorAvailable || _simForceEnabled) ...[
+                    const SizedBox(height: 8),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.settings_remote_outlined),
                       label: const Text('Simulator Settings'),

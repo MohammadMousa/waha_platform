@@ -6,12 +6,28 @@ import '../services/local_prefs.dart';
 
 enum SimScanType { product }
 
+/// Shortcut buttons in the simulator cluster whose visibility is
+/// configurable — Close and "hide dev tools" are the panel's own meta
+/// controls and are never optional. 'browse' opens the Products/Browse
+/// screen — named to match Routes.browse and the bottom nav's own label.
+enum SimPinnedButton { home, settings, camera, productScan, browse }
+
+/// Ships with 'home' and 'productScan' (manual barcode entry) OFF — the
+/// common case doesn't need either pinned, and a cluttered cluster is worse
+/// than one extra trip through Settings to turn a button back on.
+const _defaultPinnedButtons = {
+  SimPinnedButton.settings,
+  SimPinnedButton.camera,
+  SimPinnedButton.browse,
+};
+
 class SimulatorService extends ChangeNotifier {
   bool _enabled = true;
   bool _clusterVisible;
   bool _devToolsHidden;
   bool _autoCache;
   int _cacheLimit;
+  final Set<SimPinnedButton> _pinnedButtons;
   final Map<SimScanType, List<String>> _cachedCodes = {
     SimScanType.product: [],
   };
@@ -20,8 +36,19 @@ class SimulatorService extends ChangeNotifier {
       : _devToolsHidden = !LocalPrefs.simDevToolsVisible,
         _clusterVisible = LocalPrefs.simDevToolsVisible,
         _autoCache = LocalPrefs.simAutoCache,
-        _cacheLimit = LocalPrefs.simCacheLimit {
+        _cacheLimit = LocalPrefs.simCacheLimit,
+        _pinnedButtons = _decodePinnedButtons(LocalPrefs.simPinnedButtons) {
     _cachedCodes[SimScanType.product] = List.of(LocalPrefs.simProductCodes);
+  }
+
+  static Set<SimPinnedButton> _decodePinnedButtons(List<String>? saved) {
+    if (saved == null) return Set.of(_defaultPinnedButtons);
+    return saved
+        .map((name) => SimPinnedButton.values
+            .where((b) => b.name == name)
+            .firstOrNull)
+        .whereType<SimPinnedButton>()
+        .toSet();
   }
 
   bool get enabled => _enabled;
@@ -29,6 +56,18 @@ class SimulatorService extends ChangeNotifier {
   bool get devToolsHidden => _devToolsHidden;
   bool get autoCache => _autoCache;
   int get cacheLimit => _cacheLimit;
+
+  bool isPinned(SimPinnedButton button) => _pinnedButtons.contains(button);
+
+  void setPinned(SimPinnedButton button, bool value) {
+    if (value) {
+      _pinnedButtons.add(button);
+    } else {
+      _pinnedButtons.remove(button);
+    }
+    LocalPrefs.setSimPinnedButtons(_pinnedButtons.map((b) => b.name).toList());
+    notifyListeners();
+  }
 
   // Returns a random code from the saved list, or null if the list is empty.
   String? cachedCode(SimScanType type) {

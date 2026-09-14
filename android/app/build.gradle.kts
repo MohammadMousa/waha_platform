@@ -32,6 +32,19 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // Renames the built APK from Flutter's generic app-release.apk to
+    // something that identifies itself on sight — waha-kiosk-release.apk —
+    // since this is handed off/installed manually rather than through a
+    // store listing that already carries the app's name.
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                output.outputFileName = "waha-kiosk-${variant.buildType.name}.apk"
+            }
+    }
 }
 
 kotlin {

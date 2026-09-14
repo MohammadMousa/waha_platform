@@ -85,6 +85,32 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
+          // ── Pinned buttons ───────────────────────────────────────────────
+          Text('Pinned buttons', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Which shortcut buttons show in the floating simulator cluster. '
+            'Close and "hide dev tools" are always there and aren\'t listed here.',
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          for (final entry in const {
+            SimPinnedButton.home: 'Home',
+            SimPinnedButton.settings: 'Settings',
+            SimPinnedButton.camera: 'Camera scan',
+            SimPinnedButton.productScan: 'Product scan (manual/cached code)',
+            SimPinnedButton.browse: 'Browse',
+          }.entries)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              title: Text(entry.value),
+              value: sim.isPinned(entry.key),
+              onChanged: (value) => sim.setPinned(entry.key, value ?? false),
+            ),
+          const Divider(height: 40),
+
           // ── Product UPC codes ──────────────────────────────────────────
           Text('Product UPC codes',
               style: Theme.of(context).textTheme.titleSmall),

@@ -64,6 +64,21 @@ class AppLocalizationsAr extends AppLocalizations {
   String get checkoutButton => 'الشراء والدفع';
 
   @override
+  String get devicePinDialogTitle => 'إعدادات الجهاز';
+
+  @override
+  String get devicePinSignedInAs => 'تم الدخول باسم';
+
+  @override
+  String get devicePinLabel => 'أدخل رمز PIN الخاص بالجهاز';
+
+  @override
+  String get devicePinIncorrect => 'رمز PIN غير صحيح';
+
+  @override
+  String get devicePinUnlock => 'فتح';
+
+  @override
   String get scanBlockedUnpaidTitle => 'لم يتم الدفع بعد';
 
   @override
@@ -391,16 +406,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get shareLinkCopied => 'تم نسخ الرابط';
 
   @override
-  String get cartClearTitle => 'مسح السلة؟';
-
-  @override
-  String get cartClearMessage => 'سيتم إزالة جميع المنتجات من السلة.';
-
-  @override
-  String get cartClearConfirm => 'مسح';
-
-  @override
-  String get cartClearCancel => 'إلغاء';
+  String get commonCancel => 'إلغاء';
 
   @override
   String get perUnit => 'للوحدة';

@@ -34,6 +34,24 @@ class AppConfig {
     return 'http://localhost:8081';
   }
 
+  /// True when a real server address is already known — a build-time
+  /// `--dart-define=API_BASE_URL=...` or a value already saved by the
+  /// Server Connection panel — as opposed to falling through to the
+  /// unreachable platform default above. Used to skip first-launch LAN
+  /// auto-discovery: without this, main.dart's discovery gate only checked
+  /// the stored preference, so a release build shipped with API_BASE_URL
+  /// baked in still ran the "Server Found" probe/prompt on every fresh
+  /// install for no reason — the address was already known before
+  /// discovery ever ran.
+  static bool get hasExplicitApiBaseUrl {
+    const override = String.fromEnvironment('API_BASE_URL');
+    if (override.isNotEmpty) return true;
+    final stored = LocalPrefs.apiBaseUrl;
+    return stored != null &&
+        stored.isNotEmpty &&
+        (!Platform.isAndroid || !stored.contains('localhost'));
+  }
+
   /// Web-only, ephemeral: a `?mode=` URL query param. This is the actual
   /// real-world mechanism for entering Shopping mode — a customer scans a
   /// QR or opens a link carrying `?mode=shopping`, typically printed on/
@@ -70,6 +88,6 @@ class AppConfig {
   /// Compiled out via --dart-define, not just hidden behind a settings
   /// toggle — see the leaked-setting concern raised earlier.
   static bool get simulatorAvailable =>
-      const bool.fromEnvironment('ENABLE_SIMULATOR', defaultValue: true);
+      const bool.fromEnvironment('ENABLE_SIMULATOR', defaultValue: false);
 }
 

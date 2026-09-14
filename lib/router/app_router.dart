@@ -89,15 +89,21 @@ class Routes {
   // browse/categories/search/productDetail are intentionally included so that
   // HTML landing-page banners (href="/screen?name=browse_screen&tag=X") can
   // navigate to catalog screens from kiosk/shopping mode without being blocked
-  // by the nav guard.  Settings, profile, admin, and auth routes remain locked.
+  // by the nav guard. Profile and admin/auth routes remain locked. Settings
+  // is reachable only via the deliberate 10-tap + device-PIN gesture on the
+  // Cart screen — nothing else links to it from kiosk mode, so adding it
+  // here doesn't open any other door.
   static const kioskAllowlist = {landing, scan, cart, checkout, invoice, pay, success,
-      browse, categories, search, productDetail};
+      browse, categories, search, productDetail, settings};
 
-  /// Also reused (see onGenerateRoute) to decide where the ambient
-  /// hardware-scanner listener mounts: the same product/cart screens are
-  /// exactly where a barcode scan should always be accepted, in every
-  /// mode — not just Kiosk/Shopping's restricted set.
-  static const scanEnabledRoutes = kioskAllowlist;
+  /// Reused (see onGenerateRoute) to decide where the ambient hardware-
+  /// scanner listener mounts: the same product/cart screens are exactly
+  /// where a barcode scan should always be accepted, in every mode — not
+  /// just Kiosk/Shopping's restricted set. Deliberately NOT the same set as
+  /// kioskAllowlist above — settings has no business accepting a barcode
+  /// scan into the cart in the background.
+  static const scanEnabledRoutes = {landing, scan, cart, checkout, invoice, pay, success,
+      browse, categories, search, productDetail};
 
   /// Which non-Landing routes represent "after invoice" for idle-timer
   /// purposes (shorter, display-oriented countdown vs. the general

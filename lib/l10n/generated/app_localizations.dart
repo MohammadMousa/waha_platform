@@ -206,6 +206,36 @@ abstract class AppLocalizations {
   /// **'Buy & Pay'**
   String get checkoutButton;
 
+  /// No description provided for @devicePinDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device Settings'**
+  String get devicePinDialogTitle;
+
+  /// No description provided for @devicePinSignedInAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in as'**
+  String get devicePinSignedInAs;
+
+  /// No description provided for @devicePinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter device PIN'**
+  String get devicePinLabel;
+
+  /// No description provided for @devicePinIncorrect.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect PIN'**
+  String get devicePinIncorrect;
+
+  /// No description provided for @devicePinUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get devicePinUnlock;
+
   /// No description provided for @scanBlockedUnpaidTitle.
   ///
   /// In en, this message translates to:
@@ -848,29 +878,11 @@ abstract class AppLocalizations {
   /// **'Link copied to clipboard'**
   String get shareLinkCopied;
 
-  /// No description provided for @cartClearTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear cart?'**
-  String get cartClearTitle;
-
-  /// No description provided for @cartClearMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove all items from the cart.'**
-  String get cartClearMessage;
-
-  /// No description provided for @cartClearConfirm.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear'**
-  String get cartClearConfirm;
-
-  /// No description provided for @cartClearCancel.
+  /// No description provided for @commonCancel.
   ///
   /// In en, this message translates to:
   /// **'Cancel'**
-  String get cartClearCancel;
+  String get commonCancel;
 
   /// No description provided for @perUnit.
   ///

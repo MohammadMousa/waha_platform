@@ -24,6 +24,12 @@
   "cartTotal": "Total",
   "checkoutButton": "Buy & Pay",
 
+  "devicePinDialogTitle": "Device Settings",
+  "devicePinSignedInAs": "Signed in as",
+  "devicePinLabel": "Enter device PIN",
+  "devicePinIncorrect": "Incorrect PIN",
+  "devicePinUnlock": "Unlock",
+
   "scanBlockedUnpaidTitle": "Order not paid yet",
   "scanBlockedUnpaidMessage": "You haven't paid for this order yet. Please complete payment first.",
 
@@ -158,10 +164,7 @@
   "shareCopyLink": "Copy Link",
   "shareLinkCopied": "Link copied to clipboard",
 
-  "cartClearTitle": "Clear cart?",
-  "cartClearMessage": "Remove all items from the cart.",
-  "cartClearConfirm": "Clear",
-  "cartClearCancel": "Cancel",
+  "commonCancel": "Cancel",
 
   "perUnit": "per unit",
 

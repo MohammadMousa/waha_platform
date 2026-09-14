@@ -61,6 +61,17 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } on NetworkException catch (_) {
+      // Distinct type from ApiException (see api_exceptions.dart) — a
+      // timeout or unreachable server was previously falling through
+      // uncaught here, silently resetting the spinner with zero feedback
+      // (looked exactly like the login screen was "stuck").
+      if (mounted) {
+        setState(() => _error =
+            'Could not reach the server. Check your connection and try again.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

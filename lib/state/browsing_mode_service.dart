@@ -155,5 +155,11 @@ BrowsingMode? parseBrowsingMode(String? name) {
 
 /// Global instances. Provided reactively via ChangeNotifierProvider.value
 /// in main.dart; read directly (no context needed) from onGenerateRoute.
-final browsingModeService = BrowsingModeService(BrowsingMode.normal);
+///
+/// Kiosk is the out-of-the-box default: a fresh install with no persisted
+/// mode and no --dart-define=APP_MODE (main.dart's _resolveStartupConfig)
+/// falls through to whatever this is constructed with. The device this
+/// ships on is a kiosk unless someone deliberately configures otherwise —
+/// it should never boot into unrestricted Normal mode by default.
+final browsingModeService = BrowsingModeService(BrowsingMode.kiosk);
 final kioskTimerConfig = KioskTimerConfig();

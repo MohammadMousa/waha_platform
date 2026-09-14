@@ -9,6 +9,7 @@ import '../models/quote.dart';
 import '../router/app_router.dart';
 import '../services/local_prefs.dart';
 import '../state/browsing_mode_service.dart';
+import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
@@ -34,16 +35,46 @@ class _CartScreenState extends State<CartScreen> {
   Timer? _flashTimer;
   late final OrderFlowController _flow;
 
+  // Secret 10-tap gesture, two different outcomes depending on the build:
+  //  - Simulator-enabled (dev) builds: reveals the simulator dev-tools
+  //    cluster, unchanged from before.
+  //  - Production builds running Kiosk mode's own device account: there is
+  //    no simulator to reveal, but Settings is otherwise completely
+  //    unreachable in Kiosk mode (see kioskAllowlist) — gate a way in
+  //    behind the device's own PIN instead of leaving it locked out
+  //    entirely. Not offered in Shopping mode (customer's own phone).
   void _onBodyTap() {
-    if (!AppConfig.simulatorAvailable) return;
+    if (AppConfig.simulatorAvailable) {
+      _tapTimer?.cancel();
+      _tapCount++;
+      if (_tapCount >= 10) {
+        _tapCount = 0;
+        context.read<SimulatorService>().showDevTools();
+      } else {
+        _tapTimer = Timer(const Duration(seconds: 3), () => _tapCount = 0);
+      }
+      return;
+    }
+
+    if (browsingModeService.mode != BrowsingMode.kiosk) return;
     _tapTimer?.cancel();
     _tapCount++;
     if (_tapCount >= 10) {
       _tapCount = 0;
-      context.read<SimulatorService>().showDevTools();
-      return;
+      _showDevicePinDialog();
+    } else {
+      _tapTimer = Timer(const Duration(seconds: 3), () => _tapCount = 0);
     }
-    _tapTimer = Timer(const Duration(seconds: 3), () => _tapCount = 0);
+  }
+
+  Future<void> _showDevicePinDialog() async {
+    final unlocked = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DevicePinDialog(),
+    );
+    if (unlocked == true && mounted) {
+      Navigator.of(context).pushNamed(Routes.settings);
+    }
   }
 
   @override
@@ -110,33 +141,19 @@ class _CartScreenState extends State<CartScreen> {
       appBar: AppBar(
         title: Text(l10n.cartTitle),
         actions: [
-          if (flow.cart.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined),
-              tooltip: l10n.cartClearTitle,
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text(l10n.cartClearTitle),
-                    content: Text(l10n.cartClearMessage),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: Text(l10n.cartClearCancel),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: Text(l10n.cartClearConfirm),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true && context.mounted) {
-                  context.read<OrderFlowController>().clearCart();
-                }
-              },
-            ),
+          // The Cancel button on the summary card now covers "empty the
+          // cart" — a second, separate clear-cart action here was
+          // redundant. A language toggle is more useful in this slot.
+          IconButton(
+            icon: const Icon(Icons.language_outlined),
+            tooltip: l10n.settingsLanguage,
+            onPressed: () {
+              final next = localeService.locale.languageCode == 'en'
+                  ? const Locale('ar')
+                  : const Locale('en');
+              localeService.setLocale(next);
+            },
+          ),
         ],
       ),
       bottomNavigationBar:
@@ -359,7 +376,7 @@ class _CartSummaryCardState extends State<_CartSummaryCard> {
                           ),
                           onPressed: widget.onCancel,
                           child: Text(
-                            l10n.cartClearCancel,
+                            l10n.commonCancel,
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -419,4 +436,82 @@ String _fmt(double amount, String? currency) {
   if (u == 'USD') return '\$$s';
   if (u == 'EUR') return '€$s';
   return '$s $currency';
+}
+
+// ── Device PIN gate — the way into Settings from Kiosk mode ─────────────────
+// Validated locally against the same credential the device already trusts
+// for its own auto-login (LocalPrefs.kioskPin) — first-phase simplicity, no
+// extra backend round-trip. Pops `true` only once the PIN matches.
+
+class _DevicePinDialog extends StatefulWidget {
+  const _DevicePinDialog();
+
+  @override
+  State<_DevicePinDialog> createState() => _DevicePinDialogState();
+}
+
+class _DevicePinDialogState extends State<_DevicePinDialog> {
+  final _pinController = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final entered = _pinController.text.trim();
+    final actual = LocalPrefs.kioskPin;
+    if (actual != null && actual.isNotEmpty && entered == actual) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() => _error = AppLocalizations.of(context)!.devicePinIncorrect);
+      _pinController.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    final username = LocalPrefs.kioskUsername ?? '—';
+
+    return AlertDialog(
+      icon: Icon(Icons.admin_panel_settings_outlined, color: scheme.primary, size: 32),
+      title: Text(l10n.devicePinDialogTitle),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.devicePinSignedInAs,
+              style: TextStyle(fontSize: 12, color: scheme.outline)),
+          Text(username,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pinController,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            maxLength: 12,
+            decoration: InputDecoration(
+              labelText: l10n.devicePinLabel,
+              border: const OutlineInputBorder(),
+              errorText: _error,
+              counterText: '',
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(l10n.commonCancel),
+        ),
+        FilledButton(onPressed: _submit, child: Text(l10n.devicePinUnlock)),
+      ],
+    );
+  }
 }

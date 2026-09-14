@@ -24,6 +24,12 @@
   "cartTotal": "الإجمالي",
   "checkoutButton": "الشراء والدفع",
 
+  "devicePinDialogTitle": "إعدادات الجهاز",
+  "devicePinSignedInAs": "تم الدخول باسم",
+  "devicePinLabel": "أدخل رمز PIN الخاص بالجهاز",
+  "devicePinIncorrect": "رمز PIN غير صحيح",
+  "devicePinUnlock": "فتح",
+
   "scanBlockedUnpaidTitle": "لم يتم الدفع بعد",
   "scanBlockedUnpaidMessage": "لم تدفع قيمة هذا الطلب بعد. يرجى إتمام الدفع أولاً.",
 
@@ -158,10 +164,7 @@
   "shareCopyLink": "نسخ الرابط",
   "shareLinkCopied": "تم نسخ الرابط",
 
-  "cartClearTitle": "مسح السلة؟",
-  "cartClearMessage": "سيتم إزالة جميع المنتجات من السلة.",
-  "cartClearConfirm": "مسح",
-  "cartClearCancel": "إلغاء",
+  "commonCancel": "إلغاء",
 
   "perUnit": "للوحدة",
 

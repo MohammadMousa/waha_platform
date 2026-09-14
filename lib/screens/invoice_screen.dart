@@ -1908,7 +1908,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           else
             OutlinedButton.icon(
               icon: const Icon(Icons.cancel_outlined),
-              label: Text(l10n.cartClearCancel),
+              label: Text(l10n.commonCancel),
               onPressed: _cancel,
               style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
             ),
