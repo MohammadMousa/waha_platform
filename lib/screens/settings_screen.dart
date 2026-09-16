@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_config.dart';
+import '../services/geidea_terminal_bridge.dart';
 import '../services/local_prefs.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
@@ -12,6 +13,7 @@ import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
 import '../state/simulator_service.dart';
+import '../services/trace_log.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import 'simulator_settings_screen.dart';
@@ -35,12 +37,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _terminalTimeout;
   String? _terminalTimeoutError;
 
+  // "Detect Payment Terminals" manual test button
+  bool _detectingTerminal = false;
+
   // Dev tools unlock: tap the version line 10 times
   int _tapCount = 0;
   bool _devUnlocked = false;
 
   // Cart's bottom nav bar visibility in Kiosk mode — hidden by default.
   bool _showCartMenuInKiosk = false;
+
+  // Kiosk idle/inactivity timers — off by default (see LocalPrefs doc comment).
+  bool _timersEnabled = false;
 
   // Dev tools — store ID override
   late final TextEditingController _storeId;
@@ -66,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: '${LocalPrefs.terminalTimeoutSeconds}');
     _devUnlocked = LocalPrefs.devToolsUnlocked;
     _showCartMenuInKiosk = LocalPrefs.showCartMenuInKiosk;
+    _timersEnabled = LocalPrefs.kioskTimersEnabled;
   }
 
   @override
@@ -154,6 +163,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _terminalTimeoutError = null);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Terminal payment timeout saved.')),
+    );
+  }
+
+  Future<void> _detectTerminal() async {
+    setState(() => _detectingTerminal = true);
+    final found = await GeideaTerminalBridge.instance.detectTerminal();
+    if (!mounted) return;
+    setState(() => _detectingTerminal = false);
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Icon(
+          found ? Icons.check_circle_outline : Icons.error_outline,
+          color: found ? Colors.green : Colors.red,
+          size: 40,
+        ),
+        title: Text(found ? 'Terminal Found' : 'No Terminal Found'),
+        content: Text(found
+            ? 'A payment terminal is connected and responding.'
+            : 'No payment terminal was detected. Check the USB cable and '
+                'make sure the terminal is powered on.'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -251,6 +288,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Only take effect in Kiosk mode. Two contexts: before-invoice and
           // after-invoice, each with a warn delay and a countdown duration.
           Text(l10n.settingsKioskTimers, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Row(
+              children: [
+                const Text('Enable Idle Timers'),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      content: const Text(
+                        'Only affects inactivity redirects (before- and after-invoice, '
+                        'both below). On by default — trusted on real hardware. Turn '
+                        'off if you need the app to never redirect home for mere '
+                        'inactivity, on any screen. A paid order still shows a brief '
+                        'success popup and redirects home on its own regardless of '
+                        'this. Does NOT affect the separate "Wait for terminal" '
+                        'timeout further down — that one stays on always, as a safety '
+                        'cutoff so a stuck terminal call can\'t hang the app forever.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('OK'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            value: _timersEnabled,
+            onChanged: (value) {
+              setState(() => _timersEnabled = value);
+              LocalPrefs.setKioskTimersEnabled(value);
+            },
+          ),
           const SizedBox(height: 14),
           _SecondsField(label: 'Before invoice — warn after (s)', controller: _beforeWarn),
           const SizedBox(height: 10),
@@ -300,6 +376,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: FilledButton(
               onPressed: _saveTerminalTimeout,
               child: const Text('Save'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Manual test hook: forces a fresh connection attempt right now
+          // (instead of waiting for the app's own slow background retry)
+          // and reports whether the terminal answered — useful for
+          // verifying cabling/power on real hardware without having to
+          // start a whole checkout flow.
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              icon: _detectingTerminal
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.contactless_outlined),
+              label: Text(_detectingTerminal ? 'Scanning…' : 'Detect Payment Terminals'),
+              onPressed: _detectingTerminal ? null : _detectTerminal,
             ),
           ),
 
@@ -398,10 +494,19 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
   bool _expanded = false;
   bool _showScanToast = LocalPrefs.showScanSuccessToast;
   bool _simForceEnabled = LocalPrefs.simulatorForceEnabled;
+  // In-memory only (see GeideaTerminalBridge.fakeTerminalEnabled) — always
+  // starts false on a fresh app launch, regardless of what it was set to
+  // last session.
+  bool _fakeTerminalEnabled = GeideaTerminalBridge.fakeTerminalEnabled;
+
+  // Diagnostic trace logging — off by default (see LocalPrefs.loggingEnabled).
+  // Persisted, unlike _fakeTerminalEnabled above — survives restart.
+  bool _loggingEnabled = LocalPrefs.loggingEnabled;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final sim = context.watch<SimulatorService>();
 
     return Card(
       elevation: 0,
@@ -512,12 +617,19 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
 
                   const Divider(height: 32),
 
-                  // Simulator toggle — this is the only way to turn the
-                  // simulator dev-tools cluster on in a build compiled with
-                  // ENABLE_SIMULATOR=false (that flag stays compile-time-only
-                  // everywhere else in the app; this switch only affects
-                  // SimulatorOverlay's own visibility, gated behind this
-                  // already-PIN-unlocked panel — see LocalPrefs.simulatorForceEnabled).
+                  // Simulator toggle — the one manual on/off switch for the
+                  // floating dev-tools cluster, same action as the 10-tap
+                  // gesture or the cluster's own eye icon. Always live and
+                  // always interactive on every build: it used to freeze as
+                  // "Always on, can't touch it" when compiled with
+                  // ENABLE_SIMULATOR=true, which meant the ONLY way to bring
+                  // the cluster back after hiding it via the eye icon was
+                  // the 10-tap gesture — needlessly indirect.
+                  // LocalPrefs.simulatorForceEnabled only matters for an
+                  // ENABLE_SIMULATOR=false build (it's what lets
+                  // SimulatorOverlay compile-in at all there); this still
+                  // sets it either way, harmlessly, so both build types are
+                  // controlled through the same one switch.
                   const Text('Simulator', style: TextStyle(fontWeight: FontWeight.w600)),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -525,23 +637,20 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     title: const Text('Enable simulator dev tools'),
                     subtitle: Text(
                       AppConfig.simulatorAvailable
-                          ? 'Always on — this build was compiled with ENABLE_SIMULATOR=true.'
+                          ? 'This build was compiled with ENABLE_SIMULATOR=true — shows/hides the floating cluster.'
                           : 'This build was compiled with ENABLE_SIMULATOR=false; '
-                            'turning this on re-enables it at runtime.',
+                            'turning this on enables and shows the cluster at runtime.',
                     ),
-                    value: AppConfig.simulatorAvailable || _simForceEnabled,
-                    onChanged: AppConfig.simulatorAvailable
-                        ? null
-                        : (value) {
-                            setState(() => _simForceEnabled = value);
-                            LocalPrefs.setSimulatorForceEnabled(value);
-                            final sim = context.read<SimulatorService>();
-                            if (value) {
-                              sim.showDevTools();
-                            } else {
-                              sim.hideDevTools();
-                            }
-                          },
+                    value: !sim.devToolsHidden,
+                    onChanged: (value) {
+                      setState(() => _simForceEnabled = value);
+                      LocalPrefs.setSimulatorForceEnabled(value);
+                      if (value) {
+                        sim.showDevTools();
+                      } else {
+                        sim.hideDevTools();
+                      }
+                    },
                   ),
 
                   // Simulator settings (if available)
@@ -556,6 +665,61 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       ),
                     ),
                   ],
+
+                  const Divider(height: 32),
+
+                  // Fake payment terminal — lets InvoiceScreen's terminal
+                  // payment flow (checkCommunication → session → SDK call
+                  // → confirm) be exercised end-to-end with no USB hardware
+                  // attached at all: "connected" always true, a payment
+                  // always approves after a short fake delay. Deliberately
+                  // NOT persisted (see GeideaTerminalBridge.fakeTerminalEnabled's
+                  // doc comment) — always off again on the next app launch.
+                  const Text('Payment Terminal', style: TextStyle(fontWeight: FontWeight.w600)),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Fake Payment Terminal'),
+                    subtitle: const Text(
+                      'Testing only — bypasses the real Geidea/USB terminal '
+                      'entirely and always reports a connected terminal and '
+                      'an approved payment. Resets to off on every app '
+                      'restart, never saved.',
+                    ),
+                    value: _fakeTerminalEnabled,
+                    onChanged: (value) {
+                      setState(() => _fakeTerminalEnabled = value);
+                      GeideaTerminalBridge.fakeTerminalEnabled = value;
+                    },
+                  ),
+
+                  const Divider(height: 32),
+
+                  // Diagnostic trace logging — writes timestamped lines to
+                  // waha_trace.log (native side, see MainActivity.logTrace)
+                  // for crash investigation, readable via the separate
+                  // "Waha Startup Log" home-screen icon (CrashLogActivity).
+                  // Off by default — this shouldn't write to disk forever
+                  // on every kiosk in the field. Persisted, so this survives
+                  // restart (unlike Fake Payment Terminal above).
+                  const Text('Diagnostics', style: TextStyle(fontWeight: FontWeight.w600)),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Enable trace logging'),
+                    subtitle: const Text(
+                      'Writes startup/crash trace lines to a log file, readable '
+                      'via the separate "Waha Startup Log" icon on the home '
+                      'screen/app drawer. Off by default — only turn on while '
+                      'actively diagnosing an issue.',
+                    ),
+                    value: _loggingEnabled,
+                    onChanged: (value) {
+                      setState(() => _loggingEnabled = value);
+                      LocalPrefs.setLoggingEnabled(value);
+                      TraceLog.setEnabled(value);
+                    },
+                  ),
 
                 ],
               ),

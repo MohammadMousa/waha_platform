@@ -20,7 +20,22 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // Pinned below Flutter's own default (34+), NOT flutter.targetSdkVersion —
+        // Geidea's compiled POS SDK (net.geidea.sdk:pos-comm-sdk-ksa:1.3.0)
+        // constructs a mutable PendingIntent from an implicit intent internally
+        // (geidea.net.terminal_comm_api.USBService, requesting USB permission),
+        // which Android 14 flatly disallows for apps targeting API 34+ — see
+        // https://developer.android.com/about/versions/14/behavior-changes-14
+        // ("Restrictions to implicit and pending intents"). Confirmed via a
+        // real crash log from the client's Android 14 kiosk: an uncaught
+        // IllegalArgumentException from inside that exact SDK class, crashing
+        // the app on every startup. The restriction is gated by targetSdk, not
+        // by the device's own Android version, so targeting 33 here makes
+        // Geidea's SDK behave exactly as it did on Android 13 and earlier —
+        // this isn't source we can patch (no source, it's a closed binary).
+        // Remove once Geidea ships an SDK build that constructs this
+        // PendingIntent correctly (FLAG_IMMUTABLE or an explicit intent).
+        targetSdk = 33
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

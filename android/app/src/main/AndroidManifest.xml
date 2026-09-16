@@ -39,6 +39,21 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Diagnostic-only, temporary: plain Activity, no Flutter/Geidea/USB
+             code, own launcher icon — reachable even if MainActivity never
+             successfully starts. See CrashLogActivity's doc comment. Remove
+             once the startup crash is root-caused and fixed. -->
+        <activity
+            android:name=".CrashLogActivity"
+            android:exported="true"
+            android:label="Waha Startup Log"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -63,19 +78,20 @@
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
 
-        <!-- ML Kit (pulled in transitively by mobile_scanner's barcode
-             scanning) auto-registers this provider to initialize itself at
-             app PROCESS startup — before any Activity, unconditionally,
-             whether or not the customer ever opens the scanner. On old/
-             low-end kiosk hardware that may not have Google Play Services
-             at all, that eager init is a plausible source of a startup-time
-             crash with no way to opt out except removing the provider
-             outright. Barcode scanning still works fine lazily-initialized
-             on first real use, which is what happens once this is gone. -->
+        <!-- REVERTED 2026-09-14: removing this provider broke the built-in
+             camera barcode scanner outright (mobile_scanner's error
+             placeholder, camera never initializes) on multiple devices, not
+             just the old kiosk hardware this was meant to fix. The "lazy
+             init on first use" assumption below was wrong — ML Kit's
+             barcode module needs this provider to initialize at all, not
+             just eagerly at startup. Left commented, not deleted, since the
+             original startup-crash theory (eager ML Kit init on Play-
+             Services-less kiosk hardware) may still need a different fix.
         <provider
             android:name="com.google.mlkit.common.internal.MlKitInitProvider"
             android:authorities="${applicationId}.mlkitinitprovider"
             tools:node="remove" />
+        -->
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

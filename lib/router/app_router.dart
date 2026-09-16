@@ -107,9 +107,14 @@ class Routes {
 
   /// Which non-Landing routes represent "after invoice" for idle-timer
   /// purposes (shorter, display-oriented countdown vs. the general
-  /// before-invoice one). Currently just Success — will include a QR
-  /// screen once e-invoice/QR exists on the backend. Timers only ever
-  /// apply in Kiosk mode — see onGenerateRoute.
+  /// before-invoice one). `invoice` itself is excluded from receiving any
+  /// guard at all now (see onGenerateRoute) — it's listed here only so a
+  /// direct check against this set still classifies it correctly if that
+  /// ever changes back. `success` is still guarded — worth knowing that
+  /// it has the exact same "cart's guard is still alive underneath"
+  /// exposure `invoice` had (see onGenerateRoute's comment on why invoice
+  /// was excluded); success just doesn't have an auto-select-style escape
+  /// hatch of its own the way invoice now does, so it hasn't been touched.
   static const afterInvoiceRoutes = {invoice, success};
 }
 
@@ -273,7 +278,20 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
   // Without the contains() check, a restricted route (e.g. /settings in
   // kiosk) would redirect to LandingScreen but still receive the idle
   // guard, causing the dialog to fire on the landing page itself.
-  if (isKiosk && name != Routes.landing && Routes.kioskAllowlist.contains(name)) {
+  //
+  // Routes.invoice is deliberately excluded — it's reached via a push
+  // chain from cart (cart's own push is never replaced), so cart's guard
+  // stays alive underneath the whole time regardless. Wrapping invoice
+  // too meant TWO independent guards could fire within milliseconds of
+  // each other, each trying to redirect/reset at once — confirmed via
+  // trace logging as the actual cause of an intermittent black screen
+  // (see InvoiceScreen's own auto-select-or-auto-pick logic, which now
+  // replaces the need for an idle guard there entirely: it always
+  // resolves on its own within a few seconds, guard or not).
+  if (isKiosk &&
+      name != Routes.landing &&
+      name != Routes.invoice &&
+      Routes.kioskAllowlist.contains(name)) {
     page = KioskIdleGuard(
       afterInvoice: Routes.afterInvoiceRoutes.contains(name),
       child: page,

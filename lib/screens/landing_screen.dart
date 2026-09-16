@@ -11,6 +11,7 @@ import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../services/landing_cache.dart';
 import '../services/local_prefs.dart';
+import '../services/trace_log.dart';
 import '../state/auth_service.dart';
 import '../state/permission_service.dart';
 import '../state/browsing_mode_service.dart';
@@ -81,6 +82,11 @@ class _LandingScreenState extends State<LandingScreen> {
   @override
   void initState() {
     super.initState();
+    // Diagnostic-only: confirms LandingScreen was actually reached after a
+    // KioskIdleGuard redirect — see that class's own trace calls. If this
+    // line never appears after "redirect call returned", the freeze is
+    // inside Navigator's own transition, not in Landing's build.
+    TraceLog.log('LandingScreen: initState');
     _loadFromCache();
     authService.addListener(_onConfigChanged);
     storeConfigService.addListener(_onConfigChanged);

@@ -6,8 +6,10 @@ import '../state/simulator_service.dart';
 
 /// Small indicator of the current browsing mode. Stacked on every route in
 /// app_router.dart. Bottom-left, away from the simulator cluster's bottom-right.
-/// Hidden when dev tools are hidden (simulator eye-off button or startup default).
-/// Tap 10 times anywhere on the landing page background to reveal.
+/// Hidden when dev tools are hidden (simulator eye-off button or startup
+/// default). Purely a display widget, not tappable (see IgnorePointer below)
+/// — to bring dev tools back, use the cart screen's 10-tap gesture or the
+/// Simulator switch in Settings' Developer Tools panel.
 class ModeBadge extends StatelessWidget {
   const ModeBadge({super.key});
 

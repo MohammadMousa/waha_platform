@@ -47,11 +47,27 @@ class ApiClient {
   // kioskLogin) never returns, runApp() is never called, and the native
   // splash stays up indefinitely — indistinguishable from a native crash,
   // but reproducible on any device/hardware pointed at an unreachable host.
+  //
+  // Retries once on any failure (timeout or otherwise) before giving up.
+  // Real-world symptom this fixes: the first request in a fresh app
+  // session pays for DNS + TCP + TLS setup, which can occasionally cross
+  // the 8s bound on real kiosk/phone WiFi even though the backend itself
+  // is healthy — the user was manually doing this exact retry by hand
+  // (tapping "try again" and it working instantly the second time). One
+  // bounded retry here does that automatically, in the one place every
+  // endpoint already routes through, instead of patching each call site.
+  // Does not retry a successful response with a non-2xx status — those
+  // aren't exceptions here, each caller's own statusCode check handles
+  // them; this only covers connection/timeout-class failures.
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     try {
       return await request().timeout(const Duration(seconds: 8));
-    } catch (e) {
-      throw NetworkException(e);
+    } catch (_) {
+      try {
+        return await request().timeout(const Duration(seconds: 8));
+      } catch (e) {
+        throw NetworkException(e);
+      }
     }
   }
 

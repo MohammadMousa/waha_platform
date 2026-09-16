@@ -5,7 +5,18 @@ import 'package:flutter/services.dart';
 /// Push connection-state events from the native USBConnectionListener
 /// (spec §4.2) — separate from the request/response MethodChannel below
 /// since these arrive unprompted, not as a reply to a Dart-initiated call.
-enum GeideaConnectionState { unknown, serviceConnected, usbConnected, usbDisconnected, error }
+/// [scanning] covers every kind of "attempting a connection right now"
+/// moment (startup, a USB attach broadcast, a bounded startup retry, or an
+/// on-demand [GeideaTerminalBridge.detectTerminal] call) — see
+/// GeideaUsbActivityLogger for where these surface as a dev-tools toast/log.
+enum GeideaConnectionState {
+  unknown,
+  serviceConnected,
+  scanning,
+  usbConnected,
+  usbDisconnected,
+  error,
+}
 
 class GeideaConnectionEvent {
   final GeideaConnectionState state;
@@ -47,10 +58,18 @@ class GeideaTerminalBridge {
 
   /// Bypasses the native SDK/USB entirely and returns canned results, so the
   /// rest of the flow (InvoiceScreen dialog, ApiClient session calls, order
-  /// confirmation) can be tested before real hardware is available. Only
-  /// on with an explicit `--dart-define=GEIDEA_MOCK=true` — never enabled by
-  /// default, remove once real hardware testing replaces this.
-  static const _mock = bool.fromEnvironment('GEIDEA_MOCK');
+  /// confirmation) can be tested before real hardware is available. Two
+  /// ways to turn this on: a build-time `--dart-define=GEIDEA_MOCK=true`
+  /// (baked into the APK, can't be toggled at runtime), or the runtime
+  /// "Fake Payment Terminal" switch in Settings → Developer Tools
+  /// ([fakeTerminalEnabled] below). [fakeTerminalEnabled] is deliberately
+  /// an in-memory field, NOT persisted to LocalPrefs — it always resets to
+  /// false on a fresh app launch, so a kiosk can never be left silently
+  /// faking successful payments across a restart just because someone
+  /// forgot to flip it back off after testing.
+  static bool fakeTerminalEnabled = false;
+  static bool get _mock =>
+      const bool.fromEnvironment('GEIDEA_MOCK') || fakeTerminalEnabled;
 
   Stream<GeideaConnectionEvent>? _connectionStream;
 
@@ -133,6 +152,38 @@ class GeideaTerminalBridge {
     } on PlatformException catch (e) {
       return GeideaPaymentResult(approved: false, errorMessage: e.message ?? 'Terminal error');
     }
+  }
+
+  /// On-demand connection retry. Forces a fresh native connection attempt
+  /// right now and, after [wait], reports whatever [checkCommunication]
+  /// observes — i.e. whether the USBConnectionListener actually heard back
+  /// `onUSBConnected` in that window. A synchronous "yes/no" isn't
+  /// possible: the SDK's own callback is asynchronous, so this is a
+  /// poll-after-delay, same tradeoff the terminal payment dialog itself
+  /// makes.
+  ///
+  /// Two callers: Settings' "Detect Payment Terminals" test button
+  /// ([source] "manual", the default), and [InvoiceScreen]'s terminal
+  /// payment dialog itself ([source] "payment") — calling this the moment
+  /// a payment starts closes the gap left by MainActivity's other two
+  /// detection layers (the USB-attach broadcast receiver and the bounded
+  /// startup retry), for whatever case those somehow missed. [source] only
+  /// changes the native log/toast text, not the behavior.
+  Future<bool> detectTerminal({
+    Duration wait = const Duration(seconds: 4),
+    String source = 'manual',
+  }) async {
+    if (_mock) {
+      await Future.delayed(const Duration(seconds: 1));
+      return true;
+    }
+    try {
+      await _methodChannel.invokeMethod('detectTerminal', {'source': source});
+    } on PlatformException {
+      return false;
+    }
+    await Future.delayed(wait);
+    return checkCommunication();
   }
 
   Future<void> cancelPayment() async {

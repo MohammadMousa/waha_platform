@@ -118,9 +118,19 @@ class LocalPrefs {
     await _p.setInt(_kAfterCountdown, afterCountdownSeconds);
   }
 
-  // Dev-tools cluster visibility. Defaults to false (hidden) when not set.
+  // Dev-tools cluster visibility. Until the operator explicitly shows/hides
+  // it (which persists from then on and always wins over this), defaults to
+  // whatever this build was compiled with: visible if ENABLE_SIMULATOR=true
+  // (that's a dev/test build in the first place — no reason to also make it
+  // hunt for a secret 10-tap gesture just to see its own dev tools), hidden
+  // otherwise (a real release build, where dev tools should not be casually
+  // stumbled into). Reads the dart-define directly rather than importing
+  // AppConfig, which itself imports this file.
   static const _kSimDevToolsVisible = 'waha.sim_dev_tools_visible';
-  static bool get simDevToolsVisible => _p.getBool(_kSimDevToolsVisible) ?? false;
+  static const _kEnableSimulatorCompileFlag =
+      bool.fromEnvironment('ENABLE_SIMULATOR', defaultValue: false);
+  static bool get simDevToolsVisible =>
+      _p.getBool(_kSimDevToolsVisible) ?? _kEnableSimulatorCompileFlag;
   static Future<void> setSimDevToolsVisible(bool value) =>
       _p.setBool(_kSimDevToolsVisible, value);
 
@@ -163,6 +173,30 @@ class LocalPrefs {
   static bool get showCartMenuInKiosk => _p.getBool(_kShowCartMenuInKiosk) ?? false;
   static Future<void> setShowCartMenuInKiosk(bool value) =>
       _p.setBool(_kShowCartMenuInKiosk, value);
+
+  // On by default: KioskIdleGuard's inactivity-driven redirect-home was
+  // suspected as an ongoing source of Navigator-corruption crashes on real
+  // hardware (see git history on kiosk_idle_guard.dart), so this defaulted
+  // off while that was unconfirmed. Now confirmed working fine on real
+  // kiosk hardware — the checkbox stays as a manual fallback in case a
+  // specific device needs it disabled again, but the default is trusted.
+  static const _kKioskTimersEnabled = 'waha.kiosk_timers_enabled';
+  static bool get kioskTimersEnabled => _p.getBool(_kKioskTimersEnabled) ?? true;
+  static Future<void> setKioskTimersEnabled(bool value) =>
+      _p.setBool(_kKioskTimersEnabled, value);
+
+  // Diagnostic-only, temporary: gates TraceLog (see lib/services/trace_log.dart)
+  // and MainActivity.logTrace's native-side writes — false by default, since
+  // this shouldn't write to disk forever on every kiosk in the field. Two
+  // ways to turn it on: this persisted Settings toggle (works on a device
+  // already installed, no rebuild needed), or a `--dart-define=LOGGING=true`
+  // build (see main.dart, which seeds this same persisted value from that
+  // define on first run — from then on this toggle is the durable control).
+  // Remove alongside the rest of the trace-logging system once no longer needed.
+  static const _kLoggingEnabled = 'waha.logging_enabled';
+  static bool get loggingEnabled => _p.getBool(_kLoggingEnabled) ?? false;
+  static Future<void> setLoggingEnabled(bool value) =>
+      _p.setBool(_kLoggingEnabled, value);
 
   // Which shortcut buttons show in the simulator cluster — 'home', 'settings',
   // 'camera', 'productScan' (manual barcode entry/cached-code fire),

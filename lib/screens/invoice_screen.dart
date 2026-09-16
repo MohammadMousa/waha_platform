@@ -38,6 +38,12 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   WahaOrder? _order;
   String? _error;
 
+  // Cached in initState, not read fresh in dispose() — same pattern
+  // KioskIdleGuard already uses safely; calling context.read() for the
+  // first time inside dispose() risks throwing if the element's ancestor
+  // chain has already started tearing down by then.
+  late final OrderFlowController _flow;
+
   List<PaymentMethod> _methods = [];
   bool _declined = false;
   String? _declineDetail;
@@ -48,17 +54,37 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   int _pollAttempts = 0;
   static const _maxPollAttempts = 150; // ~5 min at 2s
 
-  // Auto-select when there's only one payment method — skips the pointless
-  // extra tap. Only armed on the initial load (see _loadOrder); a decline
-  // or a cancelled redirect returning to _Phase.loaded does NOT re-arm it,
-  // so a customer is never silently re-charged after backing out once.
+  // Auto-select/auto-pick — the ONLY thing standing between this screen and
+  // sitting forever with no idle guard of its own (see app_router.dart's
+  // comment on why invoice is deliberately excluded from KioskIdleGuard).
+  // Three cases, all armed only on the initial load (see _loadOrder); a
+  // decline or a cancelled redirect returning to _Phase.loaded does NOT
+  // re-arm any of them, so a customer is never silently re-charged after
+  // backing out once, and never auto-picked into a second attempt either:
+  //  - Exactly one method: auto-select it after a short delay — skips the
+  //    pointless extra tap.
+  //  - More than one: auto-pick after a longer delay if the customer
+  //    hasn't chosen manually — `terminal` if it's an active method for
+  //    this store (the physical kiosk's expected common case), otherwise
+  //    just the first listed method. This is a config check (is `terminal`
+  //    in `_methods`), not a live hardware ping — if the hardware itself
+  //    turns out not to work, _handleTerminal's own failed/retry state
+  //    handles that already, same as a manual pick would.
+  //  - Zero methods (e.g. a transient getPaymentMethods() failure): no
+  //    method to pick at all, so instead of sitting stuck forever with
+  //    nothing else watching this screen, fall back to redirecting home
+  //    after a longer wait — see _startNoMethodsFallback.
   static const _autoSelectDelaySeconds = 4;
+  static const _autoPickDelaySeconds = 5;
+  static const _noMethodsFallbackSeconds = 45;
   Timer? _autoSelectTimer;
   int? _autoSelectSecondsLeft;
+  Timer? _noMethodsFallbackTimer;
 
   @override
   void initState() {
     super.initState();
+    _flow = context.read<OrderFlowController>();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadOrder());
   }
 
@@ -66,20 +92,56 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _autoSelectTimer?.cancel();
+    _noMethodsFallbackTimer?.cancel();
+    // Safety net: if this screen is disposed while still polling (left the
+    // flow some way other than _pollOnce/_cancelWaiting reaching one of
+    // their own end states), paymentInProgress would otherwise stay stuck
+    // true forever, permanently blocking cart's KioskIdleGuard even after
+    // leaving payment entirely.
+    _flow.setPaymentInProgress(false);
     super.dispose();
   }
 
   void _maybeStartAutoSelect() {
-    if (_methods.length != 1) return;
-    setState(() => _autoSelectSecondsLeft = _autoSelectDelaySeconds);
+    if (_methods.isEmpty) {
+      _startNoMethodsFallback();
+      return;
+    }
+    final delay = _methods.length == 1 ? _autoSelectDelaySeconds : _autoPickDelaySeconds;
+    setState(() => _autoSelectSecondsLeft = delay);
     _autoSelectTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       final left = _autoSelectSecondsLeft! - 1;
       if (left <= 0) {
         _cancelAutoSelect();
-        _handleMethod(_methods.first);
+        _handleMethod(_chooseAutoPickMethod());
       } else {
         setState(() => _autoSelectSecondsLeft = left);
+      }
+    });
+  }
+
+  /// Only called once _methods.isNotEmpty is already established (see
+  /// _maybeStartAutoSelect) — always returns a real method, never null.
+  PaymentMethod _chooseAutoPickMethod() {
+    for (final method in _methods) {
+      if (method.provider == 'TERMINAL') return method;
+    }
+    return _methods.first;
+  }
+
+  /// The only safety net left for the rare case where there's nothing at
+  /// all to auto-pick from — see this class's own doc comment above. Not a
+  /// KioskIdleGuard: doesn't reset on activity, doesn't warn first, just a
+  /// single long-wait fallback for a screen that has no other way out.
+  void _startNoMethodsFallback() {
+    _noMethodsFallbackTimer?.cancel();
+    _noMethodsFallbackTimer = Timer(const Duration(seconds: _noMethodsFallbackSeconds), () {
+      if (!mounted) return;
+      context.read<OrderFlowController>().reset();
+      final nav = Navigator.of(context);
+      if (nav.canPop()) {
+        nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
       }
     });
   }
@@ -107,10 +169,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       } else if (order.status == 'CANCELLED') {
         if (mounted) setState(() => _phase = _Phase.cancelled);
       } else if (order.status == 'PENDING') {
-        // Payment session already started in a previous screen visit — resume polling.
+        // Payment session already started in a previous screen visit — resume
+        // polling. Same suspension as _payWithRedirect's own poll start —
+        // cart's still-alive KioskIdleGuard needs to stay suspended for this
+        // resumed wait too, cleared in _pollOnce/_cancelWaiting same as before.
         if (mounted) {
           setState(() => _phase = _Phase.waiting);
           _pollAttempts = 0;
+          context.read<OrderFlowController>().setPaymentInProgress(true);
           _pollTimer =
               Timer.periodic(const Duration(seconds: 2), (_) => _pollOnce());
         }
@@ -180,6 +246,12 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       _declined = false;
     });
     final flow = context.read<OrderFlowController>();
+    // See _handleTerminal's identical call for why this matters: cart's
+    // KioskIdleGuard is still alive underneath this screen the whole time
+    // (see app_router.dart) — without suspending it, its idle countdown
+    // firing mid-payment redirects home while this await is still in
+    // flight, corrupting Navigator state.
+    flow.setPaymentInProgress(true);
     try {
       final result = await flow.pay(simulateOutcome: outcome);
       if (!mounted) return;
@@ -194,6 +266,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _phase = _Phase.loaded);
+    } finally {
+      flow.setPaymentInProgress(false);
     }
   }
 
@@ -220,24 +294,32 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         final lang = localeService.locale.languageCode;
         final methodLabel = localeName(method.displayName, lang)
             .let((s) => s.isEmpty ? method.key : s);
-        final paidOrder = await showDialog<WahaOrder>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-                horizontal: 24, vertical: 48),
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20)),
-            child: QrPaymentScreen(
-              orderId: flow.orderId!,
-              qrCodeDataUri: session.qrCodeDataUri!,
-              expiresAt: session.expiresAt!,
-              methodLabel: methodLabel,
-              onRefreshOrder: flow.refreshOrder,
+        // See _handleTerminal's comment — this dialog polls waiting on a
+        // customer's own phone and can sit open for a while too.
+        flow.setPaymentInProgress(true);
+        final WahaOrder? paidOrder;
+        try {
+          paidOrder = await showDialog<WahaOrder>(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 48),
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              child: QrPaymentScreen(
+                orderId: flow.orderId!,
+                qrCodeDataUri: session.qrCodeDataUri!,
+                expiresAt: session.expiresAt!,
+                methodLabel: methodLabel,
+                onRefreshOrder: flow.refreshOrder,
+              ),
             ),
-          ),
-        );
+          );
+        } finally {
+          flow.setPaymentInProgress(false);
+        }
         if (!mounted) return;
         if (paidOrder != null) _onPaid(paidOrder);
         return;
@@ -262,6 +344,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         _phase = _Phase.waiting;
       });
       _pollAttempts = 0;
+      // Can poll for up to _maxPollAttempts * 2s (~5 min) waiting on a
+      // customer's external browser/app — see _handleTerminal's identical
+      // comment for why cart's still-alive KioskIdleGuard needs suspending
+      // for the whole span, not just this function call. Cleared in every
+      // place polling can end: _pollOnce's paid/exhausted branches and
+      // _cancelWaiting, not here — this call starts it, it doesn't own
+      // when it ends.
+      flow.setPaymentInProgress(true);
       _pollTimer =
           Timer.periodic(const Duration(seconds: 2), (_) => _pollOnce());
     } catch (e) {
@@ -281,18 +371,21 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       final order = await flow.refreshOrder();
       if (order.status == 'PAID') {
         _pollTimer?.cancel();
+        flow.setPaymentInProgress(false);
         if (mounted) _onPaid(order);
         return;
       }
     } catch (_) {}
     if (_pollAttempts >= _maxPollAttempts && mounted) {
       _pollTimer?.cancel();
+      flow.setPaymentInProgress(false);
       setState(() => _phase = _Phase.loaded);
     }
   }
 
   void _cancelWaiting() {
     _pollTimer?.cancel();
+    context.read<OrderFlowController>().setPaymentInProgress(false);
     setState(() => _phase = _Phase.loaded);
   }
 
@@ -395,20 +488,31 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final orderId = _order?.orderId;
     if (orderId == null) return;
     final apiClient = context.read<ApiClient>();
+    final flow = context.read<OrderFlowController>();
 
-    final paidOrder = await showDialog<WahaOrder>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: _TerminalPaymentScreen(
-          orderId: orderId,
-          apiClient: apiClient,
+    // Tells KioskIdleGuard to suspend its own timer for as long as this
+    // dialog is open — it can sit unresolved for a long time waiting on the
+    // terminal, and the idle countdown firing underneath it corrupts
+    // Navigator state (see OrderFlowController.paymentInProgress).
+    flow.setPaymentInProgress(true);
+    final WahaOrder? paidOrder;
+    try {
+      paidOrder = await showDialog<WahaOrder>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: _TerminalPaymentScreen(
+            orderId: orderId,
+            apiClient: apiClient,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      flow.setPaymentInProgress(false);
+    }
 
     if (paidOrder != null && mounted) {
       _onPaid(paidOrder);
@@ -431,22 +535,30 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final l10n = AppLocalizations.of(context)!;
     final flow = context.read<OrderFlowController>();
 
-    final paidOrder = await showDialog<WahaOrder>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: _MobilePaymentScreen(
-          qrUrl: qrUrl,
-          methodLabel: methodLabel,
-          scanHint: l10n.mobilePaymentScanHint,
-          pollingLabel: l10n.mobilePaymentPolling,
-          onRefreshOrder: flow.refreshOrder,
+    // See _handleTerminal's comment — this dialog polls waiting on a
+    // customer's own phone and can sit open for a while too.
+    flow.setPaymentInProgress(true);
+    final WahaOrder? paidOrder;
+    try {
+      paidOrder = await showDialog<WahaOrder>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: _MobilePaymentScreen(
+            qrUrl: qrUrl,
+            methodLabel: methodLabel,
+            scanHint: l10n.mobilePaymentScanHint,
+            pollingLabel: l10n.mobilePaymentPolling,
+            onRefreshOrder: flow.refreshOrder,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      flow.setPaymentInProgress(false);
+    }
     if (!mounted) return;
     if (paidOrder != null) _onPaid(paidOrder);
   }
@@ -527,7 +639,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   IconData _iconForMethod(PaymentMethod method) {
     if (method.isPaymentUrl) return Icons.phone_android_outlined;
-    if (method.provider == 'TERMINAL') return Icons.point_of_sale_outlined;
+    if (method.provider == 'TERMINAL') return Icons.contactless_outlined;
     return switch (method.key.replaceAll('_qr', '')) {
       'simulated' => Icons.phone_android_outlined,
       'stripe' => Icons.credit_card,
@@ -893,13 +1005,20 @@ class _KioskPaidDialog extends StatefulWidget {
 }
 
 class _KioskPaidDialogState extends State<_KioskPaidDialog> {
+  // Always follows the "after invoice" Settings field, regardless of the
+  // "Enable Idle Timers" checkbox — this redirect always fires (a paid
+  // screen can't be left up forever), on whatever duration is configured
+  // there. Want it shorter/longer? Change that spinner value, not this
+  // toggle.
   late int _secondsLeft;
   Timer? _timer;
+
+  int get _countdownSeconds => kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds;
 
   @override
   void initState() {
     super.initState();
-    _secondsLeft = kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds;
+    _secondsLeft = _countdownSeconds;
     _startTimer();
   }
 
@@ -923,7 +1042,7 @@ class _KioskPaidDialogState extends State<_KioskPaidDialog> {
 
   void _resetTimer() {
     setState(() {
-      _secondsLeft = kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds;
+      _secondsLeft = _countdownSeconds;
     });
     _startTimer();
   }
@@ -1793,7 +1912,15 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     final l10n = AppLocalizations.of(context)!;
     final bridge = GeideaTerminalBridge.instance;
 
-    final connected = await bridge.checkCommunication();
+    // checkCommunication() only reads last-known state, it doesn't try to
+    // connect — if the background/event-driven detection (MainActivity)
+    // hasn't caught up yet (e.g. cashier plugged the terminal in seconds
+    // ago), fall back to an active on-demand attempt right here, at the
+    // one moment it actually matters, before giving up.
+    var connected = await bridge.checkCommunication();
+    if (!connected) {
+      connected = await bridge.detectTerminal(source: 'payment');
+    }
     if (!mounted) return;
     if (!connected) {
       setState(() {
@@ -1918,36 +2045,65 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
   }
 }
 
-// A plain point-of-sale icon reads as "cash register" — this pairs it with
-// a small overlapping card badge so it reads as "card + terminal" instead,
-// without needing a custom asset.
+// Flutter's built-in Material icon set has no dedicated "handheld
+// card-reader device" glyph — the bare Icons.contactless wave alone reads
+// as a generic NFC symbol, not a terminal, and Icons.point_of_sale reads
+// as a cash register. This composes an actual small reader-device shape
+// instead: a rounded body, a screen showing the tap-to-pay wave, and a
+// keypad hint below it — no external asset needed.
 class _TerminalIcon extends StatelessWidget {
   final Color color;
   const _TerminalIcon({required this.color});
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 88,
-      height: 80,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.point_of_sale_outlined, size: 72, color: color),
-          Positioned(
-            right: 0,
-            top: -4,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: color, width: 1.5),
+      width: 68,
+      height: 88,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color, width: 2.5),
+        ),
+        child: Column(
+          children: [
+            // Screen — this is what makes it read as a device, not just a
+            // floating NFC symbol.
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.contactless, color: scheme.surface, size: 26),
               ),
-              child: Icon(Icons.credit_card, size: 20, color: color),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            // Keypad hint
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                3,
+                (i) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Container(
+                    width: 8,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

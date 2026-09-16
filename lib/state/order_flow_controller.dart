@@ -265,6 +265,22 @@ class OrderFlowController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// True while InvoiceScreen has a blocking payment dialog open (terminal,
+  /// QR/mobile) that can sit unresolved for a long time waiting on external
+  /// hardware or a customer's phone. KioskIdleGuard checks this alongside
+  /// its existing "already paid" check to suspend its own idle timer —
+  /// without it, the idle countdown could still fire and call
+  /// Navigator.pushNamedAndRemoveUntil while that dialog's own route and
+  /// async flow are still in flight, corrupting Navigator state (the
+  /// `!_debugLocked` assertion / black-screen crash seen in testing).
+  bool _paymentInProgress = false;
+  bool get paymentInProgress => _paymentInProgress;
+  void setPaymentInProgress(bool value) {
+    if (_paymentInProgress == value) return;
+    _paymentInProgress = value;
+    notifyListeners();
+  }
+
   /// Starts a Stripe/MyFatoorah session. For REDIRECT provider, returns a URL
   /// to open in the browser. For QR_LINK provider, also returns qrCodeDataUri
   /// and expiresAt for the kiosk QR screen.

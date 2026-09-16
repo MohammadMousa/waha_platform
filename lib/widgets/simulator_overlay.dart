@@ -67,7 +67,8 @@ class SimulatorOverlay extends StatelessWidget {
               _IconBtn(icon: Icons.close, tooltip: 'Collapse', onTap: sim.hideCluster),
               _IconBtn(
                 icon: Icons.visibility_off_outlined,
-                tooltip: 'Hide all dev tools\n(5-tap badge to restore)',
+                tooltip: 'Hide all dev tools\n(10-tap the cart screen, or the '
+                    'Simulator switch in Settings, to restore)',
                 onTap: sim.hideDevTools,
               ),
               if (sim.isPinned(SimPinnedButton.home))
