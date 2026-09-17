@@ -164,11 +164,17 @@ class GeideaTerminalBridge {
   ///
   /// Two callers: Settings' "Detect Payment Terminals" test button
   /// ([source] "manual", the default), and [InvoiceScreen]'s terminal
-  /// payment dialog itself ([source] "payment") — calling this the moment
-  /// a payment starts closes the gap left by MainActivity's other two
-  /// detection layers (the USB-attach broadcast receiver and the bounded
-  /// startup retry), for whatever case those somehow missed. [source] only
-  /// changes the native log/toast text, not the behavior.
+  /// payment dialog itself ([source] "payment") — called unconditionally,
+  /// every time, right before every payment attempt, never gated behind a
+  /// prior [checkCommunication] check. That check only reads a cached
+  /// flag (MainActivity's isUsbConnected, set by whichever
+  /// USBConnectionListener callback last fired) — nothing keeps it live
+  /// between that callback and the moment a payment actually starts, so a
+  /// stale "yes" would otherwise let startPurchaseTransaction() run
+  /// against a connection that's actually already dead, failing
+  /// immediately inside the SDK before anything ever reaches the physical
+  /// terminal. [source] only changes the native log/toast text, not the
+  /// behavior.
   Future<bool> detectTerminal({
     Duration wait = const Duration(seconds: 4),
     String source = 'manual',
@@ -182,7 +188,16 @@ class GeideaTerminalBridge {
     } on PlatformException {
       return false;
     }
-    await Future.delayed(wait);
+    // Poll instead of blindly sleeping the full [wait] every time — a
+    // healthy reconnect typically resolves in well under a second (seen as
+    // low as ~40ms in the field), so a fixed sleep makes every payment
+    // attempt pay the full delay even when the terminal was fine the whole
+    // time. Still caps at [wait] total for a genuinely bad connection.
+    final deadline = DateTime.now().add(wait);
+    while (DateTime.now().isBefore(deadline)) {
+      if (await checkCommunication()) return true;
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
     return checkCommunication();
   }
 

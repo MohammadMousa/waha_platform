@@ -11,9 +11,7 @@ import '../models/product.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../services/scan_sound_service.dart';
-import '../utils/locale_name.dart';
 import 'auth_service.dart';
-import 'locale_service.dart';
 import 'store_config_service.dart';
 
 const _uuid = Uuid();
@@ -110,8 +108,7 @@ class OrderFlowController extends ChangeNotifier {
     if (existing.isNotEmpty) {
       existing.first.quantity += 1;
     } else {
-      final name = localeName(product.name, localeService.locale.languageCode);
-      cart.add(CartItem(productId: product.id, name: name, quantity: 1,
+      cart.add(CartItem(productId: product.id, name: product.name, quantity: 1,
           imageResourceId: product.imageResourceId));
     }
     ScanSoundService.playSuccess();

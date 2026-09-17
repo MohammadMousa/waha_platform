@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../router/app_router.dart';
 import '../state/order_flow_controller.dart';
+import '../state/locale_service.dart';
+import '../utils/locale_name.dart';
 import '../widgets/waha_app_bar.dart';
 
 /// Normal mode's explicit "Scan" entry. A real hardware scanner (USB/BT
@@ -58,6 +60,7 @@ class ScanScreen extends StatelessWidget {
                       itemCount: flow.cart.length,
                       itemBuilder: (context, i) {
                         final item = flow.cart[i];
+                        final name = localeName(item.name, localeService.locale.languageCode);
                         return Card(
                           elevation: 0,
                           color: scheme.surfaceVariant.withOpacity(0.5),
@@ -66,9 +69,9 @@ class ScanScreen extends StatelessWidget {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: scheme.primaryContainer,
-                              child: Text(item.name.isNotEmpty ? item.name[0].toUpperCase() : '?'),
+                              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
                             ),
-                            title: Text(item.name),
+                            title: Text(name),
                             trailing: Text('x${item.quantity}',
                                 style: const TextStyle(fontWeight: FontWeight.bold)),
                           ),

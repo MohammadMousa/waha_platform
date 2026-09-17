@@ -36,9 +36,37 @@ import '../models/product.dart';
 import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../widgets/hardware_scan_listener.dart';
-import '../widgets/kiosk_idle_guard.dart';
 import '../widgets/mode_badge.dart';
 import '../widgets/simulator_overlay.dart';
+
+/// Lets code outside the routed page tree (KioskIdleGuard, mounted once
+/// above MaterialApp — see main.dart) push/pop navigation and know which
+/// route is on top, without needing a per-route BuildContext of its own.
+/// Passing this key's own currentContext to Navigator.of()/showDialog()/
+/// showModalBottomSheet() works because Navigator.of() special-cases a
+/// context that IS a NavigatorState's own element.
+final navigatorKey = GlobalKey<NavigatorState>();
+
+/// Tracks the currently-top route's name for KioskIdleGuard, which needs to
+/// know this without being built inside any specific route (it wraps
+/// MaterialApp itself, not a page). Register once via MaterialApp's
+/// navigatorObservers — see main.dart.
+class KioskRouteObserver extends NavigatorObserver {
+  static final ValueNotifier<String?> currentRouteName = ValueNotifier(null);
+
+  void _update(Route<dynamic>? route) {
+    currentRouteName.value = route?.settings.name;
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _update(route);
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _update(previousRoute);
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _update(previousRoute);
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => _update(newRoute);
+}
 
 class Routes {
   static const landing = '/';
@@ -273,30 +301,25 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
     }
   }
 
-  // Only wrap kiosk-allowed non-landing pages — NOT pages that were
-  // silently redirected to LandingScreen by the allowlist guard above.
-  // Without the contains() check, a restricted route (e.g. /settings in
-  // kiosk) would redirect to LandingScreen but still receive the idle
-  // guard, causing the dialog to fire on the landing page itself.
+  // No per-route idle-timer wrapping anymore — KioskIdleGuard is mounted
+  // ONCE, above MaterialApp (see main.dart), and tracks the current route
+  // via KioskRouteObserver above instead of being rebuilt on every push.
+  // The old design wrapped each guarded page in its own KioskIdleGuard
+  // instance here; Flutter's normal push navigation never disposes routes
+  // underneath a new one, so any two guarded routes stacked together (not
+  // just cart+invoice — e.g. cart pushed to checkout without replacing)
+  // ran two fully independent timers at once. Confirmed via trace logging
+  // as the actual cause of a real black-screen crash: both fired within
+  // milliseconds of each other, each showed its own warning sheet and
+  // tried to redirect/reset Navigator state at the same time. A single
+  // controller for the whole app makes that structurally impossible —
+  // there is exactly one Timer and one "warning showing" flag in the
+  // entire app, however many guarded routes are stacked underneath.
   //
-  // Routes.invoice is deliberately excluded — it's reached via a push
-  // chain from cart (cart's own push is never replaced), so cart's guard
-  // stays alive underneath the whole time regardless. Wrapping invoice
-  // too meant TWO independent guards could fire within milliseconds of
-  // each other, each trying to redirect/reset at once — confirmed via
-  // trace logging as the actual cause of an intermittent black screen
-  // (see InvoiceScreen's own auto-select-or-auto-pick logic, which now
-  // replaces the need for an idle guard there entirely: it always
-  // resolves on its own within a few seconds, guard or not).
-  if (isKiosk &&
-      name != Routes.landing &&
-      name != Routes.invoice &&
-      Routes.kioskAllowlist.contains(name)) {
-    page = KioskIdleGuard(
-      afterInvoice: Routes.afterInvoiceRoutes.contains(name),
-      child: page,
-    );
-  }
+  // Routes.invoice still gets no guard at all — its own auto-select/
+  // auto-pick logic (see InvoiceScreen) always resolves within a few
+  // seconds on its own, which a generic idle-warning sheet doesn't need to
+  // duplicate.
 
   return MaterialPageRoute(
     settings: settings,

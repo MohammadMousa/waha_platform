@@ -18,6 +18,7 @@ import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
+import '../services/trace_log.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import '../widgets/timer_footer_sheet.dart';
@@ -104,17 +105,22 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   void _maybeStartAutoSelect() {
     if (_methods.isEmpty) {
+      TraceLog.log('Invoice: no payment methods, arming ${_noMethodsFallbackSeconds}s fallback');
       _startNoMethodsFallback();
       return;
     }
     final delay = _methods.length == 1 ? _autoSelectDelaySeconds : _autoPickDelaySeconds;
+    TraceLog.log(
+        'Invoice: auto-${_methods.length == 1 ? "select" : "pick"} armed, ${_methods.length} method(s), ${delay}s');
     setState(() => _autoSelectSecondsLeft = delay);
     _autoSelectTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       final left = _autoSelectSecondsLeft! - 1;
       if (left <= 0) {
         _cancelAutoSelect();
-        _handleMethod(_chooseAutoPickMethod());
+        final method = _chooseAutoPickMethod();
+        TraceLog.log('Invoice: auto-picked ${method.key} (${method.provider})');
+        _handleMethod(method);
       } else {
         setState(() => _autoSelectSecondsLeft = left);
       }
@@ -138,6 +144,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     _noMethodsFallbackTimer?.cancel();
     _noMethodsFallbackTimer = Timer(const Duration(seconds: _noMethodsFallbackSeconds), () {
       if (!mounted) return;
+      TraceLog.log('Invoice: no-methods fallback fired, redirecting home');
       context.read<OrderFlowController>().reset();
       final nav = Navigator.of(context);
       if (nav.canPop()) {
@@ -205,6 +212,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   void _onPaid(WahaOrder order) {
     _order = order;
+    TraceLog.log('Invoice: order ${order.orderId} PAID via ${order.paymentMethod ?? "unknown"}');
     // Every payment path funnels through here — the single choke point to
     // keep OrderFlowController.order in sync, which KioskIdleGuard reads to
     // suspend its own timer once paid. pay()/refreshOrder() already do this
@@ -258,6 +266,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       if (result.paid) {
         _onPaid(result.order);
       } else {
+        TraceLog.log('Invoice: simulated payment declined: ${result.detail}');
         setState(() {
           _phase = _Phase.loaded;
           _declined = true;
@@ -846,6 +855,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                           ? null
                           : () {
                               _cancelAutoSelect();
+                              TraceLog.log(
+                                  'Invoice: manual pick ${method.key} (${method.provider})');
                               if (method.isPaymentUrl) {
                                 _handlePaymentUrl(method);
                               } else if (method.provider == 'TERMINAL') {
@@ -1912,17 +1923,25 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     final l10n = AppLocalizations.of(context)!;
     final bridge = GeideaTerminalBridge.instance;
 
-    // checkCommunication() only reads last-known state, it doesn't try to
-    // connect — if the background/event-driven detection (MainActivity)
-    // hasn't caught up yet (e.g. cashier plugged the terminal in seconds
-    // ago), fall back to an active on-demand attempt right here, at the
-    // one moment it actually matters, before giving up.
-    var connected = await bridge.checkCommunication();
-    if (!connected) {
-      connected = await bridge.detectTerminal(source: 'payment');
-    }
+    // Always actively reconnect here, unconditionally — do NOT trust
+    // checkCommunication() alone first. It only reads MainActivity's last-
+    // known isUsbConnected flag, set by whichever USBConnectionListener
+    // callback fired last; nothing keeps it live between that callback and
+    // this exact moment. A client report of the transaction never reaching
+    // the physical terminal at all (no prompt, nothing) — while the app
+    // still believed it was connected — matches this exactly: the cached
+    // flag said true, startPurchaseTransaction() was called against a
+    // connection that had actually gone stale, and Geidea's SDK failed
+    // immediately, internally, before ever writing anything to the
+    // terminal for the customer to see. Forcing a fresh reconnect attempt
+    // right here, every time, closes that gap — costs a few seconds, but
+    // only at the one moment a stale "yes" would otherwise silently fail
+    // the whole transaction with no card ever presented.
+    TraceLog.log('Terminal: payment run start, order ${widget.orderId}');
+    final connected = await bridge.detectTerminal(source: 'payment');
     if (!mounted) return;
     if (!connected) {
+      TraceLog.log('Terminal: not connected after reconnect attempt, aborting before charging');
       setState(() {
         _failed = true;
         _statusLabel = l10n.terminalNotConnected;
@@ -1934,6 +1953,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     try {
       session = await widget.apiClient.createTerminalSession(widget.orderId);
     } catch (e) {
+      TraceLog.log('Terminal: backend session create failed: $e');
       if (mounted) {
         setState(() {
           _failed = true;
@@ -1943,6 +1963,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       return;
     }
     if (!mounted) return;
+    TraceLog.log('Terminal: session ${session.id} created, amount ${session.amount}, prompting card');
     setState(() {
       _session = session;
       _statusLabel = l10n.terminalSwipeCard;
@@ -1954,6 +1975,8 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       timeout: Duration(seconds: LocalPrefs.terminalTimeoutSeconds),
     );
     if (!mounted) return;
+    TraceLog.log('Terminal: SDK result approved=${result.approved} '
+        'approvalCode=${result.approvalCode} error=${result.errorMessage}');
 
     if (result.approved && result.approvalCode != null) {
       try {
@@ -1963,10 +1986,12 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           notes: {...result.details, 'vendor': 'geidea'},
         );
         final order = await widget.apiClient.getOrder(widget.orderId);
+        TraceLog.log('Terminal: session ${session.id} confirmed to backend, order paid');
         if (mounted) Navigator.pop(context, order);
       } catch (e) {
         // Card was charged but the backend couldn't be told — do NOT show
         // this as a plain decline, the customer's card was already debited.
+        TraceLog.log('Terminal: approved but confirm-to-backend failed: $e');
         if (mounted) {
           setState(() {
             _failed = true;
@@ -1975,6 +2000,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
         }
       }
     } else {
+      TraceLog.log('Terminal: declined/failed — ${result.errorMessage ?? "no message"}');
       try { await widget.apiClient.cancelTerminalSession(session.id); } catch (_) {}
       if (mounted) {
         setState(() {
@@ -1991,6 +2017,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
   // backend session, but a transaction the terminal already approved will
   // still go through underneath.
   Future<void> _cancel() async {
+    TraceLog.log('Terminal: payment cancelled by user');
     final id = _session?.id;
     if (id != null) {
       try { await widget.apiClient.cancelTerminalSession(id); } catch (_) {}

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/cart_item.dart';
 import '../models/quote.dart';
+import '../state/locale_service.dart';
+import '../utils/locale_name.dart';
 import 'product_image.dart';
 import 'quantity_stepper.dart';
 
@@ -59,7 +61,7 @@ class CartLineTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item.name,
+                    localeName(item.name, localeService.locale.languageCode),
                     style: theme.textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),

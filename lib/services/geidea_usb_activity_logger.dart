@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../state/simulator_service.dart';
 import 'app_messenger.dart';
 import 'geidea_terminal_bridge.dart';
+import 'trace_log.dart';
 
 /// Surfaces every Geidea USB connection event (scanning, found, lost,
 /// failed) as a debug log always, and as a SnackBar toast too when the
@@ -36,6 +37,13 @@ class _GeideaUsbActivityLoggerState extends State<GeideaUsbActivityLogger> {
   void _onEvent(GeideaConnectionEvent event) {
     final message = _describe(event);
     debugPrint('[GeideaUSB] $message');
+    // Previously only went to debugPrint (live adb/flutter-run only) or a
+    // toast (visible but never recorded) — neither survives to be read
+    // after the fact. This is exactly the sequence needed to tell "cached
+    // connected flag was stale" apart from "genuinely never connected" the
+    // next time a payment fails with the terminal never receiving
+    // anything — see _run()'s comment in invoice_screen.dart.
+    TraceLog.log('GeideaUSB: $message');
 
     final devToolsOn = !context.read<SimulatorService>().devToolsHidden;
     if (!devToolsOn) return;

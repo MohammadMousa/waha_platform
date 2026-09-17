@@ -401,7 +401,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
     if (!mounted || _dismissing) return;
     if (_flow!.cart.isNotEmpty) {
       _dismissing = true;
-      Navigator.of(context).pushReplacementNamed(Routes.cart);
+      Navigator.of(context).pushNamed(Routes.cart);
     }
   }
 

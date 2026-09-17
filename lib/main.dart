@@ -25,6 +25,7 @@ import 'state/order_flow_controller.dart';
 import 'state/permission_service.dart';
 import 'state/simulator_service.dart';
 import 'state/store_config_service.dart';
+import 'widgets/kiosk_idle_guard.dart';
 
 void main() {
   // Diagnostic-only: catches any uncaught Dart error anywhere in the app
@@ -207,27 +208,38 @@ class WahaApp extends StatelessWidget {
         builder: (context) {
           final locale = context.watch<LocaleService>().locale;
           return GeideaUsbActivityLogger(
-            child: MaterialApp(
-              title: 'Waha Kiosk',
-              debugShowCheckedModeBanner: false,
-              theme: ThemeData(
-                colorSchemeSeed: const Color(0xFF6B1A2A),
-                useMaterial3: true,
+            // Mounted once for the app's whole lifetime, wrapping
+            // MaterialApp itself — NOT per-route. See kiosk_idle_guard.dart's
+            // doc comment for why: a per-route instance let two guarded
+            // routes stacked on top of each other run two independent idle
+            // timers at once, a confirmed real cause of a black-screen
+            // crash. This single instance tracks the current route via
+            // KioskRouteObserver below and acts through navigatorKey.
+            child: KioskIdleGuard(
+              child: MaterialApp(
+                title: 'Waha Kiosk',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  colorSchemeSeed: const Color(0xFF6B1A2A),
+                  useMaterial3: true,
+                ),
+                locale: locale,
+                supportedLocales: const [Locale('en'), Locale('ar')],
+                localizationsDelegates: const [
+                  AppLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                scaffoldMessengerKey: rootScaffoldMessengerKey,
+                navigatorKey: navigatorKey,
+                navigatorObservers: [KioskRouteObserver()],
+                onGenerateRoute: onGenerateRoute,
+                initialRoute: Routes.landing,
+                // No `builder` override here on purpose — the simulator overlay
+                // is stacked per-route inside onGenerateRoute instead, so it
+                // lives inside the Navigator's Overlay. See app_router.dart.
               ),
-              locale: locale,
-              supportedLocales: const [Locale('en'), Locale('ar')],
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              scaffoldMessengerKey: rootScaffoldMessengerKey,
-              onGenerateRoute: onGenerateRoute,
-              initialRoute: Routes.landing,
-              // No `builder` override here on purpose — the simulator overlay
-              // is stacked per-route inside onGenerateRoute instead, so it
-              // lives inside the Navigator's Overlay. See app_router.dart.
             ),
           );
         },

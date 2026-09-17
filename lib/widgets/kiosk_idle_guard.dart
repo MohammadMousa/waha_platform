@@ -14,19 +14,23 @@ import 'timer_footer_sheet.dart';
 
 enum _IdleContext { beforeInvoice, afterInvoice }
 
-/// Wraps a routed page in Kiosk mode only. Resets its idle timer on any
-/// tap AND on any OrderFlowController change (so a hardware barcode
-/// scanner typing into a focused field — which fires no pointer event —
-/// still counts as activity, since a scan always triggers a controller
-/// notification). After [idleWarningAfter] of no activity, shows an "Are
-/// you still there?" dialog with its own countdown; letting that expire
-/// resets the flow and returns to Landing. Never instantiated for
-/// Normal/Shopping — see app_router.dart, this only wraps kiosk-mode pages.
+/// Single, app-wide idle-timer owner for Kiosk mode. Mounted exactly ONCE,
+/// wrapping MaterialApp (see main.dart) — NOT per-route. Tracks which
+/// route is currently on top via [KioskRouteObserver] and acts through
+/// [navigatorKey] (both in app_router.dart) instead of a route's own
+/// BuildContext, so it doesn't depend on any specific pushed route still
+/// being mounted.
+///
+/// Replaces an earlier per-route design where onGenerateRoute wrapped every
+/// guarded page in its own KioskIdleGuard instance — see app_router.dart's
+/// comment on why that could run two independent timers at once and caused
+/// a real black-screen crash. There is exactly one Timer and one "warning
+/// showing" flag in the whole app now, so that race is structurally
+/// impossible regardless of how many guarded routes are stacked
+/// underneath each other.
 class KioskIdleGuard extends StatefulWidget {
   final Widget child;
-  final bool afterInvoice;
-
-  const KioskIdleGuard({super.key, required this.child, this.afterInvoice = false});
+  const KioskIdleGuard({required this.child, super.key});
 
   @override
   State<KioskIdleGuard> createState() => _KioskIdleGuardState();
@@ -36,19 +40,23 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   Timer? _idleTimer;
   bool _warningShowing = false;
   late final OrderFlowController _flow;
+  String? _routeName;
 
-  // Signals the open _StillThereSheet to dismiss itself on activity. NOT a
-  // direct Navigator.pop() call from here anymore — see _StillThereSheet's
-  // own doc comment for why: a tap arriving right as the countdown expires
-  // could otherwise race two independent pop() calls against the same
-  // route, and if the ticker's pop wins first, a second pop (from a tap
-  // whose event was already queued) would land on whatever route is now on
-  // top — the actual screen underneath, not the already-closed sheet. The
-  // sheet is now the single owner of its own pop; this just pings it.
+  // Signals the open _StillThereSheet to dismiss itself on activity — see
+  // _StillThereSheet's own doc comment for why this is a ping, not a
+  // direct Navigator.pop() call from here.
   final ValueNotifier<bool> _dismissPing = ValueNotifier(false);
 
-  _IdleContext get _ctx =>
-      widget.afterInvoice ? _IdleContext.afterInvoice : _IdleContext.beforeInvoice;
+  bool get _isGuardedRoute =>
+      browsingModeService.mode == BrowsingMode.kiosk &&
+      _routeName != null &&
+      _routeName != Routes.landing &&
+      _routeName != Routes.invoice &&
+      Routes.kioskAllowlist.contains(_routeName);
+
+  _IdleContext get _ctx => Routes.afterInvoiceRoutes.contains(_routeName)
+      ? _IdleContext.afterInvoice
+      : _IdleContext.beforeInvoice;
 
   // Once the order is paid, _KioskPaidDialog owns the countdown. The idle
   // guard must not interfere with it — and must not interfere with a
@@ -58,10 +66,8 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   bool get _isPaid => _flow.order?.status == 'PAID';
   bool get _isSuspended => _isPaid || _flow.paymentInProgress;
 
-  // Off by default (Settings → Kiosk Timers → "Enable Idle Timers"). Inactivity-
-  // driven redirects have been the repeated source of Navigator-corruption
-  // crashes on real hardware — with this off, the guard never starts its
-  // own timer or forces navigation on any screen; only the always-on
+  // Off by default (Settings → Kiosk Timers → "Enable Idle Timers"). With
+  // this off, no timer is ever started on any screen; only the always-on
   // post-payment redirect in _KioskPaidDialog still fires, since a paid
   // screen can't be left up forever regardless of this setting.
   bool get _timersEnabled => LocalPrefs.kioskTimersEnabled;
@@ -76,16 +82,31 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
     _flow = context.read<OrderFlowController>();
     _flow.addListener(_onActivity);
     HardwareKeyboard.instance.addHandler(_onKeyEvent);
-    _startIdleTimer();
+    KioskRouteObserver.currentRouteName.addListener(_onRouteChanged);
+    _routeName = KioskRouteObserver.currentRouteName.value;
   }
 
   @override
   void dispose() {
     _flow.removeListener(_onActivity);
     HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+    KioskRouteObserver.currentRouteName.removeListener(_onRouteChanged);
     _idleTimer?.cancel();
     _dismissPing.dispose();
     super.dispose();
+  }
+
+  void _onRouteChanged() {
+    _routeName = KioskRouteObserver.currentRouteName.value;
+    if (_warningShowing) {
+      // Navigated away while a warning sheet was up (shouldn't normally
+      // happen — the sheet is modal — but stay safe rather than let a
+      // stale timer/sheet act against whatever's now on top).
+      _dismissPing.value = !_dismissPing.value;
+    }
+    // Arriving at a new screen counts as activity, and also re-evaluates
+    // whether the new top route is even guarded.
+    _maybeRestartTimer();
   }
 
   // HID barcode scanner generates key events, not pointer events.
@@ -102,39 +123,32 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
       // the resulting OrderFlowController notification both bypass hit-
       // testing entirely. A scan while the warning is up is unambiguous
       // proof the customer is present: dismiss it the same as tapping
-      // Continue, instead of silently ignoring the activity. Ping rather
-      // than popping directly — see _dismissPing's doc comment above.
+      // Continue, instead of silently ignoring the activity.
       _dismissPing.value = !_dismissPing.value;
       return;
     }
-    if (_isSuspended) {
-      _idleTimer?.cancel();
-      return;
-    }
-    _startIdleTimer();
+    _maybeRestartTimer();
   }
 
-  void _startIdleTimer() {
+  void _maybeRestartTimer() {
     _idleTimer?.cancel();
-    if (!_timersEnabled) return;
+    if (!_isGuardedRoute || _isSuspended || !_timersEnabled) return;
     _idleTimer = Timer(_warnAfter, _showWarning);
   }
 
   Future<void> _showWarning() async {
-    if (!mounted || _warningShowing) return;
-    if (_isSuspended || !_timersEnabled) {
-      _idleTimer?.cancel();
-      return;
-    }
+    if (_warningShowing || !_isGuardedRoute || _isSuspended || !_timersEnabled) return;
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null) return;
     TraceLog.log('KioskIdleGuard(${_ctx.name}): idle timer fired, showing warning');
-    setState(() => _warningShowing = true);
+    _warningShowing = true;
 
     // A modal bottom sheet, not a centered dialog — same blocking behavior
     // (isDismissible/enableDrag both off, so it only closes via its own
     // buttons, a timeout, or _onActivity's programmatic pop above), just
     // anchored to the bottom to match the paid-invoice countdown's look.
     final continued = await showModalBottomSheet<bool>(
-      context: context,
+      context: navContext,
       isDismissible: false,
       enableDrag: false,
       isScrollControlled: true,
@@ -143,29 +157,24 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
     );
 
     TraceLog.log('KioskIdleGuard(${_ctx.name}): sheet resolved, continued=$continued');
+    _warningShowing = false;
     if (!mounted) return;
-    setState(() => _warningShowing = false);
 
     if (continued == true) {
-      _startIdleTimer();
+      _maybeRestartTimer();
     } else {
       // Expired, or customer explicitly chose "Start New Order" — same
-      // action either way: reset and go Home. No previous-customer state
-      // should carry into whatever loads next.
+      // action either way: reset and go Home, unconditionally, regardless
+      // of cart contents or canPop() state. pushNamedAndRemoveUntil pushes
+      // Landing first and only then removes everything below it, so it's
+      // safe even when the current route is already the root — worst case
+      // it just rebuilds a fresh Landing instead of no-op'ing.
       _flow.reset();
-      if (!mounted) return;
-      final nav = Navigator.of(context);
-      // pushNamedAndRemoveUntil with (route)=>false removes ALL routes before
-      // pushing the new one. If we are already at the root (canPop==false),
-      // Flutter's history is a single entry and removing it triggers the
-      // '_history.isNotEmpty' assertion. Skip navigation — we're already home.
-      if (nav.canPop()) {
-        TraceLog.log('KioskIdleGuard(${_ctx.name}): redirecting to landing');
-        nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
-        TraceLog.log('KioskIdleGuard(${_ctx.name}): redirect call returned');
-      } else {
-        TraceLog.log('KioskIdleGuard(${_ctx.name}): already at root, skipped redirect');
-      }
+      final nav = navigatorKey.currentState;
+      if (nav == null) return;
+      TraceLog.log('KioskIdleGuard(${_ctx.name}): redirecting to landing');
+      nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
+      TraceLog.log('KioskIdleGuard(${_ctx.name}): redirect call returned');
     }
   }
 
