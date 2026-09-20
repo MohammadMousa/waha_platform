@@ -193,6 +193,16 @@ class LocalPrefs {
   // build (see main.dart, which seeds this same persisted value from that
   // define on first run — from then on this toggle is the durable control).
   // Remove alongside the rest of the trace-logging system once no longer needed.
+  // Internal/test only: when on, the "waha_pos" payment method (Waha POS)
+  // runs the Geidea-shaped USB flow (kiosk = USB host, Waha Terminal = USB
+  // accessory) instead of the backend-polling flow. Off by default. Do NOT
+  // enable with a Geidea terminal plugged in — see WahaUsbHost's device
+  // ambiguity guard.
+  static const _kWahaPosUsbEnabled = 'waha.pos_usb_enabled';
+  static bool get wahaPosUsbEnabled => _p.getBool(_kWahaPosUsbEnabled) ?? false;
+  static Future<void> setWahaPosUsbEnabled(bool value) =>
+      _p.setBool(_kWahaPosUsbEnabled, value);
+
   static const _kLoggingEnabled = 'waha.logging_enabled';
   static bool get loggingEnabled => _p.getBool(_kLoggingEnabled) ?? false;
   static Future<void> setLoggingEnabled(bool value) =>

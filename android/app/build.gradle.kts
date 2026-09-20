@@ -77,6 +77,12 @@ dependencies {
     // proguard-rules.pro) resolves transitively via this artifact's own
     // POM — no need to declare it separately.
     implementation("net.geidea.sdk:pos-comm-sdk-ksa:1.3.0")
+
+    // Unit tests for the shared Waha link codec (com.waha.link). The real
+    // org.json is needed on the test classpath — android.jar's org.json is a
+    // throwing stub in plain JVM unit tests.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 }
 
 flutter {

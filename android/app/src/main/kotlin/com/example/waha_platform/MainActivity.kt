@@ -260,6 +260,9 @@ class MainActivity : FlutterActivity() {
                     connectionEventSink = null
                 }
             })
+        // Generic Waha kiosk<->terminal USB link — separate channels/host from
+        // everything Geidea above; see WahaLinkChannel.
+        WahaLinkChannel.register(flutterEngine, this) { logTrace(it) }
         logTrace("configureFlutterEngine end")
     }
 
@@ -497,6 +500,7 @@ class MainActivity : FlutterActivity() {
         } catch (e: Throwable) {
             Log.e(TAG, "closeUsbSerialConnection failed", e)
         }
+        WahaLinkChannel.shutdown()
         super.onDestroy()
     }
 }

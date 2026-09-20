@@ -14,6 +14,7 @@ import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
 import '../state/simulator_service.dart';
 import '../services/trace_log.dart';
+import '../services/waha_usb_link_bridge.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import 'simulator_settings_screen.dart';
@@ -163,6 +164,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _terminalTimeoutError = null);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Terminal payment timeout saved.')),
+    );
+  }
+
+  bool _detectingWahaLink = false;
+
+  Future<void> _detectWahaLink() async {
+    setState(() => _detectingWahaLink = true);
+    final result = await WahaUsbLinkBridge.instance.connect();
+    if (!mounted) return;
+    setState(() => _detectingWahaLink = false);
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Icon(
+          result.ok ? Icons.check_circle_outline : Icons.error_outline,
+          color: result.ok ? Colors.green : Colors.red,
+          size: 40,
+        ),
+        title: Text(result.ok ? 'Waha Terminal Linked' : 'Waha Terminal Not Linked'),
+        content: Text(result.ok
+            ? 'AOA handshake, hello exchange and link are up.'
+            : result.describe),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+        ],
+      ),
     );
   }
 
@@ -398,6 +425,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: _detectingTerminal ? null : _detectTerminal,
             ),
           ),
+          if (LocalPrefs.wahaPosUsbEnabled) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                icon: _detectingWahaLink
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.usb),
+                label: Text(_detectingWahaLink ? 'Linking…' : 'Detect Waha USB Terminal'),
+                onPressed: _detectingWahaLink ? null : _detectWahaLink,
+              ),
+            ),
+          ],
 
           // ── Admin: Payment Methods + Integrations ─────────────────────────
           if (context.watch<PermissionService>().can('MANAGE_STORES')) ...[
@@ -502,6 +546,7 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
   // Diagnostic trace logging — off by default (see LocalPrefs.loggingEnabled).
   // Persisted, unlike _fakeTerminalEnabled above — survives restart.
   bool _loggingEnabled = LocalPrefs.loggingEnabled;
+  bool _wahaPosUsb = LocalPrefs.wahaPosUsbEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -718,6 +763,28 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       setState(() => _loggingEnabled = value);
                       LocalPrefs.setLoggingEnabled(value);
                       TraceLog.setEnabled(value);
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Waha POS over USB (test)'),
+                    subtitle: const Text(
+                      'Internal test only. Makes the "waha_pos" payment method '
+                      'talk to a Waha Terminal phone over a USB cable '
+                      '(kiosk = USB host) instead of via the backend. Do NOT '
+                      'turn on with a Geidea terminal plugged in. Reopen '
+                      'Settings after changing to see the detect button.',
+                    ),
+                    value: _wahaPosUsb,
+                    onChanged: (value) {
+                      setState(() => _wahaPosUsb = value);
+                      LocalPrefs.setWahaPosUsbEnabled(value);
+                      if (value) {
+                        WahaUsbLinkBridge.instance.start();
+                      } else {
+                        WahaUsbLinkBridge.instance.stop();
+                      }
                     },
                   ),
 

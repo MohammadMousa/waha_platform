@@ -19,6 +19,7 @@ import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../services/trace_log.dart';
+import '../services/waha_usb_link_bridge.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import '../widgets/timer_footer_sheet.dart';
@@ -484,6 +485,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   void _handleMethod(PaymentMethod method) {
     if (method.provider == 'SIMULATED') {
       _paySimulated(outcome: 'SUCCESS');
+    } else if (method.provider == 'TERMINAL' && method.key == 'waha_pos') {
+      // Checked before the generic TERMINAL branch below, which stays
+      // untouched — see _handleWahaPos's own doc comment for why this
+      // needs both provider AND key, not just provider.
+      _handleWahaPos(method);
     } else if (method.provider == 'TERMINAL') {
       _handleTerminal(method);
     } else if (method.isPaymentUrl) {
@@ -516,6 +522,51 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           child: _TerminalPaymentScreen(
             orderId: orderId,
             apiClient: apiClient,
+          ),
+        ),
+      );
+    } finally {
+      flow.setPaymentInProgress(false);
+    }
+
+    if (paidOrder != null && mounted) {
+      _onPaid(paidOrder);
+    }
+  }
+
+  // Internal/test-only transport (see the "Waha POS — USB Payment Transport
+  // Evaluation" task doc) — shares provider=='TERMINAL' with Geidea's row
+  // (payment_methods id=7, key='terminal') but has its own distinct key
+  // ('waha_pos', id=8), so _handleMethod checks both provider AND key
+  // before routing here, never touching the Geidea branch or
+  // GeideaTerminalBridge at all. Unlike Geidea, the kiosk does no
+  // USB/hardware work for this path — a separate device (the waha_terminal
+  // app) confirms the session directly to the backend over its own
+  // transport, and this dialog just polls the order like the REDIRECT/QR
+  // flows already do, waiting for status to flip to PAID.
+  Future<void> _handleWahaPos(PaymentMethod method) async {
+    final orderId = _order?.orderId;
+    if (orderId == null) return;
+    final apiClient = context.read<ApiClient>();
+    final flow = context.read<OrderFlowController>();
+
+    // Same suspension reasoning as _handleTerminal — this can sit open for
+    // a while waiting on a separate device to confirm.
+    flow.setPaymentInProgress(true);
+    final WahaOrder? paidOrder;
+    try {
+      paidOrder = await showDialog<WahaOrder>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: _WahaPosPaymentScreen(
+            orderId: orderId,
+            apiClient: apiClient,
+            useUsb: LocalPrefs.wahaPosUsbEnabled,
+            currency: storeConfigService.storeCurrency ?? _order?.currency,
           ),
         ),
       );
@@ -859,6 +910,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                                   'Invoice: manual pick ${method.key} (${method.provider})');
                               if (method.isPaymentUrl) {
                                 _handlePaymentUrl(method);
+                              } else if (method.provider == 'TERMINAL' &&
+                                  method.key == 'waha_pos') {
+                                _handleWahaPos(method);
                               } else if (method.provider == 'TERMINAL') {
                                 _handleTerminal(method);
                               } else if (method.provider == 'REDIRECT' ||
@@ -2047,6 +2101,274 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           const SizedBox(height: 12),
           Text(
             _statusLabel ?? '',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.outline),
+          ),
+          if (!done) ...[
+            const SizedBox(height: 24),
+            const LinearProgressIndicator(),
+          ],
+          const SizedBox(height: 32),
+          if (done)
+            FilledButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: Text(l10n.terminalClose))
+          else
+            OutlinedButton.icon(
+              icon: const Icon(Icons.cancel_outlined),
+              label: Text(l10n.commonCancel),
+              onPressed: _cancel,
+              style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Waha POS (internal test transport) payment dialog ─────────────────────
+// See _handleWahaPos's doc comment — this is deliberately NOT wired to
+// GeideaTerminalBridge or any native USB code. A separate app/device
+// (waha_terminal) confirms the session directly against the backend; the
+// kiosk's only job here is create-session-then-poll, same shape as the
+// REDIRECT/QR flows above, just without a URL/QR to show.
+class _WahaPosPaymentScreen extends StatefulWidget {
+  final String orderId;
+  final ApiClient apiClient;
+
+  /// Internal test transport (LocalPrefs.wahaPosUsbEnabled): true runs the
+  /// Geidea-shaped flow over the generic USB link (kiosk = host); false keeps
+  /// the backend-polling flow, which is the default and unchanged.
+  final bool useUsb;
+  final String? currency;
+
+  const _WahaPosPaymentScreen({
+    required this.orderId,
+    required this.apiClient,
+    this.useUsb = false,
+    this.currency,
+  });
+
+  @override
+  State<_WahaPosPaymentScreen> createState() => _WahaPosPaymentScreenState();
+}
+
+class _WahaPosPaymentScreenState extends State<_WahaPosPaymentScreen> {
+  // Matches waha_terminal's own documented tap timeout (see its README:
+  // "90s with no tap → session times out, retry allowed") — the kiosk's
+  // poll just needs to give up around the same point the other device does.
+  static const _maxWaitSeconds = 90;
+
+  String _statusLabel = 'Connecting…';
+  bool _failed = false;
+  TerminalSession? _session;
+  bool _started = false;
+  Timer? _pollTimer;
+  int _secondsWaited = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      _run();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  // Geidea-shaped sequence over the generic USB link: fresh reconnect every
+  // payment (never trust a cached connected flag), create the backend session,
+  // send the request over USB, then confirm or cancel the session ourselves —
+  // in this mode the terminal makes no backend calls, the kiosk owns state.
+  Future<void> _runUsb() async {
+    final link = WahaUsbLinkBridge.instance;
+    TraceLog.log('WahaPos(USB): payment run start, order ${widget.orderId}');
+    setState(() => _statusLabel = 'Connecting to terminal…');
+
+    final connected = await link.connect();
+    if (!mounted) return;
+    if (!connected.ok) {
+      TraceLog.log('WahaPos(USB): connect failed: ${connected.describe}');
+      setState(() {
+        _failed = true;
+        _statusLabel = 'Terminal not linked: ${connected.describe}';
+      });
+      return;
+    }
+
+    final TerminalSession session;
+    try {
+      session = await widget.apiClient.createTerminalSession(widget.orderId);
+    } catch (e) {
+      TraceLog.log('WahaPos(USB): session create failed: $e');
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = 'Could not start session: $e';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final currency = session.currency ?? widget.currency;
+    if (currency == null || currency.isEmpty) {
+      TraceLog.log('WahaPos(USB): no currency for session ${session.id}');
+      try { await widget.apiClient.cancelTerminalSession(session.id); } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = 'No currency for this order.';
+        });
+      }
+      return;
+    }
+
+    TraceLog.log('WahaPos(USB): session ${session.id} created, sending request');
+    setState(() {
+      _session = session;
+      _statusLabel = 'Present card on the terminal…';
+    });
+
+    final result = await link.requestPayment(
+      reference: session.orderId,
+      amount: session.amount,
+      currency: currency,
+      timeout: Duration(seconds: LocalPrefs.terminalTimeoutSeconds),
+    );
+    if (!mounted) return;
+    TraceLog.log('WahaPos(USB): result ok=${result.ok} status=${result.status} '
+        'code=${result.errorCode} message=${result.message}');
+
+    if (result.approved) {
+      try {
+        await widget.apiClient.confirmTerminalSession(
+          session.id,
+          authCode: result.approvalCode!,
+          notes: {...result.details, 'vendor': 'waha_terminal_usb'},
+        );
+        final order = await widget.apiClient.getOrder(widget.orderId);
+        TraceLog.log('WahaPos(USB): session ${session.id} confirmed, order paid');
+        if (mounted) Navigator.pop(context, order);
+      } catch (e) {
+        // Card was charged but the backend couldn't be told — never present
+        // this as a plain decline.
+        TraceLog.log('WahaPos(USB): approved but confirm-to-backend failed: $e');
+        if (mounted) {
+          setState(() {
+            _failed = true;
+            _statusLabel = AppLocalizations.of(context)!.terminalApprovedNotRecorded(e.toString());
+          });
+        }
+      }
+    } else {
+      try { await widget.apiClient.cancelTerminalSession(session.id); } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = result.message ?? result.describe;
+        });
+      }
+    }
+  }
+
+  Future<void> _run() async {
+    if (widget.useUsb) {
+      await _runUsb();
+      return;
+    }
+    TraceLog.log('WahaPos: payment run start, order ${widget.orderId}');
+    final TerminalSession session;
+    try {
+      session = await widget.apiClient.createTerminalSession(widget.orderId);
+    } catch (e) {
+      TraceLog.log('WahaPos: session create failed: $e');
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = 'Could not start session: $e';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    TraceLog.log('WahaPos: session ${session.id} created, waiting for waha_terminal to confirm');
+    setState(() {
+      _session = session;
+      _statusLabel = 'Waiting for terminal confirmation…';
+    });
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollOnce());
+  }
+
+  Future<void> _pollOnce() async {
+    _secondsWaited += 2;
+    try {
+      final order = await widget.apiClient.getOrder(widget.orderId);
+      if (order.status == 'PAID') {
+        _pollTimer?.cancel();
+        TraceLog.log('WahaPos: order ${widget.orderId} confirmed PAID');
+        if (mounted) Navigator.pop(context, order);
+        return;
+      }
+    } catch (_) {
+      // Transient poll failure — keep trying until the overall timeout.
+    }
+    if (_secondsWaited >= _maxWaitSeconds) {
+      _pollTimer?.cancel();
+      TraceLog.log('WahaPos: timed out waiting for confirmation');
+      final id = _session?.id;
+      if (id != null) {
+        try { await widget.apiClient.cancelTerminalSession(id); } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _statusLabel = 'No confirmation received — timed out.';
+        });
+      }
+    }
+  }
+
+  Future<void> _cancel() async {
+    TraceLog.log('WahaPos: payment cancelled by user');
+    _pollTimer?.cancel();
+    final ref = _session?.orderId;
+    if (widget.useUsb && ref != null) {
+      unawaited(WahaUsbLinkBridge.instance.cancel(ref));
+    }
+    final id = _session?.id;
+    if (id != null) {
+      try { await widget.apiClient.cancelTerminalSession(id); } catch (_) {}
+    }
+    if (mounted) Navigator.pop(context, null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    final done = _failed;
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          done
+              ? Icon(Icons.error_outline, size: 72, color: scheme.error)
+              : _TerminalIcon(color: scheme.primary),
+          const SizedBox(height: 24),
+          Text(
+            done ? l10n.terminalPaymentFailedTitle : 'Waha POS (test)',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _statusLabel,
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.outline),
           ),
