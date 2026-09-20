@@ -176,6 +176,7 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   // and shouldn't block or fail app startup either way.
   if (browsingModeService.mode == BrowsingMode.kiosk) {
     unawaited(GeideaTerminalBridge.instance.initialize());
+    unawaited(WahaUsbLinkBridge.instance.usbInventory(reason: 'app start'));
     // Internal Waha POS USB link — receivers only, no USB access until a
     // payment or the Settings test button calls connect().
     if (LocalPrefs.wahaPosUsbEnabled) {

@@ -103,6 +103,18 @@ class WahaUsbLinkBridge {
     }
   }
 
+  /// Passive snapshot of every attached USB device, which one Geidea's SDK
+  /// would pick, and whether this device is acting as USB host or peripheral.
+  /// Never touches the link or Geidea. With [reason] the snapshot is also
+  /// written to the trace log so it lines up with the other events.
+  Future<String> usbInventory({String? reason}) async {
+    try {
+      return (await _method.invokeMethod<String>('usbInventory', {'reason': reason})) ?? '';
+    } on PlatformException catch (e) {
+      return 'USB inventory failed: ${e.message}';
+    }
+  }
+
   Future<bool> isConnected() async {
     try {
       return (await _method.invokeMethod<bool>('isConnected')) ?? false;

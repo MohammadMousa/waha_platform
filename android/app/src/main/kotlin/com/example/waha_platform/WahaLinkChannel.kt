@@ -55,6 +55,19 @@ object WahaLinkChannel {
                     "start" -> { hostOrCreate().start(); result.success(true) }
                     "stop" -> { host?.stop(); result.success(true) }
                     "isConnected" -> result.success(host?.isConnected() ?: false)
+                    // Passive USB snapshot (see UsbInventory) — never touches the
+                    // link or Geidea. With a reason it is also written to the
+                    // trace log so it lines up with the other events.
+                    "usbInventory" -> {
+                        val reason = call.argument<String>("reason")
+                        val text = try {
+                            UsbInventory.report(appContext)
+                        } catch (e: Throwable) {
+                            "USB inventory failed: ${e.javaClass.simpleName}: ${e.message}"
+                        }
+                        if (reason != null) text.lines().forEach { trace("USB[$reason] $it") }
+                        result.success(text)
+                    }
                     "connect" -> async { hostOrCreate().connect().toMap() }
                     "requestPayment" -> {
                         val reference = call.argument<String>("reference")

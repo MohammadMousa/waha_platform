@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_config.dart';
@@ -764,6 +765,40 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       LocalPrefs.setLoggingEnabled(value);
                       TraceLog.setEnabled(value);
                     },
+                  ),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.usb),
+                      label: const Text('List attached USB devices'),
+                      onPressed: () async {
+                        final text = await WahaUsbLinkBridge.instance.usbInventory(reason: 'settings button');
+                        if (!context.mounted) return;
+                        showDialog<void>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('USB devices'),
+                            content: SingleChildScrollView(
+                              child: SelectableText(
+                                text,
+                                textDirection: TextDirection.ltr,
+                                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Clipboard.setData(ClipboardData(text: text)),
+                                child: const Text('Copy'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,

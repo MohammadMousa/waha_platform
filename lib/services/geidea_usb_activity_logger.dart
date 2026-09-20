@@ -7,6 +7,7 @@ import '../state/simulator_service.dart';
 import 'app_messenger.dart';
 import 'geidea_terminal_bridge.dart';
 import 'trace_log.dart';
+import 'waha_usb_link_bridge.dart';
 
 /// Surfaces every Geidea USB connection event (scanning, found, lost,
 /// failed) as a debug log always, and as a SnackBar toast too when the
@@ -44,6 +45,10 @@ class _GeideaUsbActivityLoggerState extends State<GeideaUsbActivityLogger> {
     // next time a payment fails with the terminal never receiving
     // anything — see _run()'s comment in invoice_screen.dart.
     TraceLog.log('GeideaUSB: $message');
+    // Passive: records every attached USB device and which one the Geidea SDK
+    // would pick, next to the Geidea event that triggered it (attach, retry,
+    // payment start, failure). Read-only, changes nothing about Geidea.
+    unawaited(WahaUsbLinkBridge.instance.usbInventory(reason: 'geidea:${event.state.name}'));
 
     final devToolsOn = !context.read<SimulatorService>().devToolsHidden;
     if (!devToolsOn) return;

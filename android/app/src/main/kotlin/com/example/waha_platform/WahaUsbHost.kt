@@ -205,17 +205,29 @@ class WahaUsbHost(
         teardown("reconnect") // never trust old state
         emit("scanning", null, "Looking for Waha terminal…")
 
+        // Always log everything attached — a real kiosk carries built-in USB
+        // devices (barcode scanner, hubs, touch controller), so this is the
+        // first thing to read when a link does not come up.
+        val attached = usbManager.deviceList.values.toList()
+        trace("attached devices: " + attached.joinToString { describe(it) }.ifEmpty { "none" })
+
         var accessory = findAccessoryDevice()
         if (accessory == null) {
-            val candidates = usbManager.deviceList.values.filter {
-                it.deviceClass != UsbConstants.USB_CLASS_HUB
+            // Only consider devices that could plausibly be a phone. Built-in
+            // kiosk peripherals (HID scanners/keyboards, printers, hubs,
+            // smart-card readers) are never sent AOA requests.
+            val candidates = attached.filter { isPhoneCandidate(it) }
+            if (candidates.isEmpty()) {
+                return failEmit(
+                    HostError.NO_DEVICE,
+                    "No phone-like USB device found. Attached: " + attached.joinToString { label(it) }.ifEmpty { "nothing" },
+                )
             }
-            if (candidates.isEmpty()) return failEmit(HostError.NO_DEVICE, "No USB device attached")
             if (candidates.size > 1) {
-                candidates.forEach { trace("candidate ${it.deviceName} vid=${it.vendorId} pid=${it.productId}") }
                 return failEmit(
                     HostError.MULTIPLE_DEVICES,
-                    "More than one USB device attached — unplug the others so AOA is not sent to the wrong one",
+                    "More than one possible terminal attached (" + candidates.joinToString { label(it) } +
+                        ") — unplug all but the terminal phone so AOA is not sent to the wrong device",
                 )
             }
             val started = startAccessoryMode(candidates[0])
@@ -228,6 +240,24 @@ class WahaUsbHost(
                 )
         }
         return openAccessoryDevice(accessory)
+    }
+
+    private fun label(d: UsbDevice): String = String.format("%04x:%04x", d.vendorId, d.productId)
+
+    private fun describe(d: UsbDevice): String {
+        val classes = (0 until d.interfaceCount).joinToString("/") { d.getInterface(it).interfaceClass.toString() }
+        return "${label(d)} devClass=${d.deviceClass} ifaceClasses=[$classes]"
+    }
+
+    private fun isPhoneCandidate(d: UsbDevice): Boolean {
+        if (d.deviceClass == UsbConstants.USB_CLASS_HUB) return false
+        for (i in 0 until d.interfaceCount) {
+            when (d.getInterface(i).interfaceClass) {
+                UsbConstants.USB_CLASS_HID, UsbConstants.USB_CLASS_PRINTER,
+                UsbConstants.USB_CLASS_HUB, UsbConstants.USB_CLASS_CSCID -> return false
+            }
+        }
+        return true
     }
 
     private fun findAccessoryDevice(): UsbDevice? =
