@@ -103,8 +103,7 @@ class SuccessScreen extends StatelessWidget {
                   FilledButton(
                     onPressed: () {
                       context.read<OrderFlowController>().reset();
-                      Navigator.of(context)
-                          .pushNamedAndRemoveUntil(Routes.landing, (r) => false);
+                      goHomeKeepingLanding(Navigator.of(context));
                     },
                     child: Text(l10n.successNewOrder),
                   ),

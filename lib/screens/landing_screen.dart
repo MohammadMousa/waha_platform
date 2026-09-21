@@ -398,7 +398,12 @@ class _WebViewLandingState extends State<_WebViewLanding> {
   // _dismissing guards against the navigator assertion that fires when this is
   // called multiple times while the navigator is already mid-transition.
   void _onFlowChanged() {
-    if (!mounted || _dismissing) return;
+    if (!mounted) return;
+    // Landing now survives resets (goHomeKeepingLanding), so re-arm the
+    // latch once the cart is empty again — otherwise the second customer's
+    // first item would never open the cart.
+    if (_flow!.cart.isEmpty) _dismissing = false;
+    if (_dismissing) return;
     if (_flow!.cart.isNotEmpty) {
       _dismissing = true;
       Navigator.of(context).pushNamed(Routes.cart);

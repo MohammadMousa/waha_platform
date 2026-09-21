@@ -202,8 +202,7 @@ class _CartScreenState extends State<CartScreen> {
                               if (isShopping) {
                                 openCameraAndAddToCart(context);
                               } else {
-                                Navigator.of(context).pushNamedAndRemoveUntil(
-                                    Routes.landing, (r) => false);
+                                goHomeKeepingLanding(Navigator.of(context));
                               }
                             },
                           ),
@@ -256,8 +255,7 @@ class _CartScreenState extends State<CartScreen> {
             canCheckout: flow.cart.isNotEmpty && !flow.busy,
             onCancel: () {
               context.read<OrderFlowController>().clearCart();
-              Navigator.of(context)
-                  .pushNamedAndRemoveUntil(Routes.landing, (r) => false);
+              goHomeKeepingLanding(Navigator.of(context));
             },
             onCheckout: () => Navigator.of(context).pushNamed(Routes.checkout),
           ),

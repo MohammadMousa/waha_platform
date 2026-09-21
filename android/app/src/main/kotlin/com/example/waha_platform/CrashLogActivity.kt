@@ -29,20 +29,21 @@ import java.io.File
  * root-caused and fixed (alongside the rest of the trace-logging system).
  */
 class CrashLogActivity : Activity() {
+    private lateinit var logText: TextView
+    private lateinit var scroll: ScrollView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val content = readLog()
-
-        val logText = TextView(this).apply {
-            text = content
+        logText = TextView(this).apply {
+            text = readLog()
             textSize = 13f
             setTextColor(Color.WHITE)
             setPadding(32, 32, 32, 32)
             setTextIsSelectable(true)
         }
 
-        val scroll = ScrollView(this).apply {
+        scroll = ScrollView(this).apply {
             setBackgroundColor(Color.BLACK)
             addView(logText)
         }
@@ -67,8 +68,11 @@ class CrashLogActivity : Activity() {
             recreate()
         }
 
+        val reloadButton = actionButton("Reload") { reload() }
+
         val buttonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            addView(reloadButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(copyButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(shareButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(clearButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -88,6 +92,20 @@ class CrashLogActivity : Activity() {
         }
 
         setContentView(root)
+    }
+
+    // The log is written while this screen may already be open or
+    // backgrounded, so re-read on every return to the foreground instead of
+    // showing whatever onCreate saw.
+    override fun onResume() {
+        super.onResume()
+        reload()
+    }
+
+    private fun reload() {
+        logText.text = readLog()
+        // Newest entries are appended at the bottom.
+        scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
     private fun actionButton(label: String, onClick: () -> Unit): TextView {

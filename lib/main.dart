@@ -17,6 +17,7 @@ import 'services/geidea_usb_activity_logger.dart';
 import 'services/local_prefs.dart';
 import 'services/server_discovery.dart';
 import 'services/trace_log.dart';
+import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
 import 'state/browsing_mode_service.dart';
 import 'state/edit_mode_service.dart';
@@ -175,6 +176,7 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   // and shouldn't block or fail app startup either way.
   if (browsingModeService.mode == BrowsingMode.kiosk) {
     unawaited(GeideaTerminalBridge.instance.initialize());
+    UsbDiagnostics.logSnapshot('app start');
   }
 }
 

@@ -38,6 +38,18 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   _QrPhase _phase = _QrPhase.waiting;
   Timer? _countdownTimer;
   Duration _remaining = Duration.zero;
+
+  // An expired QR used to wait for a tap on its button. While this dialog is
+  // open the payment-in-progress flag stays on, which suspends the idle
+  // guard — so a customer who walked away left the kiosk stuck here for good.
+  Timer? _expiredCloseTimer;
+
+  void _scheduleExpiredClose() {
+    _expiredCloseTimer?.cancel();
+    _expiredCloseTimer = Timer(const Duration(seconds: 20), () {
+      if (mounted) Navigator.of(context).pop(null);
+    });
+  }
   http.Client? _sseClient;
   StreamSubscription<String>? _sseSub;
 
@@ -47,6 +59,7 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
     _remaining = widget.expiresAt.difference(DateTime.now());
     if (_remaining.isNegative) {
       _phase = _QrPhase.expired;
+      _scheduleExpiredClose();
     } else {
       _startCountdown();
       _subscribeToSse();
@@ -59,7 +72,10 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
       if (!mounted) return;
       if (rem.isNegative) {
         _countdownTimer?.cancel();
-        if (_phase == _QrPhase.waiting) setState(() => _phase = _QrPhase.expired);
+        if (_phase == _QrPhase.waiting) {
+          setState(() => _phase = _QrPhase.expired);
+          _scheduleExpiredClose();
+        }
       } else {
         setState(() => _remaining = rem);
       }
@@ -134,6 +150,7 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _expiredCloseTimer?.cancel();
     _cancelSse();
     super.dispose();
   }

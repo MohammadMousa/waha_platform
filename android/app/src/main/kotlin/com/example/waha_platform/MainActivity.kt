@@ -260,6 +260,8 @@ class MainActivity : FlutterActivity() {
                     connectionEventSink = null
                 }
             })
+        // Read-only USB snapshot channel — separate from everything Geidea above.
+        UsbDiagnosticsChannel.register(flutterEngine, this) { logTrace(it) }
         logTrace("configureFlutterEngine end")
     }
 

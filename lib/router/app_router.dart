@@ -68,6 +68,27 @@ class KioskRouteObserver extends NavigatorObserver {
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => _update(newRoute);
 }
 
+/// Returns to Landing without rebuilding it.
+///
+/// Landing is the root route and hosts a WebView. Replacing it with
+/// pushNamedAndRemoveUntil(landing, (_) => false) destroys the live WebView and
+/// builds a new one, which shows a blank screen until the page paints again
+/// on every idle reset / new order — and creating and destroying WebViews
+/// repeatedly is costly on the kiosk's old Android WebView. Popping down to
+/// the root keeps the already-painted Landing alive instead. Falls back to
+/// the rebuild only if the root is somehow not Landing (e.g. a login flow
+/// that replaced it).
+void goHomeKeepingLanding(NavigatorState nav) {
+  String? rootName;
+  nav.popUntil((route) {
+    if (route.isFirst) rootName = route.settings.name;
+    return route.isFirst;
+  });
+  if (rootName != Routes.landing) {
+    nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
+  }
+}
+
 class Routes {
   static const landing = '/';
   static const scan = '/scan';
@@ -133,17 +154,14 @@ class Routes {
   static const scanEnabledRoutes = {landing, scan, cart, checkout, invoice, pay, success,
       browse, categories, search, productDetail};
 
-  /// Which non-Landing routes represent "after invoice" for idle-timer
+  /// Which non-Landing routes count as "after invoice" for idle-timer
   /// purposes (shorter, display-oriented countdown vs. the general
-  /// before-invoice one). `invoice` itself is excluded from receiving any
-  /// guard at all now (see onGenerateRoute) — it's listed here only so a
-  /// direct check against this set still classifies it correctly if that
-  /// ever changes back. `success` is still guarded — worth knowing that
-  /// it has the exact same "cart's guard is still alive underneath"
-  /// exposure `invoice` had (see onGenerateRoute's comment on why invoice
-  /// was excluded); success just doesn't have an auto-select-style escape
-  /// hatch of its own the way invoice now does, so it hasn't been touched.
-  static const afterInvoiceRoutes = {invoice, success};
+  /// before-invoice one). `invoice` is deliberately NOT here: an invoice
+  /// that is still unpaid is a before-payment screen — the customer may be
+  /// fetching a card or a phone — so it gets the longer before-invoice
+  /// window. Once it is paid the guard suspends itself (see
+  /// KioskIdleGuard._isPaid) and the paid dialog owns its own countdown.
+  static const afterInvoiceRoutes = {success};
 }
 
 /// Route guard + idle-timer application.
@@ -316,10 +334,12 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
   // there is exactly one Timer and one "warning showing" flag in the
   // entire app, however many guarded routes are stacked underneath.
   //
-  // Routes.invoice still gets no guard at all — its own auto-select/
-  // auto-pick logic (see InvoiceScreen) always resolves within a few
-  // seconds on its own, which a generic idle-warning sheet doesn't need to
-  // duplicate.
+  // Routes.invoice IS guarded (as a before-invoice screen): a customer who
+  // creates an invoice and walks away, or backs out of a failed/cancelled
+  // payment, must not be left on the unpaid invoice forever. The
+  // auto-select/auto-pick logic in InvoiceScreen only covers the first few
+  // seconds after the screen loads and never re-arms; this single guard
+  // covers everything after that.
 
   return MaterialPageRoute(
     settings: settings,

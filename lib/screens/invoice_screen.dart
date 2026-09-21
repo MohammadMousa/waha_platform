@@ -55,13 +55,13 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   int _pollAttempts = 0;
   static const _maxPollAttempts = 150; // ~5 min at 2s
 
-  // Auto-select/auto-pick — the ONLY thing standing between this screen and
-  // sitting forever with no idle guard of its own (see app_router.dart's
-  // comment on why invoice is deliberately excluded from KioskIdleGuard).
-  // Three cases, all armed only on the initial load (see _loadOrder); a
-  // decline or a cancelled redirect returning to _Phase.loaded does NOT
-  // re-arm any of them, so a customer is never silently re-charged after
-  // backing out once, and never auto-picked into a second attempt either:
+  // Auto-select/auto-pick — a convenience for the first few seconds after
+  // the screen loads, NOT a way out of this screen: sitting idle here is
+  // handled by the single app-wide KioskIdleGuard (see app_router.dart).
+  // Armed only on the initial load (see _loadOrder); a decline or a
+  // cancelled redirect returning to _Phase.loaded does NOT re-arm it, so a
+  // customer is never silently re-charged after backing out once, and never
+  // auto-picked into a second attempt either:
   //  - Exactly one method: auto-select it after a short delay — skips the
   //    pointless extra tap.
   //  - More than one: auto-pick after a longer delay if the customer
@@ -71,16 +71,12 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   //    in `_methods`), not a live hardware ping — if the hardware itself
   //    turns out not to work, _handleTerminal's own failed/retry state
   //    handles that already, same as a manual pick would.
-  //  - Zero methods (e.g. a transient getPaymentMethods() failure): no
-  //    method to pick at all, so instead of sitting stuck forever with
-  //    nothing else watching this screen, fall back to redirecting home
-  //    after a longer wait — see _startNoMethodsFallback.
+  //  - Zero methods (e.g. a transient getPaymentMethods() failure): nothing
+  //    to pick, so nothing is armed — the idle guard resets the session.
   static const _autoSelectDelaySeconds = 4;
   static const _autoPickDelaySeconds = 5;
-  static const _noMethodsFallbackSeconds = 45;
   Timer? _autoSelectTimer;
   int? _autoSelectSecondsLeft;
-  Timer? _noMethodsFallbackTimer;
 
   @override
   void initState() {
@@ -93,7 +89,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _autoSelectTimer?.cancel();
-    _noMethodsFallbackTimer?.cancel();
     // Safety net: if this screen is disposed while still polling (left the
     // flow some way other than _pollOnce/_cancelWaiting reaching one of
     // their own end states), paymentInProgress would otherwise stay stuck
@@ -105,8 +100,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   void _maybeStartAutoSelect() {
     if (_methods.isEmpty) {
-      TraceLog.log('Invoice: no payment methods, arming ${_noMethodsFallbackSeconds}s fallback');
-      _startNoMethodsFallback();
+      TraceLog.log('Invoice: no payment methods — idle guard will reset the session');
       return;
     }
     final delay = _methods.length == 1 ? _autoSelectDelaySeconds : _autoPickDelaySeconds;
@@ -134,23 +128,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       if (method.provider == 'TERMINAL') return method;
     }
     return _methods.first;
-  }
-
-  /// The only safety net left for the rare case where there's nothing at
-  /// all to auto-pick from — see this class's own doc comment above. Not a
-  /// KioskIdleGuard: doesn't reset on activity, doesn't warn first, just a
-  /// single long-wait fallback for a screen that has no other way out.
-  void _startNoMethodsFallback() {
-    _noMethodsFallbackTimer?.cancel();
-    _noMethodsFallbackTimer = Timer(const Duration(seconds: _noMethodsFallbackSeconds), () {
-      if (!mounted) return;
-      TraceLog.log('Invoice: no-methods fallback fired, redirecting home');
-      context.read<OrderFlowController>().reset();
-      final nav = Navigator.of(context);
-      if (nav.canPop()) {
-        nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
-      }
-    });
   }
 
   void _cancelAutoSelect() {
@@ -240,8 +217,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   void _resetAndGoHome() {
     context.read<OrderFlowController>().reset();
     if (mounted) {
-      Navigator.of(context)
-          .pushNamedAndRemoveUntil(Routes.landing, (r) => false);
+      goHomeKeepingLanding(Navigator.of(context));
     }
   }
 
@@ -1776,6 +1752,13 @@ class _MobilePaymentScreen extends StatefulWidget {
 class _MobilePaymentScreenState extends State<_MobilePaymentScreen> {
   Timer? _pollTimer;
 
+  // Same overall cap as the redirect flow's polling (~5 min, see
+  // _maxPollAttempts): without one this dialog waits forever on a customer
+  // who walked away, and the payment-in-progress flag it holds keeps the idle
+  // guard suspended for good.
+  static const _maxPolls = 100; // 100 x 3 s
+  int _polls = 0;
+
   @override
   void initState() {
     super.initState();
@@ -1789,6 +1772,11 @@ class _MobilePaymentScreenState extends State<_MobilePaymentScreen> {
   }
 
   void _poll() {
+    if (++_polls > _maxPolls) {
+      _pollTimer?.cancel();
+      if (mounted) Navigator.of(context).pop(null);
+      return;
+    }
     widget.onRefreshOrder().then((order) {
       if (order.status == 'PAID' && mounted) {
         _pollTimer?.cancel();
@@ -1904,6 +1892,29 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
   TerminalSession? _session;
   bool _started = false;
 
+  // A failed attempt (terminal not found, session couldn't start, declined)
+  // used to sit here until someone tapped Close — and while this dialog is
+  // open the payment-in-progress flag stays on, which suspends the idle
+  // guard, so an abandoned kiosk could never recover. Close it on its own
+  // after a readable delay; the invoice screen underneath is then covered by
+  // the idle guard. Deliberately NOT applied to "approved but not recorded":
+  // that message is for staff (the card was charged) and must stay up.
+  static const _failedAutoClose = Duration(seconds: 20);
+  Timer? _autoCloseTimer;
+
+  void _scheduleAutoClose() {
+    _autoCloseTimer?.cancel();
+    _autoCloseTimer = Timer(_failedAutoClose, () {
+      if (mounted) Navigator.pop(context, null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoCloseTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1946,6 +1957,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
         _failed = true;
         _statusLabel = l10n.terminalNotConnected;
       });
+      _scheduleAutoClose();
       return;
     }
 
@@ -1959,6 +1971,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           _failed = true;
           _statusLabel = l10n.terminalSessionStartFailed(e.toString());
         });
+        _scheduleAutoClose();
       }
       return;
     }
@@ -2007,6 +2020,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           _failed = true;
           _statusLabel = result.errorMessage ?? l10n.paymentDeclined;
         });
+        _scheduleAutoClose();
       }
     }
   }

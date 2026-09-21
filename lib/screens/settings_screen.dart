@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_config.dart';
@@ -14,6 +15,7 @@ import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
 import '../state/simulator_service.dart';
 import '../services/trace_log.dart';
+import '../services/usb_diagnostics.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import 'simulator_settings_screen.dart';
@@ -503,6 +505,43 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
   // Persisted, unlike _fakeTerminalEnabled above — survives restart.
   bool _loggingEnabled = LocalPrefs.loggingEnabled;
 
+  // Opens a dialog with the current USB snapshot (see UsbDiagnostics). The
+  // Copy button confirms in place ("Copied"), since a snackbar would sit
+  // behind the dialog's barrier.
+  Future<void> _showUsbDevices() async {
+    final text = await UsbDiagnostics.inventory(reason: 'settings');
+    if (!mounted) return;
+    var copied = false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('USB devices'),
+          content: SingleChildScrollView(
+            child: SelectableText(
+              text,
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: text));
+                setDialogState(() => copied = true);
+              },
+              child: Text(copied ? 'Copied' : 'Copy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -720,7 +759,21 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       TraceLog.setEnabled(value);
                     },
                   ),
-
+                  // A plain row with a chevron, not a switch: tapping it reads
+                  // the USB state and opens a dialog with the result.
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.usb),
+                    title: const Text('List attached USB devices'),
+                    subtitle: const Text(
+                      'Shows every USB device, whether this device is a USB '
+                      'host or peripheral, and which device the Geidea SDK '
+                      'would use. Read-only.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _showUsbDevices,
+                  ),
                 ],
               ),
             ),

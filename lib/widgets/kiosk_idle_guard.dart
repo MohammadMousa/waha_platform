@@ -51,7 +51,6 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
       browsingModeService.mode == BrowsingMode.kiosk &&
       _routeName != null &&
       _routeName != Routes.landing &&
-      _routeName != Routes.invoice &&
       Routes.kioskAllowlist.contains(_routeName);
 
   _IdleContext get _ctx => Routes.afterInvoiceRoutes.contains(_routeName)
@@ -165,15 +164,14 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
     } else {
       // Expired, or customer explicitly chose "Start New Order" — same
       // action either way: reset and go Home, unconditionally, regardless
-      // of cart contents or canPop() state. pushNamedAndRemoveUntil pushes
-      // Landing first and only then removes everything below it, so it's
-      // safe even when the current route is already the root — worst case
-      // it just rebuilds a fresh Landing instead of no-op'ing.
+      // of cart contents. goHomeKeepingLanding pops back to the existing
+      // root Landing (keeping its WebView alive, so no blank screen) and
+      // only rebuilds Landing if the root somehow isn't Landing.
       _flow.reset();
       final nav = navigatorKey.currentState;
       if (nav == null) return;
       TraceLog.log('KioskIdleGuard(${_ctx.name}): redirecting to landing');
-      nav.pushNamedAndRemoveUntil(Routes.landing, (route) => false);
+      goHomeKeepingLanding(nav);
       TraceLog.log('KioskIdleGuard(${_ctx.name}): redirect call returned');
     }
   }
