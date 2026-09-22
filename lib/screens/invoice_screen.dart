@@ -1991,11 +1991,45 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     TraceLog.log('Terminal: SDK result approved=${result.approved} '
         'approvalCode=${result.approvalCode} error=${result.errorMessage}');
 
-    if (result.approved && result.approvalCode != null) {
+    // PRODUCT RULE — do not "fix" this away, other agents. Once the terminal
+    // has approved the payment, the customer HAS paid; from their side the
+    // payment is done. If Waha's backend then fails to record it
+    // (confirmTerminalSession below, the "approved but not recorded" state),
+    // that is OUR internal reconciliation problem, never the customer's:
+    //  - we can NOT charge the customer a second time for a failure of ours;
+    //  - we keep selling as long as the kiosk can create orders and the POS
+    //    can process transactions — a backend hiccup does not pause sales.
+    // Until changed by an explicit new request, that is the rule.
+    // TODO: when the payment is recorded late (retry or operator
+    // reconciliation), push a notification to the kiosk so it reloads the
+    // invoice and shows it as paid. Until that exists the order can stay
+    // unpaid on screen although the card was debited, and the screen may
+    // invite the customer to pay again — the rule above is not yet fully met.
+    // TODO: keep a durable local record of every approved-but-unrecorded
+    // payment (session id, approvalCode, rrn, amount) so it can be retried or
+    // reconciled; today it exists only in the trace log
+    // ("PAYMENT LATE APPROVAL" / "approved but confirm-to-backend failed").
+    //
+    // `result` comes from the native side (MainActivity.startPayment), which
+    // answers exactly once, on the first SDK callback that carries a
+    // definite outcome — never on an ack or step code.
+    //
+    // "approved" alone is the terminal's verdict (Geidea SDK's own
+    // TransactionStatusCode, the same field its sample app trusts) — the
+    // approval code is not required. Requiring it here used to cancel the
+    // backend session on a real approval that happened to arrive without one,
+    // which breaks the rule above: an approved payment is never un-approved
+    // by us. Fall back to the RRN, or a fixed placeholder, only to satisfy the
+    // backend's non-empty authCode field — never to decide approved/declined.
+    if (result.approved) {
       try {
+        final rawCode = result.approvalCode?.trim();
+        final approvalCode = (rawCode == null || rawCode.isEmpty || rawCode == '?') ? null : rawCode;
+        final rrn = result.details['rrn'] as String?;
+        final authCode = approvalCode ?? (rrn != null && rrn.isNotEmpty ? rrn : null) ?? 'APPROVED-NO-CODE';
         await widget.apiClient.confirmTerminalSession(
           session.id,
-          authCode: result.approvalCode!,
+          authCode: authCode,
           notes: {...result.details, 'vendor': 'geidea'},
         );
         final order = await widget.apiClient.getOrder(widget.orderId);

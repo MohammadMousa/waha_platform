@@ -75,6 +75,7 @@ object UsbInventory {
                     usb.hasPermission(d), serial, names, ifaces,
                 ),
             )
+            if (serial) appendInterfaceDetail(sb, d)
         }
         sb.append(
             if (sdkPick != null) "Geidea SDK would pick (first sdkSerial=true in list order): ${sdkPick.deviceName} " +
@@ -82,6 +83,33 @@ object UsbInventory {
             else "Geidea SDK would find no serial device (it would report NO_USB)\n",
         )
         return sb.toString().trimEnd()
+    }
+
+    // One line per interface with its endpoints, marking the two the SDK's CDC
+    // driver (felhr CDCSerialDevice) actually uses: the FIRST class-10 (CDC data)
+    // interface for I/O and the FIRST class-2 (CDC control) interface for line
+    // settings. A composite device with several CDC pairs only ever gets the first.
+    private fun appendInterfaceDetail(sb: StringBuilder, d: UsbDevice) {
+        val firstData = (0 until d.interfaceCount).firstOrNull { d.getInterface(it).interfaceClass == UsbConstants.USB_CLASS_CDC_DATA }
+        val firstControl = (0 until d.interfaceCount).firstOrNull { d.getInterface(it).interfaceClass == UsbConstants.USB_CLASS_COMM }
+        for (n in 0 until d.interfaceCount) {
+            val i = d.getInterface(n)
+            val eps = (0 until i.endpointCount).joinToString(" ") {
+                val e = i.getEndpoint(it)
+                String.format("0x%02X/type%d/%dB", e.address, e.type, e.maxPacketSize)
+            }
+            val mark = when (n) {
+                firstData -> "  <-- SDK data channel (first class 10)"
+                firstControl -> "  <-- SDK control interface (first class 2)"
+                else -> ""
+            }
+            sb.append(
+                String.format(
+                    "      iface#%d id=%d class=%d/%d/%d endpoints: %s%s\n",
+                    n, i.id, i.interfaceClass, i.interfaceSubclass, i.interfaceProtocol, eps.ifEmpty { "none" }, mark,
+                ),
+            )
+        }
     }
 
     // The exact rule the SDK uses (UsbService.a -> UsbSerialDevice.isSupported).

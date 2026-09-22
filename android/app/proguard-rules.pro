@@ -7,6 +7,15 @@
 # isMinifyEnabled explicitly for that to be true). These rules were live
 # the whole time.
 -keep class geidea.net.terminal_comm_api.** {*;}
+
+# The SDK's USB-serial driver (felhr, package com.felhr.usbserial) logs under
+# its own class name (CLASS_ID = getSimpleName()): "Interface succesfully
+# claimed", "Interface could not be claimed", "Control Transfer Response: N".
+# R8 was renaming it (mapping.txt: CDCSerialDevice -> i2.b), so those log tags
+# became "b", "i" ... and SdkLogCapture (which filters by tag) never saw them.
+# Keeping the NAMES (not the code) makes the driver's own port-setup results
+# visible in the diagnostic log. No behaviour change.
+-keepnames class com.felhr.usbserial.**
 -keep class com.jcraft.jsch.jce.*
 -keep class * extends com.jcraft.jsch.KeyExchange
 -keep class com.jcraft.jsch.**

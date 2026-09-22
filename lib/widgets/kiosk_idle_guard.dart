@@ -117,12 +117,12 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
 
   void _onActivity() {
     if (_warningShowing) {
-      // A pointer tap can't reach here — the warning's modal barrier
-      // absorbs it — but a hardware scanner's keystrokes (_onKeyEvent) and
-      // the resulting OrderFlowController notification both bypass hit-
-      // testing entirely. A scan while the warning is up is unambiguous
-      // proof the customer is present: dismiss it the same as tapping
-      // Continue, instead of silently ignoring the activity.
+      // Only NON-pointer activity gets here while the warning is up (see
+      // build(): pointer events are ignored then): a hardware scanner's
+      // keystrokes (_onKeyEvent) and the resulting OrderFlowController
+      // notification bypass hit-testing entirely. A scan while the warning is
+      // up is unambiguous proof the customer is present: dismiss it the same
+      // as tapping Continue, instead of silently ignoring the activity.
       _dismissPing.value = !_dismissPing.value;
       return;
     }
@@ -180,8 +180,14 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _onActivity(),
-      onPointerMove: (_) => _onActivity(),
+      // Ignore pointer events while the warning sheet is open. The sheet is
+      // INSIDE this Listener's subtree, so a finger-down on its "Start New
+      // Order" button used to reach _onActivity() first, which dismissed the
+      // sheet as "Continue" (the ping below) before the button's own onPressed
+      // (fired on release) could run — New Order just hid the timer. The
+      // sheet handles its own taps; the modal barrier is not dismissible.
+      onPointerDown: (_) { if (!_warningShowing) _onActivity(); },
+      onPointerMove: (_) { if (!_warningShowing) _onActivity(); },
       child: widget.child,
     );
   }

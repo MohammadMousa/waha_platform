@@ -77,6 +77,9 @@ dependencies {
     // proguard-rules.pro) resolves transitively via this artifact's own
     // POM — no need to declare it separately.
     implementation("net.geidea.sdk:pos-comm-sdk-ksa:1.3.0")
+
+    // JVM unit tests (PaymentCallbackClassifierTest) — pure Kotlin, no device.
+    testImplementation("junit:junit:4.13.2")
 }
 
 flutter {

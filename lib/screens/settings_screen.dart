@@ -511,12 +511,100 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
   Future<void> _showUsbDevices() async {
     final text = await UsbDiagnostics.inventory(reason: 'settings');
     if (!mounted) return;
+    await _showTextDialog('USB devices', text);
+  }
+
+  // Runs [run] behind a progress dialog, then shows its text. For the
+  // terminal tools below, some of which take several seconds.
+  Future<void> _showDiagnostic(String title, Future<String> Function() run) async {
+    final nav = Navigator.of(context, rootNavigator: true);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: const Row(
+          children: [
+            SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3)),
+            SizedBox(width: 16),
+            Expanded(child: Text('Running…')),
+          ],
+        ),
+      ),
+    );
+    String text;
+    try {
+      text = await run();
+    } catch (e) {
+      text = 'Failed: $e';
+    }
+    if (!mounted) return;
+    nav.pop();
+    await _showTextDialog(title, text);
+  }
+
+  Future<String> _uploadLogText() async {
+    final r = await GeideaTerminalBridge.instance.uploadLog();
+    if (r['ok'] == true) {
+      return 'Uploaded.\n\n'
+          'LOG ID: ${r['id']}\n'
+          '${r['url']}\n\n'
+          '${r['fileName']} (${r['bytes']} bytes)\n\n'
+          'Send the LOG ID to the developer.';
+    }
+    return 'Upload FAILED.\n\n${r['message'] ?? 'unknown error'}\n\nServer: ${r['baseUrl'] ?? 'unknown'}';
+  }
+
+  Future<void> _confirmClearLog() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear log?'),
+        content: const Text('Deletes the trace log file on this device. It cannot be undone — upload it first if you still need it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final cleared = await GeideaTerminalBridge.instance.clearLog();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(cleared ? 'Log cleared' : 'No log file to clear')),
+    );
+  }
+
+  Future<String> _handshakeText() async {
+    final r = await GeideaTerminalBridge.instance.checkStatus();
+    final status = '${r['status']}';
+    final verdict = switch (status) {
+      'ok' => 'The terminal ANSWERED over USB.',
+      'error' => 'The terminal or SDK answered with an error.',
+      'timeout' => 'NO reply. Either the SDK dropped the write (serial port not open) or the terminal did not answer. Check the SDK log lines below / in the trace log.',
+      'busy' => 'A payment is waiting on the terminal.',
+      _ => 'Handshake could not run.',
+    };
+    return 'GEIDEA TERMINAL STATUS (SDK startCheckStatus over USB)\n'
+        'status:  $status\n'
+        'elapsed: ${r['elapsedMs'] ?? '-'} ms\n'
+        'message: ${r['message'] ?? ''}\n'
+        'json:    ${r['json'] ?? ''}\n'
+        'raw:     ${r['raw'] ?? ''}\n'
+        '=> $verdict\n\n'
+        'VERDICT\n${r['verdict'] ?? '-'}\n\n'
+        'SIGNAL LADDER (each fact separate)\n${r['ladder'] ?? '-'}\n\n'
+        'TIMELINE (ms since the request started)\n${r['timeline'] ?? '-'}\n\n'
+        '${await GeideaTerminalBridge.instance.sdkState()}';
+  }
+
+  Future<void> _showTextDialog(String title, String text) async {
     var copied = false;
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('USB devices'),
+          title: Text(title),
           content: SingleChildScrollView(
             child: SelectableText(
               text,
@@ -759,6 +847,39 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       TraceLog.setEnabled(value);
                     },
                   ),
+                  // Quick access to the trace log without leaving the kiosk app.
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(left: 12),
+                    dense: true,
+                    leading: const Icon(Icons.description_outlined),
+                    title: const Text('Trace log — quick actions'),
+                    subtitle: const Text('Open the viewer, upload the log to Waha, or clear it.'),
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: const Icon(Icons.article_outlined),
+                        title: const Text('Open log viewer'),
+                        onTap: () => GeideaTerminalBridge.instance.openLogViewer(),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: const Icon(Icons.cloud_upload_outlined),
+                        title: const Text('Upload log to Waha'),
+                        subtitle: const Text('Sends the last ~1 MB of the log; shows a LOG ID to pass on.'),
+                        onTap: () => _showDiagnostic('Upload log', _uploadLogText),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: const Icon(Icons.delete_outline),
+                        title: const Text('Clear log'),
+                        onTap: _confirmClearLog,
+                      ),
+                    ],
+                  ),
                   // A plain row with a chevron, not a switch: tapping it reads
                   // the USB state and opens a dialog with the result.
                   ListTile(
@@ -773,6 +894,86 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _showUsbDevices,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.handshake_outlined),
+                    title: const Text('Check Geidea Terminal Status'),
+                    subtitle: const Text(
+                      'Calls the real Geidea startCheckStatus() over USB and '
+                      'waits up to 6 s. Shows request started / sent / '
+                      'response, the exact SDK result and timing. Unlike '
+                      '"Detect", this proves the terminal answers.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showDiagnostic('Geidea terminal status', _handshakeText),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: const Text('Run Full Geidea Diagnostic'),
+                    subtitle: const Text(
+                      'One complete report (~30 s): USB environment, whether '
+                      'the serial port really opens, the real status request '
+                      'with timeline, a raw probe of every terminal channel, '
+                      'and a verdict on where communication stops. Briefly '
+                      'disconnects the SDK — do not run during a payment.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showDiagnostic(
+                      'Full Geidea diagnostic',
+                      GeideaTerminalBridge.instance.fullDiagnostic,
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.history_toggle_off),
+                    title: const Text('Previous exit reasons'),
+                    subtitle: const Text(
+                      'Why Android says the app\'s earlier processes ended '
+                      '(crash, low memory, force-stop...). Android 11 or newer.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showDiagnostic(
+                      'Previous exit reasons',
+                      GeideaTerminalBridge.instance.exitReasons,
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.hub_outlined),
+                    title: const Text('SDK internal state & logs'),
+                    subtitle: const Text(
+                      'What the Geidea SDK believes right now (port open? '
+                      'service bound?), its own log lines and log file, and '
+                      'the USB inventory. Read-only.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showDiagnostic(
+                      'SDK internal state',
+                      GeideaTerminalBridge.instance.sdkState,
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.cable),
+                    title: const Text('Probe USB serial channels (raw)'),
+                    subtitle: const Text(
+                      'Opens each serial channel of the terminal on its own, '
+                      'sends the check command and shows which one answers. '
+                      'Briefly disconnects the SDK (it reconnects after) — '
+                      'do not run during a payment.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showDiagnostic(
+                      'USB channel probe',
+                      GeideaTerminalBridge.instance.probeChannels,
+                    ),
                   ),
                 ],
               ),

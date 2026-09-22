@@ -1,6 +1,7 @@
 package com.example.waha_platform
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -22,15 +23,21 @@ import java.io.File
  * regardless of whether MainActivity can start at all, so the trace trail
  * written by MainActivity.logTrace() (native side) and TraceLog (Dart
  * side, via the logTrace method channel case) before it died is still
- * readable and photographable/copyable/shareable — see the button row
+ * readable and photographable/copyable/shareable — see the button rows
  * below. Both logTrace() and TraceLog respect LocalPrefs.loggingEnabled
  * (false by default); this screen just displays whatever's already there
  * regardless of the current flag value. Remove once the startup crash is
  * root-caused and fixed (alongside the rest of the trace-logging system).
+ *
+ * Five actions in two rows, because a single row of five no longer fits the
+ * kiosk's screen width: Reload / Copy / Share on top, Upload / Clear below.
+ * Upload sends the log to the Waha backend (see LogUploader) so a kiosk
+ * nobody can reach can still be read remotely.
  */
 class CrashLogActivity : Activity() {
     private lateinit var logText: TextView
     private lateinit var scroll: ScrollView
+    private lateinit var uploadButton: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +61,7 @@ class CrashLogActivity : Activity() {
             Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
         }
 
-        val shareButton = actionButton("Share / export") {
+        val shareButton = actionButton("Share") {
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_SUBJECT, "Waha startup log")
@@ -70,13 +77,7 @@ class CrashLogActivity : Activity() {
 
         val reloadButton = actionButton("Reload") { reload() }
 
-        val buttonRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(reloadButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(copyButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(shareButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(clearButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        }
+        uploadButton = actionButton("Upload to Waha") { upload() }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -86,7 +87,11 @@ class CrashLogActivity : Activity() {
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             )
             addView(
-                buttonRow,
+                buttonRow(reloadButton, copyButton, shareButton),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            )
+            addView(
+                buttonRow(uploadButton, clearButton),
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             )
         }
@@ -108,6 +113,34 @@ class CrashLogActivity : Activity() {
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
+    private fun upload() {
+        uploadButton.isEnabled = false
+        uploadButton.text = "Uploading…"
+        Thread {
+            val result = LogUploader.upload(applicationContext)
+            runOnUiThread {
+                uploadButton.isEnabled = true
+                uploadButton.text = "Upload to Waha"
+                if (isFinishing) return@runOnUiThread
+                val message = if (result.ok) {
+                    "Uploaded.\n\nLog ID: ${result.id}\n${result.url}\n\n${result.fileName} (${result.bytes} bytes)\n\nSend this ID to the developer."
+                } else {
+                    "Upload FAILED.\n\n${result.message}\n\nServer: ${result.baseUrl ?: "unknown"}"
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(if (result.ok) "Log uploaded" else "Upload failed")
+                    .setMessage(message)
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }.start()
+    }
+
+    private fun buttonRow(vararg buttons: TextView): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        buttons.forEach { addView(it, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)) }
+    }
+
     private fun actionButton(label: String, onClick: () -> Unit): TextView {
         return TextView(this).apply {
             text = label
@@ -120,15 +153,24 @@ class CrashLogActivity : Activity() {
         }
     }
 
-    private fun logFile(): File {
-        val dir = getExternalFilesDir(null) ?: filesDir
-        return File(dir, "waha_trace.log")
-    }
+    private fun logFile(): File = LogUploader.traceFile(this)
 
     private fun readLog(): String {
         val file = logFile()
         if (!file.exists()) return "No waha_trace.log yet — either the app hasn't run since this build was installed, or nothing has been logged."
-        val content = file.readText()
+        // Intensive diagnostics can make this file several MB; showing,
+        // copying or sharing all of it would freeze the screen or overflow the
+        // share intent. Show the newest part only — Upload sends up to 1 MB.
+        val len = file.length()
+        val maxBytes = 300_000L
+        val content = java.io.RandomAccessFile(file, "r").use { raf ->
+            val start = maxOf(0L, len - maxBytes)
+            raf.seek(start)
+            val buf = ByteArray((len - start).toInt())
+            raf.readFully(buf)
+            val text = String(buf, Charsets.UTF_8)
+            if (start > 0) "(showing the last ${maxBytes / 1000} KB of ${len / 1000} KB)\n" + text.substringAfter('\n', text) else text
+        }
         return if (content.isBlank()) "waha_trace.log is empty." else content
     }
 }

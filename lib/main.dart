@@ -177,6 +177,8 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   if (browsingModeService.mode == BrowsingMode.kiosk) {
     unawaited(GeideaTerminalBridge.instance.initialize());
     UsbDiagnostics.logSnapshot('app start');
+    // So the native log viewer can upload logs even when Flutter can't start.
+    unawaited(GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl));
   }
 }
 
