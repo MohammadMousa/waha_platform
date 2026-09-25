@@ -1,0 +1,5 @@
+{
+  "API_BASE_URL": "http://192.168.1.100:8081",
+  "ENABLE_SIMULATOR": "true",
+  "LOGGING": "true"
+}

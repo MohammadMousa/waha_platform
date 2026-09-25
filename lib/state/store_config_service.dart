@@ -9,8 +9,9 @@ import '../services/local_prefs.dart';
 /// re-resolved at runtime via resolveDefaultStore / _applySession.
 class StoreConfigService extends ChangeNotifier {
   int? _storeId;
-  String? _storeName;                    // kept for legacy callers
-  Map<String, dynamic>? _storeDisplayName; // {"en": "...", "ar": "..."} — bilingual
+  String? _storeName; // kept for legacy callers
+  Map<String, dynamic>?
+      _storeDisplayName; // {"en": "...", "ar": "..."} — bilingual
   String? _storeSlug;
   String? _storeCurrency;
   Map<String, dynamic>? _appName; // {"en": "Waha", "ar": "واحة"}
@@ -20,6 +21,7 @@ class StoreConfigService extends ChangeNotifier {
   int? get storeId => _storeId;
   String? get storeName => _storeName;
   Map<String, dynamic>? get storeDisplayName => _storeDisplayName;
+
   /// The URL-safe slug (`stores.name`). Always use this for API calls.
   String? get storeSlug => _storeSlug;
   String? get storeCurrency => _storeCurrency;
@@ -32,7 +34,12 @@ class StoreConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setStore(int id, {String? name, Map<String, dynamic>? displayName, String? slug, String? currency, bool persist = true}) {
+  void setStore(int id,
+      {String? name,
+      Map<String, dynamic>? displayName,
+      String? slug,
+      String? currency,
+      bool persist = true}) {
     _storeId = id;
     if (displayName != null) {
       _storeDisplayName = displayName;
@@ -49,7 +56,11 @@ class StoreConfigService extends ChangeNotifier {
   /// Updates the active store in-memory only — never writes to LocalPrefs.
   /// Use this for session switches and startup resolution; only "Make Default"
   /// in the store picker should ever write to LocalPrefs.
-  void applySessionStore(int id, {String? name, Map<String, dynamic>? displayName, String? slug, String? currency}) {
+  void applySessionStore(int id,
+      {String? name,
+      Map<String, dynamic>? displayName,
+      String? slug,
+      String? currency}) {
     _storeId = id;
     if (displayName != null) {
       _storeDisplayName = displayName;
@@ -59,6 +70,19 @@ class StoreConfigService extends ChangeNotifier {
     }
     if (slug != null) _storeSlug = slug;
     if (currency != null) _storeCurrency = currency;
+    notifyListeners();
+  }
+
+  /// Forgets everything tied to the previous server (store binding, names,
+  /// currency) — ids from one backend mean nothing on another.
+  Future<void> resetForServerChange() async {
+    _storeId = null;
+    _storeName = null;
+    _storeDisplayName = null;
+    _storeSlug = null;
+    _storeCurrency = null;
+    _appName = null;
+    await LocalPrefs.clearStoreIds();
     notifyListeners();
   }
 

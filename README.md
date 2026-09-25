@@ -29,6 +29,23 @@ flutter run --dart-define=API_BASE_URL=http://192.168.1.x:8080
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8080
 ```
 
+## Building for an environment
+
+The server address is not in the code — it is baked in at build time from a
+per-environment settings file in `config/` (git-ignored; only the
+`*.example.json` templates are committed).
+
+```bash
+cp config/prod.example.json config/prod.json   # then fill in the real values
+scripts/build_release.sh prod                  # bumps version, builds the APK
+flutter run --dart-define-from-file=config/dev.json   # same file works for runs
+```
+
+`API_BASE_URL` is the app's default server. On the device, Settings → Server
+Connection → **Custom Connection** overrides it (ON) and returning to it (OFF)
+never loses the saved custom fields. A plain `flutter run` with no settings
+file falls back to the emulator/localhost address, never to production.
+
 ---
 
 ## Modes

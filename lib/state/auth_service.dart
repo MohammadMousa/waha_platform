@@ -28,7 +28,7 @@ class AuthService extends ChangeNotifier {
   bool get hasSelectedStore => sessionStoreId != null;
   bool get isDeviceSession => deviceId != null;
 
-  void _applyConfig(Map<String, String> config) {
+  void applyConfig(Map<String, String> config) {
     final appNameJson = config['appName'];
     if (appNameJson != null && appNameJson.isNotEmpty) {
       try {
@@ -50,16 +50,16 @@ class AuthService extends ChangeNotifier {
     // Read defaultStoreId from properties map (takes precedence over top-level field,
     // since the backend is moving toward the properties map as the canonical source).
     final propsDefaultStore = session.properties?['defaultStoreId'];
-    final defaultFromProps = propsDefaultStore != null
-        ? int.tryParse(propsDefaultStore)
-        : null;
+    final defaultFromProps =
+        propsDefaultStore != null ? int.tryParse(propsDefaultStore) : null;
     // Falls back to the session's own bound storeId last — the Kiosk device
     // login response has no defaultStoreId at all (a device is pinned to
     // one store, not "defaulted" to one), so without this fallback a fresh
     // device login would leave storeConfigService (and therefore the
     // displayed currency/name) resolving to whichever store happens to
     // come first from GET /api/stores, not the device's own store.
-    final effectiveDefault = defaultFromProps ?? session.defaultStoreId ?? session.storeId;
+    final effectiveDefault =
+        defaultFromProps ?? session.defaultStoreId ?? session.storeId;
     if (storeConfigService.storeId == null && effectiveDefault != null) {
       storeConfigService.setStoreId(effectiveDefault, persist: false);
     }
@@ -87,8 +87,8 @@ class AuthService extends ChangeNotifier {
 
   Future<void> login(ApiClient api, String username, String password) async {
     final currentMode = browsingModeService.mode.name.toUpperCase();
-    final session = await api.login(username, password,
-        sessionProperties: {'mode': currentMode});
+    final session = await api
+        .login(username, password, sessionProperties: {'mode': currentMode});
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
     await LocalPrefs.setAuthCredentials(username, password);
@@ -111,7 +111,8 @@ class AuthService extends ChangeNotifier {
   /// there's no device-session equivalent of GET /api/auth/me to validate
   /// a cached token against, only login, so startup always re-logs-in
   /// rather than trying the token first.
-  Future<void> loginKiosk(ApiClient api, String username, String pinCode) async {
+  Future<void> loginKiosk(
+      ApiClient api, String username, String pinCode) async {
     final session = await api.kioskLogin(username, pinCode);
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
@@ -126,14 +127,7 @@ class AuthService extends ChangeNotifier {
   Future<void> logout(ApiClient api) async {
     final t = token;
     final wasDeviceSession = isDeviceSession;
-    token = null;
-    userId = null;
-    deviceId = null;
-    username = null;
-    sessionStoreId = null;
-    defaultStoreId = null;
-    mode = null;
-    permissionService.clear();
+    _clearSessionMemory();
     await LocalPrefs.clearAuthToken();
     await LocalPrefs.clearAuthCredentials();
     await LocalPrefs.clearKioskCredentials();
@@ -151,12 +145,43 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  void _clearSessionMemory() {
+    token = null;
+    userId = null;
+    deviceId = null;
+    username = null;
+    sessionStoreId = null;
+    defaultStoreId = null;
+    mode = null;
+    permissionService.clear();
+  }
+
+  /// Drops the session and every locally cached credential because they
+  /// belong to a server the app is leaving. No server call — the caller
+  /// does any best-effort logout on the old server first.
+  Future<void> resetForServerChange() async {
+    _clearSessionMemory();
+    await LocalPrefs.clearAuthToken();
+    await LocalPrefs.clearAuthCredentials();
+    await LocalPrefs.clearKioskCredentials();
+    notifyListeners();
+  }
+
+  /// Takes over a session that was just created on the new server by a
+  /// separate client. Persists the token only — never the username/PIN or
+  /// password the operator typed.
+  Future<void> adoptSession(AuthSession session) async {
+    _applySession(session, tokenOverride: session.token);
+    await LocalPrefs.setAuthToken(session.token!);
+    notifyListeners();
+  }
+
   Future<void> selectStore(ApiClient api, int storeId) async {
     final t = token;
     if (t == null) throw StateError('selectStore() called while logged out');
     final currentMode = browsingModeService.mode.name.toUpperCase();
-    final session = await api.selectStore(t, storeId,
-        sessionProperties: {'mode': currentMode});
+    final session = await api
+        .selectStore(t, storeId, sessionProperties: {'mode': currentMode});
     _applySession(session);
     notifyListeners();
   }
@@ -177,7 +202,7 @@ class AuthService extends ChangeNotifier {
   Future<void> resolveStartupAuth(ApiClient api, BrowsingMode mode) async {
     // Load public system config (appName, etc.) before any auth so the title
     // shows immediately even in kiosk mode with no cached login.
-    _applyConfig(await api.getConfig());
+    applyConfig(await api.getConfig());
 
     if (mode == BrowsingMode.kiosk) {
       final devUsername = LocalPrefs.kioskUsername;
@@ -201,7 +226,8 @@ class AuthService extends ChangeNotifier {
 
     if (cachedToken != null) {
       try {
-        final session = await api.me(cachedToken).timeout(const Duration(seconds: 5));
+        final session =
+            await api.me(cachedToken).timeout(const Duration(seconds: 5));
         token = cachedToken;
         _applySession(session);
         notifyListeners();

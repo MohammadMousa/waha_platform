@@ -46,7 +46,7 @@
         <activity
             android:name=".CrashLogActivity"
             android:exported="true"
-            android:label="Waha Startup Log"
+            android:label="Logger"
             android:taskAffinity="">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

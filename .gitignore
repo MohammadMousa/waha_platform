@@ -69,3 +69,8 @@ app.*.map.json
 /android/app/libs/
 devtools_options.yaml
 .frontend_sidekick_status
+
+# Real per-environment build settings (server address etc.). Copy the
+# *.example.json next to it, drop ".example", fill in — see README.
+/config/*.json
+!/config/*.example.json

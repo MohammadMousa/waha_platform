@@ -137,7 +137,11 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
                           controller: _pin,
                           obscureText: _obscure,
                           keyboardType: TextInputType.number,
-                          maxLength: 4,
+                          // Backend moved device PINs to 6 digits; existing
+                          // devices keep their old 4-digit PIN until reset
+                          // (see to_Kiosk_AI_On_Auth_Task), so this only caps
+                          // the max — it never required exactly 4.
+                          maxLength: 6,
                           textInputAction: TextInputAction.done,
                           enabled: !_submitting,
                           onSubmitted: (_) => _submit(),

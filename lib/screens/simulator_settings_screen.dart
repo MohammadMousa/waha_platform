@@ -13,6 +13,7 @@ import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/simulator_service.dart';
+import '../widgets/info_tiles.dart';
 
 class SimulatorSettingsScreen extends StatefulWidget {
   const SimulatorSettingsScreen({super.key});
@@ -25,6 +26,14 @@ class SimulatorSettingsScreen extends StatefulWidget {
 class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
   late List<TextEditingController> _controllers;
 
+  // Draft for the session-info footer's SAVED (survives-restart) default —
+  // deliberately NOT bound directly to SimulatorService.showFooter, which is
+  // the live/current value and can differ (toggled via the cluster button or
+  // by tapping the footer itself, neither of which persists). Starts from
+  // the last SAVED value, not the live one, same reasoning as the Store ID
+  // override field elsewhere not applying until its own "Set" is pressed.
+  late bool _footerDraft;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +42,7 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
     _controllers = codes.isEmpty
         ? [TextEditingController()]
         : codes.map((c) => TextEditingController(text: c)).toList();
+    _footerDraft = LocalPrefs.showSessionFooter;
   }
 
   @override
@@ -64,8 +74,16 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
     final msg = codes.isEmpty
         ? 'Cleared'
         : 'Saved ${codes.length} code${codes.length == 1 ? '' : 's'}';
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  void _saveFooter() {
+    context.read<SimulatorService>().saveFooterVisibility(_footerDraft);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(_footerDraft
+          ? 'Saved — footer shows on every launch from now on'
+          : 'Saved — footer stays hidden on launch from now on'),
+    ));
   }
 
   @override
@@ -83,23 +101,92 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
             value: sim.enabled,
             onChanged: sim.setEnabled,
           ),
+          const SizedBox(height: 12),
+
+          // Relocated from the inline Developer Tools panel — everything
+          // simulator-related now lives in this one screen; that panel
+          // keeps only the button that opens it.
+          const Text('Floating cluster',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          // Same manual on/off switch for the floating dev-tools cluster as
+          // before, same action as the 10-tap gesture or the cluster's own
+          // eye icon. LocalPrefs.simulatorForceEnabled only matters for an
+          // ENABLE_SIMULATOR=false build (it's what lets SimulatorOverlay
+          // compile-in at all there); this still sets it either way,
+          // harmlessly, so both build types are controlled through the same
+          // one switch.
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: TitleWithInfo(
+              'Enable simulator dev tools',
+              AppConfig.simulatorAvailable
+                  ? 'This build was compiled with ENABLE_SIMULATOR=true — shows/hides the floating cluster.'
+                  : 'This build was compiled with ENABLE_SIMULATOR=false; '
+                      'turning this on enables and shows the cluster at runtime.',
+            ),
+            subtitle: const Text('Shows the floating dev-tools cluster',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            value: !sim.devToolsHidden,
+            onChanged: (value) {
+              LocalPrefs.setSimulatorForceEnabled(value);
+              if (value) {
+                sim.showDevTools();
+              } else {
+                sim.hideDevTools();
+              }
+            },
+          ),
+
+          const SizedBox(height: 8),
+
+          // Session-info footer — a draft + explicit Save, NOT a live switch:
+          // this only edits what shows on the NEXT launch. The footer's
+          // CURRENT on-screen state is changed live and only for this
+          // session by the cluster's own sessionInfo button, or by tapping
+          // the footer strip itself — neither of those touches this saved
+          // default.
+          const HeaderWithInfo(
+            'Session info footer',
+            'A bottom strip with username, store slug, host and app mode. '
+                'This switch sets whether it shows on the NEXT app launch — '
+                'press Save to keep it. The cluster\'s own session-info button, '
+                'and tapping the footer itself, only toggle it for right now '
+                'and don\'t change this saved choice.',
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: const Text('Show on launch'),
+            subtitle: const Text('Applies on the next launch — press Save',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            value: _footerDraft,
+            onChanged: (value) => setState(() => _footerDraft = value),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _saveFooter,
+              child: const Text('Save'),
+            ),
+          ),
+
           const SizedBox(height: 20),
 
           // ── Pinned buttons ───────────────────────────────────────────────
-          Text('Pinned buttons', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(
+          HeaderWithInfo(
+            'Pinned buttons',
             'Which shortcut buttons show in the floating simulator cluster. '
-            'Close and "hide dev tools" are always there and aren\'t listed here.',
-            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                'Close and "hide dev tools" are always there and aren\'t listed here.',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-          const SizedBox(height: 4),
           for (final entry in const {
             SimPinnedButton.home: 'Home',
             SimPinnedButton.settings: 'Settings',
             SimPinnedButton.camera: 'Camera scan',
             SimPinnedButton.productScan: 'Product scan (manual/cached code)',
             SimPinnedButton.browse: 'Browse',
+            SimPinnedButton.sessionInfo: 'Session info (toggles the footer)',
           }.entries)
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
@@ -112,24 +199,24 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
           const Divider(height: 40),
 
           // ── Product UPC codes ──────────────────────────────────────────
-          Text('Product UPC codes',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(
+          HeaderWithInfo(
+            'Product UPC codes',
             'Tap the scan button fires a random code from this list. '
-            'Long-press the button to set a one-off code immediately.',
-            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                'Long-press the button to set a one-off code immediately.',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
             dense: true,
-            title: const Text('Cache scans'),
-            subtitle: const Text(
+            title: const TitleWithInfo(
+              'Cache scans',
               'When on, every code the simulator fires (tap, long-press, '
-              'camera) is added to this list automatically once it resolves.',
+                  'camera) is added to this list automatically once it resolves.',
             ),
+            subtitle: const Text('Add every fired code to the list',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
             value: sim.autoCache,
             onChanged: (value) => sim.setAutoCache(value ?? false),
           ),
@@ -181,8 +268,8 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
                   const SizedBox(width: 4),
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    icon: Icon(Icons.remove_circle_outline,
-                        color: scheme.error),
+                    icon:
+                        Icon(Icons.remove_circle_outline, color: scheme.error),
                     onPressed: () => _removeField(i),
                   ),
                 ],
@@ -204,16 +291,16 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
           ),
 
           const Divider(height: 40),
-          Text(
+          const HeaderWithInfo(
+            'Coupon and Wallet codes',
             'Coupon and Wallet codes aren\'t here yet — nothing on the '
-            'backend consumes them in this phase.',
-            style: TextStyle(color: scheme.onSurfaceVariant),
+                'backend consumes them in this phase.',
           ),
           const Divider(height: 32),
-          Text(
-            'Test the navigation lock: navigates to a route outside the '
-            'allowlist. Kiosk/Shopping mode bounces back; Normal lands.',
-            style: TextStyle(color: scheme.onSurfaceVariant),
+          const HeaderWithInfo(
+            'Navigation lock test',
+            'Navigates to a route outside the allowlist. Kiosk/Shopping '
+                'mode bounces back; Normal lands.',
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -241,7 +328,12 @@ class _LandingTestPanel extends StatefulWidget {
 }
 
 class _LandingTestPanelState extends State<_LandingTestPanel> {
-  static const _keys = ['CLIENT_LANDING', 'ADMIN_LANDING', 'KIOSK_LANDING', 'SHOPPING_LANDING'];
+  static const _keys = [
+    'CLIENT_LANDING',
+    'ADMIN_LANDING',
+    'KIOSK_LANDING',
+    'SHOPPING_LANDING'
+  ];
   late String _selectedKey;
   bool _busy = false;
   String? _statusMsg;
@@ -250,9 +342,9 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
   void initState() {
     super.initState();
     _selectedKey = switch (browsingModeService.mode) {
-      BrowsingMode.kiosk    => 'KIOSK_LANDING',
+      BrowsingMode.kiosk => 'KIOSK_LANDING',
       BrowsingMode.shopping => 'SHOPPING_LANDING',
-      BrowsingMode.normal   => 'CLIENT_LANDING',
+      BrowsingMode.normal => 'CLIENT_LANDING',
     };
   }
 
@@ -260,17 +352,28 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
       kIsWeb || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
 
   void _setStatus(String msg) {
-    if (mounted) setState(() { _statusMsg = msg; _busy = false; });
+    if (mounted) {
+      setState(() {
+        _statusMsg = msg;
+        _busy = false;
+      });
+    }
   }
 
   Future<void> _loadFromRemote() async {
-    setState(() { _busy = true; _statusMsg = null; });
+    setState(() {
+      _busy = true;
+      _statusMsg = null;
+    });
     final api = context.read<ApiClient>();
     final token = authService.token;
     final key = _selectedKey;
     try {
       final info = await api.getLandingPage(key, token);
-      if (info == null) { _setStatus('No landing page found for $key'); return; }
+      if (info == null) {
+        _setStatus('No landing page found for $key');
+        return;
+      }
       if (!mounted) return;
       final html = await api.fetchResourceContent(info.resourceUrl, token);
       await LandingCache.writeHtml(key, html, info.contentHash);
@@ -284,11 +387,17 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
   }
 
   Future<void> _loadFromLocal() async {
-    setState(() { _busy = true; _statusMsg = null; });
+    setState(() {
+      _busy = true;
+      _statusMsg = null;
+    });
     try {
       final html = await LandingCache.readHtml(_selectedKey);
       if (!mounted) return;
-      if (html == null) { _setStatus('No cached HTML for $_selectedKey'); return; }
+      if (html == null) {
+        _setStatus('No cached HTML for $_selectedKey');
+        return;
+      }
       setState(() => _busy = false);
       _openWebView(html, source: 'cache');
     } catch (e) {
@@ -298,7 +407,8 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
 
   void _openWebView(String html, {required String source}) {
     if (!_supportsWebView) {
-      setState(() => _statusMsg = 'WebView not supported on this platform. HTML loaded from $source (${html.length} chars).');
+      setState(() => _statusMsg =
+          'WebView not supported on this platform. HTML loaded from $source (${html.length} chars).');
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
@@ -316,12 +426,11 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Landing Page Testing', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text(
+        HeaderWithInfo(
+          'Landing Page Testing',
           'Load and preview a landing page HTML — either freshly fetched from '
-          'the server or from the local cache written by the app.',
-          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+              'the server or from the local cache written by the app.',
+          style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 12),
         InputDecorator(
@@ -336,8 +445,12 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
               value: _selectedKey,
               isExpanded: true,
               isDense: true,
-              items: _keys.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(),
-              onChanged: (v) { if (v != null) setState(() => _selectedKey = v); },
+              items: _keys
+                  .map((k) => DropdownMenuItem(value: k, child: Text(k)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedKey = v);
+              },
             ),
           ),
         ),
@@ -369,7 +482,8 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
         if (_statusMsg != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(_statusMsg!, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            child: Text(_statusMsg!,
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           ),
         const SizedBox(height: 16),
       ],
@@ -381,7 +495,8 @@ class _LandingPreviewScreen extends StatefulWidget {
   final String html;
   final String title;
   final String baseUrl;
-  const _LandingPreviewScreen({required this.html, required this.title, required this.baseUrl});
+  const _LandingPreviewScreen(
+      {required this.html, required this.title, required this.baseUrl});
 
   @override
   State<_LandingPreviewScreen> createState() => _LandingPreviewScreenState();
@@ -410,7 +525,8 @@ class _LandingPreviewScreenState extends State<_LandingPreviewScreen> {
           IconButton(
             icon: const Icon(Icons.refresh_outlined),
             tooltip: 'Reload',
-            onPressed: () => _controller.loadHtmlString(_resolved, baseUrl: widget.baseUrl),
+            onPressed: () =>
+                _controller.loadHtmlString(_resolved, baseUrl: widget.baseUrl),
           ),
         ],
       ),

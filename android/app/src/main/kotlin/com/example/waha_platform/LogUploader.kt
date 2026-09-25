@@ -46,6 +46,18 @@ object LogUploader {
         return stored?.takeIf { it.isNotBlank() }?.trimEnd('/')
     }
 
+    // The device's own login token, read straight from LocalPrefs' backing
+    // file (same as baseUrl's fallback above) — no live push needed: it's
+    // written synchronously by LocalPrefs.setAuthToken on every successful
+    // login (kiosk or normal), so it's already current whenever this runs,
+    // including from CrashLogActivity with no live Flutter session at all.
+    // POST /api/resources now requires a valid session; without this the
+    // upload gets a 401.
+    fun authToken(context: Context): String? =
+        context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .getString("flutter.waha.auth_token", null)
+            ?.takeIf { it.isNotBlank() }
+
     fun traceFile(context: Context): File = File(context.getExternalFilesDir(null) ?: context.filesDir, "waha_trace.log")
 
     /** Last [maxBytes] of [file], starting on a line boundary. */
@@ -94,6 +106,8 @@ object LogUploader {
         val base = baseUrl(context)
         val name = "logs_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".txt"
         if (base == null) return Result(false, null, null, name, 0, null, "No server URL known yet — open the kiosk app once (or set Settings → Server Connection) and retry.")
+        val token = authToken(context)
+        if (token == null) return Result(false, null, null, name, 0, base, "Not logged in yet — open the kiosk app and log in, then retry.")
         return try {
             val body = buildReport(context).toByteArray(Charsets.UTF_8)
             val boundary = "----waha${System.currentTimeMillis()}"
@@ -105,6 +119,7 @@ object LogUploader {
             conn.doOutput = true
             conn.connectTimeout = 15000
             conn.readTimeout = 60000
+            conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
             conn.setFixedLengthStreamingMode(head.size + body.size + tailBytes.size)
             conn.outputStream.use {

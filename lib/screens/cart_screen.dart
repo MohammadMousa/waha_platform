@@ -8,6 +8,8 @@ import '../l10n/generated/app_localizations.dart';
 import '../models/quote.dart';
 import '../router/app_router.dart';
 import '../services/local_prefs.dart';
+import '../services/api_client.dart';
+import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
@@ -437,9 +439,9 @@ String _fmt(double amount, String? currency) {
 }
 
 // ── Device PIN gate — the way into Settings from Kiosk mode ─────────────────
-// Validated locally against the same credential the device already trusts
-// for its own auto-login (LocalPrefs.kioskPin) — first-phase simplicity, no
-// extra backend round-trip. Pops `true` only once the PIN matches.
+// Checked by the backend (POST /api/kiosk/auth/pin/verify, with the device's
+// own session token) — the PIN is never stored or compared on the device.
+// Pops `true` only once the server says the PIN matches.
 
 class _DevicePinDialog extends StatefulWidget {
   const _DevicePinDialog();
@@ -451,6 +453,7 @@ class _DevicePinDialog extends StatefulWidget {
 class _DevicePinDialogState extends State<_DevicePinDialog> {
   final _pinController = TextEditingController();
   String? _error;
+  bool _checking = false;
 
   @override
   void dispose() {
@@ -458,13 +461,27 @@ class _DevicePinDialogState extends State<_DevicePinDialog> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_checking) return;
     final entered = _pinController.text.trim();
-    final actual = LocalPrefs.kioskPin;
-    if (actual != null && actual.isNotEmpty && entered == actual) {
+    final token = authService.token;
+    if (token == null) {
+      setState(() => _error = 'Not signed in — restart the app and sign in again');
+      return;
+    }
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    final problem = await context.read<ApiClient>().verifyKioskPin(token, entered);
+    if (!mounted) return;
+    if (problem == null) {
       Navigator.of(context).pop(true);
     } else {
-      setState(() => _error = AppLocalizations.of(context)!.devicePinIncorrect);
+      setState(() {
+        _checking = false;
+        _error = problem;
+      });
       _pinController.clear();
     }
   }
@@ -473,7 +490,7 @@ class _DevicePinDialogState extends State<_DevicePinDialog> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
-    final username = LocalPrefs.kioskUsername ?? '—';
+    final username = authService.username ?? '—';
 
     return AlertDialog(
       icon: Icon(Icons.admin_panel_settings_outlined, color: scheme.primary, size: 32),
@@ -508,7 +525,10 @@ class _DevicePinDialogState extends State<_DevicePinDialog> {
           onPressed: () => Navigator.of(context).pop(false),
           child: Text(l10n.commonCancel),
         ),
-        FilledButton(onPressed: _submit, child: Text(l10n.devicePinUnlock)),
+        FilledButton(
+          onPressed: _checking ? null : _submit,
+          child: Text(l10n.devicePinUnlock),
+        ),
       ],
     );
   }

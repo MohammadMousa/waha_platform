@@ -10,15 +10,26 @@ enum SimScanType { product }
 /// configurable — Close and "hide dev tools" are the panel's own meta
 /// controls and are never optional. 'browse' opens the Products/Browse
 /// screen — named to match Routes.browse and the bottom nav's own label.
-enum SimPinnedButton { home, settings, camera, productScan, browse }
+/// 'sessionInfo' toggles the session-info footer strip (see showFooter
+/// below) — it doesn't navigate anywhere, tapping it just shows/hides text.
+enum SimPinnedButton {
+  home,
+  settings,
+  camera,
+  productScan,
+  browse,
+  sessionInfo
+}
 
 /// Ships with 'home' and 'productScan' (manual barcode entry) OFF — the
 /// common case doesn't need either pinned, and a cluttered cluster is worse
 /// than one extra trip through Settings to turn a button back on.
+/// 'sessionInfo' is pinned by default, per explicit request.
 const _defaultPinnedButtons = {
   SimPinnedButton.settings,
   SimPinnedButton.camera,
   SimPinnedButton.browse,
+  SimPinnedButton.sessionInfo,
 };
 
 class SimulatorService extends ChangeNotifier {
@@ -27,6 +38,7 @@ class SimulatorService extends ChangeNotifier {
   bool _devToolsHidden;
   bool _autoCache;
   int _cacheLimit;
+  bool _showFooter;
   final Set<SimPinnedButton> _pinnedButtons;
   final Map<SimScanType, List<String>> _cachedCodes = {
     SimScanType.product: [],
@@ -37,6 +49,7 @@ class SimulatorService extends ChangeNotifier {
         _clusterVisible = LocalPrefs.simDevToolsVisible,
         _autoCache = LocalPrefs.simAutoCache,
         _cacheLimit = LocalPrefs.simCacheLimit,
+        _showFooter = LocalPrefs.showSessionFooter,
         _pinnedButtons = _decodePinnedButtons(LocalPrefs.simPinnedButtons) {
     _cachedCodes[SimScanType.product] = List.of(LocalPrefs.simProductCodes);
   }
@@ -44,9 +57,8 @@ class SimulatorService extends ChangeNotifier {
   static Set<SimPinnedButton> _decodePinnedButtons(List<String>? saved) {
     if (saved == null) return Set.of(_defaultPinnedButtons);
     return saved
-        .map((name) => SimPinnedButton.values
-            .where((b) => b.name == name)
-            .firstOrNull)
+        .map((name) =>
+            SimPinnedButton.values.where((b) => b.name == name).firstOrNull)
         .whereType<SimPinnedButton>()
         .toSet();
   }
@@ -56,6 +68,7 @@ class SimulatorService extends ChangeNotifier {
   bool get devToolsHidden => _devToolsHidden;
   bool get autoCache => _autoCache;
   int get cacheLimit => _cacheLimit;
+  bool get showFooter => _showFooter;
 
   bool isPinned(SimPinnedButton button) => _pinnedButtons.contains(button);
 
@@ -126,6 +139,25 @@ class SimulatorService extends ChangeNotifier {
   void setCacheLimit(int value) {
     _cacheLimit = value;
     LocalPrefs.setSimCacheLimit(value);
+    notifyListeners();
+  }
+
+  // The session-info footer's own visibility. Two distinct, deliberately
+  // separate mechanisms:
+  //  - toggleFooter(): the cluster's sessionInfo button AND tapping the
+  //    footer strip itself — a live, in-session flip only, never written to
+  //    LocalPrefs. Doesn't survive a restart on its own.
+  //  - saveFooterVisibility(): the ONLY thing that persists
+  //    (LocalPrefs.showSessionFooter) so it survives a restart — called
+  //    from a real "Save" action in Simulator Settings, not on every toggle.
+  void toggleFooter() {
+    _showFooter = !_showFooter;
+    notifyListeners();
+  }
+
+  void saveFooterVisibility(bool value) {
+    _showFooter = value;
+    LocalPrefs.setShowSessionFooter(value);
     notifyListeners();
   }
 

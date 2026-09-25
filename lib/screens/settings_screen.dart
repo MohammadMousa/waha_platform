@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_config.dart';
+import '../config/connection_settings.dart';
+import '../services/connection_switcher.dart';
+import '../services/app_info.dart';
 import '../services/geidea_terminal_bridge.dart';
 import '../services/local_prefs.dart';
 import '../l10n/generated/app_localizations.dart';
@@ -19,6 +22,7 @@ import '../services/usb_diagnostics.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import 'simulator_settings_screen.dart';
+import '../widgets/info_tiles.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -71,7 +75,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _afterCountdown = TextEditingController(
       text: '${kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds}',
     );
-    _storeId = TextEditingController(text: storeConfigService.storeId?.toString() ?? '');
+    _storeId = TextEditingController(
+        text: storeConfigService.storeId?.toString() ?? '');
     _terminalTimeout =
         TextEditingController(text: '${LocalPrefs.terminalTimeoutSeconds}');
     _devUnlocked = LocalPrefs.devToolsUnlocked;
@@ -105,7 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final remaining = 10 - _tapCount;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$remaining more tap${remaining == 1 ? '' : 's'} to unlock dev tools'),
+          content: Text(
+              '$remaining more tap${remaining == 1 ? '' : 's'} to unlock dev tools'),
           duration: const Duration(seconds: 1),
         ),
       );
@@ -131,7 +137,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final aw = _parseSeconds(_afterWarn.text);
     final ac = _parseSeconds(_afterCountdown.text);
     if ([bw, bc, aw, ac].contains(null)) {
-      setState(() => _timerError = 'All values must be positive whole numbers.');
+      setState(
+          () => _timerError = 'All values must be positive whole numbers.');
       return;
     }
     kioskTimerConfig.update(
@@ -204,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _storeIdError = null);
     final flow = context.read<OrderFlowController>();
-    final api  = context.read<ApiClient>();
+    final api = context.read<ApiClient>();
     final hadItems = flow.cart.isNotEmpty;
 
     try {
@@ -218,7 +225,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Store update failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Store update failed: $e'),
+              backgroundColor: Colors.red),
         );
       }
       return;
@@ -236,18 +245,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentMode = context.watch<BrowsingModeService>().mode;
     final currentLocale = context.watch<LocaleService>().locale;
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.navSettings)),
+      appBar: AppBar(
+        title: Text(l10n.navSettings),
+        actions: [
+          // Circular "!" — version + session info at a glance.
+          IconButton(
+            icon: const Icon(Icons.error_outline),
+            tooltip: 'Session info',
+            onPressed: () => showSessionInfoDialog(context),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           // ── Language ──────────────────────────────────────────────────────
-          Text(l10n.settingsLanguage, style: Theme.of(context).textTheme.titleMedium),
+          Text(l10n.settingsLanguage,
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
           SegmentedButton<Locale>(
             segments: const [
@@ -260,36 +279,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const Divider(height: 40),
 
-          // ── App Mode ──────────────────────────────────────────────────────
-          Text(l10n.settingsAppMode, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<BrowsingMode>(
-            initialValue: currentMode,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: BrowsingMode.values
-                .where((m) => m.availableOnCurrentPlatform || m == currentMode)
-                .map((m) => DropdownMenuItem(value: m, child: Text(_modeLabel(m, l10n))))
-                .toList(),
-            onChanged: (m) {
-              if (m != null) browsingModeService.setMode(m);
-            },
-          ),
-          if (!currentMode.availableOnCurrentPlatform) ...[
-            const SizedBox(height: 6),
-            Text(
-              '${_modeLabel(currentMode, l10n)} is normally used on '
-              '${currentMode.platforms.map(_platformLabel).join(' or ')} — '
-              'this platform is ${_platformLabel(currentPlatform())}.',
-              style: const TextStyle(color: Colors.orange, fontSize: 13),
-            ),
-          ],
-
-          const Divider(height: 40),
-
           // ── Kiosk Timers ─────────────────────────────────────────────────
           // Only take effect in Kiosk mode. Two contexts: before-invoice and
           // after-invoice, each with a warn delay and a countdown duration.
-          Text(l10n.settingsKioskTimers, style: Theme.of(context).textTheme.titleMedium),
+          Text(l10n.settingsKioskTimers,
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -330,21 +324,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           const SizedBox(height: 14),
-          _SecondsField(label: 'Before invoice — warn after (s)', controller: _beforeWarn),
+          _SecondsField(
+              label: 'Before invoice — warn after (s)',
+              controller: _beforeWarn),
           const SizedBox(height: 10),
-          _SecondsField(label: 'Before invoice — countdown (s)', controller: _beforeCountdown),
+          _SecondsField(
+              label: 'Before invoice — countdown (s)',
+              controller: _beforeCountdown),
           const SizedBox(height: 10),
-          _SecondsField(label: 'After invoice — warn after (s)', controller: _afterWarn),
+          _SecondsField(
+              label: 'After invoice — warn after (s)', controller: _afterWarn),
           const SizedBox(height: 10),
-          _SecondsField(label: 'After invoice — countdown (s)', controller: _afterCountdown),
+          _SecondsField(
+              label: 'After invoice — countdown (s)',
+              controller: _afterCountdown),
           if (_timerError != null) ...[
             const SizedBox(height: 6),
-            Text(_timerError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+            Text(_timerError!,
+                style: const TextStyle(color: Colors.red, fontSize: 13)),
           ],
           const SizedBox(height: 14),
           Align(
             alignment: Alignment.centerRight,
-            child: FilledButton(onPressed: _saveTimers, child: Text(l10n.settingsSaveTimers)),
+            child: FilledButton(
+                onPressed: _saveTimers, child: Text(l10n.settingsSaveTimers)),
           ),
           const SizedBox(height: 8),
           SwitchListTile(
@@ -362,7 +365,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // ── Terminal Payment (Geidea) ───────────────────────────────────
           // How long the Kiosk waits on a card-present terminal transaction
           // before giving up — see _saveTerminalTimeout for why it's capped.
-          Text('Terminal Payment', style: Theme.of(context).textTheme.titleMedium),
+          Text('Terminal Payment',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 14),
           _SecondsField(
             label: 'Wait for terminal — timeout (s)',
@@ -370,7 +374,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           if (_terminalTimeoutError != null) ...[
             const SizedBox(height: 6),
-            Text(_terminalTimeoutError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+            Text(_terminalTimeoutError!,
+                style: const TextStyle(color: Colors.red, fontSize: 13)),
           ],
           const SizedBox(height: 14),
           Align(
@@ -396,7 +401,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.contactless_outlined),
-              label: Text(_detectingTerminal ? 'Scanning…' : 'Detect Payment Terminals'),
+              label: Text(_detectingTerminal
+                  ? 'Scanning…'
+                  : 'Detect Payment Terminals'),
               onPressed: _detectingTerminal ? null : _detectTerminal,
             ),
           ),
@@ -411,7 +418,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             OutlinedButton.icon(
               icon: const Icon(Icons.sync_outlined),
               label: const Text('Odoo Integration'),
-              onPressed: () => Navigator.of(context).pushNamed(Routes.odooAdmin),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(Routes.odooAdmin),
             ),
           ],
           if (context.watch<PermissionService>().can('MANAGE_STORES')) ...[
@@ -419,7 +427,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             OutlinedButton.icon(
               icon: const Icon(Icons.receipt_outlined),
               label: const Text('Edit Receipt Info'),
-              onPressed: () => Navigator.of(context).pushNamed(Routes.receiptInfoEdit),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(Routes.receiptInfoEdit),
             ),
           ],
           if (context.watch<PermissionService>().can('EDIT_RESOURCES')) ...[
@@ -427,7 +436,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             OutlinedButton.icon(
               icon: const Icon(Icons.folder_open_outlined),
               label: const Text('Resource Explorer'),
-              onPressed: () => Navigator.of(context).pushNamed(Routes.resourceExplorer),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(Routes.resourceExplorer),
             ),
           ],
 
@@ -454,7 +464,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // the LAN IP changes and the configured server is now unreachable).
           if (_devUnlocked) ...[
             const SizedBox(height: 20),
-            _ServerConnectionPanel(),
+            const ServerConnectionPanel(),
             const SizedBox(height: 20),
             _DevToolsPanel(
               storeIdController: _storeId,
@@ -495,7 +505,6 @@ class _DevToolsPanel extends StatefulWidget {
 class _DevToolsPanelState extends State<_DevToolsPanel> {
   bool _expanded = false;
   bool _showScanToast = LocalPrefs.showScanSuccessToast;
-  bool _simForceEnabled = LocalPrefs.simulatorForceEnabled;
   // In-memory only (see GeideaTerminalBridge.fakeTerminalEnabled) — always
   // starts false on a fresh app launch, regardless of what it was set to
   // last session.
@@ -516,7 +525,8 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
 
   // Runs [run] behind a progress dialog, then shows its text. For the
   // terminal tools below, some of which take several seconds.
-  Future<void> _showDiagnostic(String title, Future<String> Function() run) async {
+  Future<void> _showDiagnostic(
+      String title, Future<String> Function() run) async {
     final nav = Navigator.of(context, rootNavigator: true);
     showDialog<void>(
       context: context,
@@ -525,7 +535,10 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
         title: Text(title),
         content: const Row(
           children: [
-            SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3)),
+            SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 3)),
             SizedBox(width: 16),
             Expanded(child: Text('Running…')),
           ],
@@ -542,6 +555,8 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
     nav.pop();
     await _showTextDialog(title, text);
   }
+
+  String _sessionInfoText() => sessionInfoText();
 
   Future<String> _uploadLogText() async {
     final r = await GeideaTerminalBridge.instance.uploadLog();
@@ -560,10 +575,15 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear log?'),
-        content: const Text('Deletes the trace log file on this device. It cannot be undone — upload it first if you still need it.'),
+        content: const Text(
+            'Deletes the trace log file on this device. It cannot be undone — upload it first if you still need it.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Clear')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Clear')),
         ],
       ),
     );
@@ -581,7 +601,8 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
     final verdict = switch (status) {
       'ok' => 'The terminal ANSWERED over USB.',
       'error' => 'The terminal or SDK answered with an error.',
-      'timeout' => 'NO reply. Either the SDK dropped the write (serial port not open) or the terminal did not answer. Check the SDK log lines below / in the trace log.',
+      'timeout' =>
+        'NO reply. Either the SDK dropped the write (serial port not open) or the terminal did not answer. Check the SDK log lines below / in the trace log.',
       'busy' => 'A payment is waiting on the terminal.',
       _ => 'Handshake could not run.',
     };
@@ -598,42 +619,14 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
         '${await GeideaTerminalBridge.instance.sdkState()}';
   }
 
-  Future<void> _showTextDialog(String title, String text) async {
-    var copied = false;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: SingleChildScrollView(
-            child: SelectableText(
-              text,
-              textDirection: TextDirection.ltr,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: text));
-                setDialogState(() => copied = true);
-              },
-              child: Text(copied ? 'Copied' : 'Copy'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Future<void> _showTextDialog(String title, String text) =>
+      showCopyableTextDialog(context, title, text);
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final sim = context.watch<SimulatorService>();
+    final currentMode = context.watch<BrowsingModeService>().mode;
+    final l10n = AppLocalizations.of(context)!;
 
     return Card(
       elevation: 0,
@@ -651,7 +644,8 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  Icon(Icons.developer_mode_outlined, color: scheme.error, size: 20),
+                  Icon(Icons.developer_mode_outlined,
+                      color: scheme.error, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -666,7 +660,8 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     message: 'Hide Developer Tools',
                     child: IconButton(
                       visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.visibility_off_outlined, color: scheme.error, size: 20),
+                      icon: Icon(Icons.visibility_off_outlined,
+                          color: scheme.error, size: 20),
                       onPressed: widget.onHide,
                     ),
                   ),
@@ -685,6 +680,59 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Simulator Settings — the one entry point left here for
+                  // everything simulator-related; its own switches (enable
+                  // dev tools, session-info footer) now live inside that
+                  // screen instead of cluttering this panel. Always
+                  // reachable (not gated on AppConfig.simulatorAvailable),
+                  // since it's now the only way to reach the switch that
+                  // turns the simulator on in an ENABLE_SIMULATOR=false
+                  // build.
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.settings_remote_outlined),
+                    label: const Text('Simulator Settings'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const SimulatorSettingsScreen()),
+                    ),
+                  ),
+
+                  const Divider(height: 32),
+
+                  // App Mode — moved in here (was a top-level dropdown) since
+                  // this app is meant to run as Kiosk only for now; keeping
+                  // it behind the same PIN gate as the rest of Developer
+                  // Tools instead of a plain always-visible control.
+                  Text(l10n.settingsAppMode,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<BrowsingMode>(
+                    initialValue: currentMode,
+                    decoration: const InputDecoration(
+                        border: OutlineInputBorder(), isDense: true),
+                    items: BrowsingMode.values
+                        .where((m) =>
+                            m.availableOnCurrentPlatform || m == currentMode)
+                        .map((m) => DropdownMenuItem(
+                            value: m, child: Text(_modeLabel(m, l10n))))
+                        .toList(),
+                    onChanged: (m) {
+                      if (m != null) browsingModeService.setMode(m);
+                    },
+                  ),
+                  if (!currentMode.availableOnCurrentPlatform) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '${_modeLabel(currentMode, l10n)} is normally used on '
+                      '${currentMode.platforms.map(_platformLabel).join(' or ')} — '
+                      'this platform is ${_platformLabel(currentPlatform())}.',
+                      style:
+                          const TextStyle(color: Colors.orange, fontSize: 13),
+                    ),
+                  ],
+
+                  const Divider(height: 32),
+
                   // Scan feedback
                   const Text('Scan feedback',
                       style: TextStyle(fontWeight: FontWeight.w600)),
@@ -692,11 +740,13 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
-                    title: const Text('Show footer toast on successful scan'),
+                    title: const TitleWithInfo(
+                        'Show footer toast on successful scan',
+                        'Off by default — the scan sound already confirms success. Failures always show a blocking dialog regardless of this.'),
                     subtitle: const Text(
-                      'Off by default — the scan sound already confirms success. '
-                      'Failures always show a blocking dialog regardless of this.',
-                    ),
+                        'Extra confirmation after a scan (off by default)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     value: _showScanToast,
                     onChanged: (value) {
                       final next = value ?? false;
@@ -725,12 +775,16 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      FilledButton(onPressed: widget.onSaveStoreId, child: const Text('Set')),
+                      FilledButton(
+                          onPressed: widget.onSaveStoreId,
+                          child: const Text('Set')),
                     ],
                   ),
                   if (widget.storeIdError != null) ...[
                     const SizedBox(height: 4),
-                    Text(widget.storeIdError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    Text(widget.storeIdError!,
+                        style:
+                            const TextStyle(color: Colors.red, fontSize: 12)),
                   ],
                   OutlinedButton.icon(
                     icon: const Icon(Icons.storefront_outlined),
@@ -739,59 +793,9 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                           ? 'Store #${storeConfigService.storeId} — pick from list'
                           : 'Pick from store list',
                     ),
-                    onPressed: () => Navigator.of(context).pushNamed(Routes.storePicker),
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed(Routes.storePicker),
                   ),
-
-                  const Divider(height: 32),
-
-                  // Simulator toggle — the one manual on/off switch for the
-                  // floating dev-tools cluster, same action as the 10-tap
-                  // gesture or the cluster's own eye icon. Always live and
-                  // always interactive on every build: it used to freeze as
-                  // "Always on, can't touch it" when compiled with
-                  // ENABLE_SIMULATOR=true, which meant the ONLY way to bring
-                  // the cluster back after hiding it via the eye icon was
-                  // the 10-tap gesture — needlessly indirect.
-                  // LocalPrefs.simulatorForceEnabled only matters for an
-                  // ENABLE_SIMULATOR=false build (it's what lets
-                  // SimulatorOverlay compile-in at all there); this still
-                  // sets it either way, harmlessly, so both build types are
-                  // controlled through the same one switch.
-                  const Text('Simulator', style: TextStyle(fontWeight: FontWeight.w600)),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('Enable simulator dev tools'),
-                    subtitle: Text(
-                      AppConfig.simulatorAvailable
-                          ? 'This build was compiled with ENABLE_SIMULATOR=true — shows/hides the floating cluster.'
-                          : 'This build was compiled with ENABLE_SIMULATOR=false; '
-                            'turning this on enables and shows the cluster at runtime.',
-                    ),
-                    value: !sim.devToolsHidden,
-                    onChanged: (value) {
-                      setState(() => _simForceEnabled = value);
-                      LocalPrefs.setSimulatorForceEnabled(value);
-                      if (value) {
-                        sim.showDevTools();
-                      } else {
-                        sim.hideDevTools();
-                      }
-                    },
-                  ),
-
-                  // Simulator settings (if available)
-                  if (AppConfig.simulatorAvailable || _simForceEnabled) ...[
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.settings_remote_outlined),
-                      label: const Text('Simulator Settings'),
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SimulatorSettingsScreen()),
-                      ),
-                    ),
-                  ],
 
                   const Divider(height: 32),
 
@@ -802,17 +806,17 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                   // always approves after a short fake delay. Deliberately
                   // NOT persisted (see GeideaTerminalBridge.fakeTerminalEnabled's
                   // doc comment) — always off again on the next app launch.
-                  const Text('Payment Terminal', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Payment Terminal',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Fake Payment Terminal'),
+                    title: const TitleWithInfo('Fake Payment Terminal',
+                        'Testing only — bypasses the real Geidea/USB terminal entirely and always reports a connected terminal and an approved payment. Resets to off on every app restart, never saved.'),
                     subtitle: const Text(
-                      'Testing only — bypasses the real Geidea/USB terminal '
-                      'entirely and always reports a connected terminal and '
-                      'an approved payment. Resets to off on every app '
-                      'restart, never saved.',
-                    ),
+                        'Testing only — fakes an approved payment',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     value: _fakeTerminalEnabled,
                     onChanged: (value) {
                       setState(() => _fakeTerminalEnabled = value);
@@ -829,17 +833,17 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                   // Off by default — this shouldn't write to disk forever
                   // on every kiosk in the field. Persisted, so this survives
                   // restart (unlike Fake Payment Terminal above).
-                  const Text('Diagnostics', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Diagnostics',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Enable trace logging'),
+                    title: const TitleWithInfo('Enable trace logging',
+                        'Writes startup/crash trace lines to a log file, readable via the separate "Logger" icon on the home screen/app drawer. Off by default — only turn on while actively diagnosing an issue.'),
                     subtitle: const Text(
-                      'Writes startup/crash trace lines to a log file, readable '
-                      'via the separate "Waha Startup Log" icon on the home '
-                      'screen/app drawer. Off by default — only turn on while '
-                      'actively diagnosing an issue.',
-                    ),
+                        'Writes trace lines to a log file (off by default)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     value: _loggingEnabled,
                     onChanged: (value) {
                       setState(() => _loggingEnabled = value);
@@ -854,23 +858,38 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     dense: true,
                     leading: const Icon(Icons.description_outlined),
                     title: const Text('Trace log — quick actions'),
-                    subtitle: const Text('Open the viewer, upload the log to Waha, or clear it.'),
+                    subtitle: const Text('Open, upload or clear the log',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
                     children: [
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                         leading: const Icon(Icons.article_outlined),
                         title: const Text('Open log viewer'),
-                        onTap: () => GeideaTerminalBridge.instance.openLogViewer(),
+                        onTap: () =>
+                            GeideaTerminalBridge.instance.openLogViewer(),
                       ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        leading: const Icon(Icons.cloud_upload_outlined),
-                        title: const Text('Upload log to Waha'),
-                        subtitle: const Text('Sends the last ~1 MB of the log; shows a LOG ID to pass on.'),
-                        onTap: () => _showDiagnostic('Upload log', _uploadLogText),
-                      ),
+                      // UI-only gate (backend re-enforces on the request
+                      // itself) — hidden rather than disabled, since a
+                      // device without this permission has no use for it.
+                      if (permissionService.can('UPLOAD_LOGS'))
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: const Icon(Icons.cloud_upload_outlined),
+                          title: const Text('Upload log to Waha'),
+                          subtitle: const Text(
+                              'Sends the recent log and shows a LOG ID',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          trailing: const InfoTrailing(
+                              title: 'Upload log to Waha',
+                              text:
+                                  'Sends the last ~1 MB of the log; shows a LOG ID to pass on.',
+                              chevron: false),
+                          onTap: () =>
+                              _showDiagnostic('Upload log', _uploadLogText),
+                        ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
@@ -888,11 +907,14 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     leading: const Icon(Icons.usb),
                     title: const Text('List attached USB devices'),
                     subtitle: const Text(
-                      'Shows every USB device, whether this device is a USB '
-                      'host or peripheral, and which device the Geidea SDK '
-                      'would use. Read-only.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
+                        'USB devices and the one Geidea would use',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'List attached USB devices',
+                        text:
+                            'Shows every USB device, whether this device is a USB host or peripheral, and which device the Geidea SDK would use. Read-only.',
+                        chevron: true),
                     onTap: _showUsbDevices,
                   ),
                   ListTile(
@@ -901,13 +923,16 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     leading: const Icon(Icons.handshake_outlined),
                     title: const Text('Check Geidea Terminal Status'),
                     subtitle: const Text(
-                      'Calls the real Geidea startCheckStatus() over USB and '
-                      'waits up to 6 s. Shows request started / sent / '
-                      'response, the exact SDK result and timing. Unlike '
-                      '"Detect", this proves the terminal answers.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _showDiagnostic('Geidea terminal status', _handshakeText),
+                        'Real status request to the terminal over USB',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'Check Geidea Terminal Status',
+                        text:
+                            'Calls the real Geidea startCheckStatus() over USB and waits up to 6 s. Shows request started / sent / response, the exact SDK result and timing. Unlike "Detect", this proves the terminal answers.',
+                        chevron: true),
+                    onTap: () => _showDiagnostic(
+                        'Geidea terminal status', _handshakeText),
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -915,13 +940,14 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     leading: const Icon(Icons.fact_check_outlined),
                     title: const Text('Run Full Geidea Diagnostic'),
                     subtitle: const Text(
-                      'One complete report (~30 s): USB environment, whether '
-                      'the serial port really opens, the real status request '
-                      'with timeline, a raw probe of every terminal channel, '
-                      'and a verdict on where communication stops. Briefly '
-                      'disconnects the SDK — do not run during a payment.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
+                        'Complete USB and terminal report (~30 s)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'Run Full Geidea Diagnostic',
+                        text:
+                            'One complete report (~30 s): USB environment, whether the serial port really opens, the real status request with timeline, a raw probe of every terminal channel, and a verdict on where communication stops. Briefly disconnects the SDK — do not run during a payment.',
+                        chevron: true),
                     onTap: () => _showDiagnostic(
                       'Full Geidea diagnostic',
                       GeideaTerminalBridge.instance.fullDiagnostic,
@@ -932,11 +958,13 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     dense: true,
                     leading: const Icon(Icons.history_toggle_off),
                     title: const Text('Previous exit reasons'),
-                    subtitle: const Text(
-                      'Why Android says the app\'s earlier processes ended '
-                      '(crash, low memory, force-stop...). Android 11 or newer.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
+                    subtitle: const Text('Why earlier app processes ended',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'Previous exit reasons',
+                        text:
+                            'Why Android says the app\'s earlier processes ended (crash, low memory, force-stop...). Android 11 or newer.',
+                        chevron: true),
                     onTap: () => _showDiagnostic(
                       'Previous exit reasons',
                       GeideaTerminalBridge.instance.exitReasons,
@@ -945,14 +973,34 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
+                    leading: const Icon(Icons.info_outline),
+                    title: const Text('Session info'),
+                    subtitle: const Text(
+                        'User, store, host, mode, version, build',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'Session info',
+                        text:
+                            'Username, store slug, host, app mode, plus this build\'s version and build number — same fields as the simulator cluster\'s footer.',
+                        chevron: true),
+                    onTap: () =>
+                        _showTextDialog('Session info', _sessionInfoText()),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
                     leading: const Icon(Icons.hub_outlined),
                     title: const Text('SDK internal state & logs'),
                     subtitle: const Text(
-                      'What the Geidea SDK believes right now (port open? '
-                      'service bound?), its own log lines and log file, and '
-                      'the USB inventory. Read-only.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
+                        'What the Geidea SDK believes right now',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'SDK internal state & logs',
+                        text:
+                            'What the Geidea SDK believes right now (port open? service bound?), its own log lines and log file, and the USB inventory. Read-only.',
+                        chevron: true),
                     onTap: () => _showDiagnostic(
                       'SDK internal state',
                       GeideaTerminalBridge.instance.sdkState,
@@ -964,12 +1012,14 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     leading: const Icon(Icons.cable),
                     title: const Text('Probe USB serial channels (raw)'),
                     subtitle: const Text(
-                      'Opens each serial channel of the terminal on its own, '
-                      'sends the check command and shows which one answers. '
-                      'Briefly disconnects the SDK (it reconnects after) — '
-                      'do not run during a payment.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
+                        'Raw test of each terminal USB channel',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: const InfoTrailing(
+                        title: 'Probe USB serial channels (raw)',
+                        text:
+                            'Opens each serial channel of the terminal on its own, sends the check command and shows which one answers. Briefly disconnects the SDK (it reconnects after) — do not run during a payment.',
+                        chevron: true),
                     onTap: () => _showDiagnostic(
                       'USB channel probe',
                       GeideaTerminalBridge.instance.probeChannels,
@@ -986,6 +1036,59 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Same 4 fields as _SessionInfoFooter (simulator_overlay.dart) — keep them
+// identical if either changes — plus this build's version, build number and
+// build time, which the footer doesn't show.
+String sessionInfoText() {
+  final username = authService.username ?? '—';
+  final storeSlug = storeConfigService.storeSlug ?? '—';
+  final host = AppConfig.apiBaseUrlLabel;
+  final mode = browsingModeService.mode.name;
+  return 'user:    $username\n'
+      'store:   $storeSlug\n'
+      'host:    $host\n'
+      'mode:    $mode\n'
+      'version: ${AppInfo.version}\n'
+      'build:   ${AppInfo.buildNumber}\n'
+      'built:   ${AppInfo.buildTime}';
+}
+
+Future<void> showSessionInfoDialog(BuildContext context) =>
+    showCopyableTextDialog(context, 'Session info', sessionInfoText());
+
+Future<void> showCopyableTextDialog(
+    BuildContext context, String title, String text) async {
+  var copied = false;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            text,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: text));
+              setDialogState(() => copied = true);
+            },
+            child: Text(copied ? 'Copied' : 'Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 class _SecondsField extends StatelessWidget {
   final String label;
@@ -1025,7 +1128,8 @@ String _platformLabel(SupportedPlatform p) => switch (p) {
 
 class _AdminPaymentMethodsPanel extends StatefulWidget {
   @override
-  State<_AdminPaymentMethodsPanel> createState() => _AdminPaymentMethodsPanelState();
+  State<_AdminPaymentMethodsPanel> createState() =>
+      _AdminPaymentMethodsPanelState();
 }
 
 class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
@@ -1035,13 +1139,28 @@ class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
   List<AdminPaymentMethodView> _methods = [];
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final storeId = authService.sessionStoreId ?? storeConfigService.storeId;
-      final methods = await context.read<ApiClient>().getAdminPaymentMethods(storeId: storeId, token: authService.token);
-      if (mounted) setState(() { _methods = methods; _loading = false; });
+      final methods = await context
+          .read<ApiClient>()
+          .getAdminPaymentMethods(storeId: storeId, token: authService.token);
+      if (mounted) {
+        setState(() {
+          _methods = methods;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -1056,7 +1175,8 @@ class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
       barrierDismissible: false,
       builder: (_) => const PopScope(
         canPop: false,
-        child: Center(child: Card(
+        child: Center(
+            child: Card(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1070,7 +1190,8 @@ class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
     );
 
     try {
-      await api.setPaymentMethodStoreActive(method.id, active: newActive, storeId: storeId, token: authService.token);
+      await api.setPaymentMethodStoreActive(method.id,
+          active: newActive, storeId: storeId, token: authService.token);
       if (!mounted) return;
       Navigator.of(context).pop(); // close dialog
       await _load(); // refresh list
@@ -1130,7 +1251,9 @@ class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                    Text(_error!,
+                        style:
+                            const TextStyle(color: Colors.red, fontSize: 13)),
                     const SizedBox(height: 8),
                     TextButton(onPressed: _load, child: const Text('Retry')),
                   ],
@@ -1147,7 +1270,8 @@ class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
                 CheckboxListTile(
                   title: Text(
                     _nameOrKey(m.displayName, m.key, lang),
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   subtitle: Text(m.provider,
                       style: TextStyle(fontSize: 12, color: scheme.outline)),
@@ -1162,49 +1286,75 @@ class _AdminPaymentMethodsPanelState extends State<_AdminPaymentMethodsPanel> {
   }
 }
 
-String _nameOrKey(Map<String, dynamic>? displayName, String fallback, String lang) {
+String _nameOrKey(
+    Map<String, dynamic>? displayName, String fallback, String lang) {
   final name = localeName(displayName, lang);
   return name.isEmpty ? fallback : name;
 }
 
 // ── Server Connection panel ───────────────────────────────────────────────────
 
+/// Convenience only — a preset just fills the form; every field stays
+/// editable afterwards and the fields (not the preset) are the source of
+/// truth. Only generic addresses here: never commit a real deployment address.
 enum _ServerPreset {
-  emulator('Emulator — 10.0.2.2', '10.0.2.2', 8081),
-  localhost('Localhost', 'localhost', 8081),
-  custom('Custom', '', 8081);
+  emulator('Emulator — 10.0.2.2', 'http', '10.0.2.2', 8081),
+  localhost('Localhost (this device)', 'http', '127.0.0.1', 8081),
+  lan('LAN — 192.168.1.x', 'http', '192.168.1.', 8081),
+  custom('Custom', 'http', '', 8081);
 
   final String label;
-  final String defaultHost;
-  final int defaultPort;
-  const _ServerPreset(this.label, this.defaultHost, this.defaultPort);
+  final String scheme;
+  final String host;
+  final int port;
+  const _ServerPreset(this.label, this.scheme, this.host, this.port);
 }
 
-class _ServerConnectionPanel extends StatefulWidget {
+class ServerConnectionPanel extends StatefulWidget {
+  /// Open by default — used when the panel is the whole screen (startup
+  /// connection popup), rather than one card among the Settings tiles.
+  final bool initiallyExpanded;
+
+  /// Start with the Custom Connection switch in this position instead of the
+  /// saved one (e.g. OFF for "Use project default").
+  final bool? initialCustomOn;
+
+  const ServerConnectionPanel(
+      {super.key, this.initiallyExpanded = false, this.initialCustomOn});
+
   @override
-  State<_ServerConnectionPanel> createState() => _ServerConnectionPanelState();
+  State<ServerConnectionPanel> createState() => _ServerConnectionPanelState();
 }
 
-class _ServerConnectionPanelState extends State<_ServerConnectionPanel> {
+class _ServerConnectionPanelState extends State<ServerConnectionPanel> {
   bool _expanded = false;
-  bool _useDefault = false;
+  bool _customOn = false;
+  bool _showAdvanced = false;
+  String _scheme = 'http';
   _ServerPreset _preset = _ServerPreset.custom;
   late final TextEditingController _hostCtrl;
   late final TextEditingController _portCtrl;
+  late final TextEditingController _pathCtrl;
+  final _userCtrl = TextEditingController();
+  final _secretCtrl = TextEditingController();
   bool _saving = false;
   String? _result;
+  bool _resultIsError = false;
 
   @override
   void initState() {
     super.initState();
-    final stored = LocalPrefs.apiBaseUrl;
-    _useDefault = stored == null || stored.isEmpty;
-
-    // Parse host + port from the stored override, or from the current resolved URL.
-    final toParse = (stored != null && stored.isNotEmpty) ? stored : AppConfig.apiBaseUrl;
-    final uri = Uri.tryParse(toParse);
-    _hostCtrl = TextEditingController(text: uri?.host ?? '');
-    _portCtrl = TextEditingController(text: (uri?.hasPort == true ? uri!.port : 8081).toString());
+    final conn = AppConfig.connection;
+    final saved = conn.custom;
+    _customOn = widget.initialCustomOn ?? conn.customEnabled;
+    _expanded = widget.initiallyExpanded;
+    _scheme = saved.scheme;
+    // The saved fields are shown as-is, even while Custom is OFF, so they are
+    // still there when it is switched back ON.
+    _hostCtrl = TextEditingController(text: saved.host);
+    _portCtrl = TextEditingController(text: saved.port?.toString() ?? '');
+    _pathCtrl = TextEditingController(text: saved.basePath);
+    _showAdvanced = saved.basePath.isNotEmpty;
     _detectPreset();
   }
 
@@ -1212,63 +1362,153 @@ class _ServerConnectionPanelState extends State<_ServerConnectionPanel> {
   void dispose() {
     _hostCtrl.dispose();
     _portCtrl.dispose();
+    _pathCtrl.dispose();
+    _userCtrl.dispose();
+    _secretCtrl.dispose();
     super.dispose();
+  }
+
+  int? get _port {
+    final t = _portCtrl.text.trim();
+    return t.isEmpty ? null : int.tryParse(t);
+  }
+
+  /// What the form currently describes — a draft until Save & Apply.
+  CustomConnection get _draft => CustomConnection(
+        scheme: _scheme,
+        host: _hostCtrl.text.trim(),
+        port: _port,
+        basePath: CustomConnection.normalizeBasePath(_pathCtrl.text),
+      );
+
+  /// Null when usable. A non-numeric port isn't caught by [_draft.validate]
+  /// (it parses to null = "no port"), so check it here.
+  String? get _draftError {
+    final t = _portCtrl.text.trim();
+    if (t.isNotEmpty && int.tryParse(t) == null) return 'Port must be a number';
+    return _draft.validate();
   }
 
   void _detectPreset() {
     final host = _hostCtrl.text.trim();
-    final port = int.tryParse(_portCtrl.text.trim()) ?? 8081;
+    final port = _port;
     for (final p in _ServerPreset.values) {
-      if (p != _ServerPreset.custom && p.defaultHost == host && p.defaultPort == port) {
+      if (p == _ServerPreset.custom || p == _ServerPreset.lan) continue;
+      if (p.host == host && p.port == port && p.scheme == _scheme) {
         _preset = p;
         return;
       }
     }
-    _preset = _ServerPreset.custom;
+    _preset = host.startsWith('192.168.1.') && _scheme == 'http'
+        ? _ServerPreset.lan
+        : _ServerPreset.custom;
   }
 
   void _selectPreset(_ServerPreset p) {
     setState(() {
       _preset = p;
-      if (p != _ServerPreset.custom) {
-        _hostCtrl.text = p.defaultHost;
-        _portCtrl.text = p.defaultPort.toString();
-      }
+      if (p == _ServerPreset.custom) return;
+      _scheme = p.scheme;
+      _hostCtrl.text = p.host;
+      _portCtrl.text = p.port.toString();
+      // Leave the cursor at the end so the last LAN octet can be typed.
+      _hostCtrl.selection =
+          TextSelection.collapsed(offset: _hostCtrl.text.length);
     });
   }
 
-  String get _previewUrl {
-    final h = _hostCtrl.text.trim();
-    final port = _portCtrl.text.trim();
-    if (h.isEmpty) return '';
-    return 'http://$h:$port';
-  }
+  /// The switch only moves the draft. Nothing changes on the device until
+  /// the Apply button succeeds — going either way means signing in to a
+  /// server, so it has to be tested first.
+  void _toggleCustom(bool on) => setState(() {
+        _customOn = on;
+        _result = null;
+      });
 
-  Future<void> _save() async {
-    setState(() { _saving = true; _result = null; });
-    try {
-      if (_useDefault) {
-        await LocalPrefs.clearApiBaseUrl();
-        if (mounted) setState(() { _saving = false; _result = '✓ Override cleared — using app default'; });
+  /// True when the button has something to do: Custom draft is ON, or it is
+  /// OFF while a custom server is still the active one.
+  bool get _needsApply => _customOn || AppConfig.connection.customActive;
+
+  Future<void> _apply() async {
+    if (_customOn) {
+      final error = _draftError;
+      if (error != null) {
+        setState(() {
+          _resultIsError = true;
+          _result = error;
+        });
         return;
       }
-      final url = _previewUrl;
-      if (url.isEmpty) { setState(() { _saving = false; }); return; }
-      await LocalPrefs.setApiBaseUrl(url);
-      final token = authService.token;
-      if (token != null) {
-        await context.read<ApiClient>().updateConfig({'publicBaseUrl': url}, token: token);
+    }
+    final api = context.read<ApiClient>();
+    final order = context.read<OrderFlowController>();
+    final nav = Navigator.of(context);
+
+    // A cart/order belongs to the server it was made on.
+    if (order.cart.isNotEmpty || order.orderId != null) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Discard current cart?'),
+          content: const Text(
+              'A cart or order is in progress. Switching server discards it.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Switch')),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+    }
+
+    setState(() {
+      _saving = true;
+      _result = null;
+    });
+    final result = await ConnectionSwitcher.apply(
+      customEnabled: _customOn,
+      // OFF keeps whatever custom fields were saved — the form is not saved.
+      custom: _customOn ? _draft : AppConfig.connection.custom,
+      activeApi: api,
+      order: order,
+      credentials: _credsNeeded
+          ? SwitchCredentials(_userCtrl.text, _secretCtrl.text)
+          : null,
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _resultIsError = !result.ok;
+      _result = result.ok
+          ? '✓ ${result.message}'
+          : '✗ ${_stepLabel(result.failedStep)}: ${result.message}';
+      if (result.ok) {
+        _userCtrl.clear();
+        _secretCtrl.clear();
       }
-      if (mounted) setState(() { _saving = false; _result = '✓ Saved — restart app to reconnect'; });
-    } catch (e) {
-      if (mounted) setState(() { _saving = false; _result = 'Local saved. Backend: $e'; });
+    });
+    if (result.ok) {
+      nav.pushNamedAndRemoveUntil(Routes.landing, (_) => false);
     }
   }
+
+  String _stepLabel(String? step) => switch (step) {
+        'address' => 'Address',
+        'server' => 'Server',
+        _ => 'Sign-in',
+      };
+
+  bool get _credsNeeded => browsingModeService.mode != BrowsingMode.shopping;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final fieldsEnabled = !_useDefault;
+    final draftUrl = _draft.url;
+    final draftOk = _draftError == null;
 
     return Card(
       elevation: 0,
@@ -1285,9 +1525,9 @@ class _ServerConnectionPanelState extends State<_ServerConnectionPanel> {
                 children: [
                   Icon(Icons.dns_outlined, color: scheme.primary, size: 20),
                   const SizedBox(width: 10),
-                  Expanded(
+                  const Expanded(
                     child: Text('Server Connection',
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                        style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
                   Icon(_expanded ? Icons.expand_less : Icons.expand_more,
                       color: scheme.outline),
@@ -1299,116 +1539,254 @@ class _ServerConnectionPanelState extends State<_ServerConnectionPanel> {
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Use app default checkbox ──────────────────────────
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Use app default'),
-                    subtitle: Text(
-                      'Falls back to built-in platform URL (LAN / emulator / localhost)',
-                      style: TextStyle(fontSize: 11, color: scheme.outline),
-                    ),
-                    value: _useDefault,
-                    onChanged: (v) => setState(() => _useDefault = v!),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // ── Preset dropdown ───────────────────────────────────
-                  _FieldRow(
-                    label: 'Preset',
-                    enabled: fieldsEnabled,
-                    child: DropdownButtonFormField<_ServerPreset>(
-                      value: _preset,
-                      isDense: true,
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        enabled: fieldsEnabled,
+              child: ListenableBuilder(
+                listenable: AppConfig.connection,
+                builder: (context, _) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Custom Connection switch (OFF by default) ─────────
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Custom Connection'),
+                      subtitle: Text(
+                        _customOn
+                            ? 'Overrides the app default'
+                            : 'Off — using the app default',
+                        style: TextStyle(fontSize: 11, color: scheme.outline),
                       ),
-                      items: _ServerPreset.values
-                          .map((p) => DropdownMenuItem(
-                                value: p,
-                                child: Text(p.label),
-                              ))
-                          .toList(),
-                      onChanged: fieldsEnabled ? (p) => _selectPreset(p!) : null,
+                      value: _customOn,
+                      onChanged: _saving ? null : _toggleCustom,
                     ),
-                  ),
-                  const SizedBox(height: 8),
 
-                  // ── Host ─────────────────────────────────────────────
-                  _FieldRow(
-                    label: 'Host',
-                    enabled: fieldsEnabled,
-                    child: TextField(
-                      controller: _hostCtrl,
-                      enabled: fieldsEnabled,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        hintText: '192.168.1.x',
+                    if (!_customOn) ...[
+                      const SizedBox(height: 4),
+                      Text('Using app default',
+                          style:
+                              TextStyle(fontSize: 12, color: scheme.outline)),
+                      Text(
+                        AppConfig.defaultApiBaseUrl,
+                        style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            color: scheme.primary),
                       ),
-                      keyboardType: TextInputType.url,
-                      autocorrect: false,
-                      onChanged: (_) => setState(_detectPreset),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                    ] else ...[
+                      const SizedBox(height: 8),
 
-                  // ── Port ─────────────────────────────────────────────
-                  _FieldRow(
-                    label: 'Port',
-                    enabled: fieldsEnabled,
-                    child: SizedBox(
-                      width: 100,
-                      child: TextField(
-                        controller: _portCtrl,
-                        enabled: fieldsEnabled,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
+                      // ── Preset (fills the form, never locks it) ────────
+                      _FieldRow(
+                        label: 'Preset',
+                        child: DropdownButtonFormField<_ServerPreset>(
+                          value: _preset,
                           isDense: true,
-                          hintText: '8081',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: _ServerPreset.values
+                              .map((p) => DropdownMenuItem(
+                                    value: p,
+                                    child: Text(p.label),
+                                  ))
+                              .toList(),
+                          onChanged: (p) => _selectPreset(p!),
                         ),
-                        keyboardType: TextInputType.number,
-                        onChanged: (_) => setState(_detectPreset),
                       ),
-                    ),
-                  ),
+                      const SizedBox(height: 8),
 
-                  // ── URL preview ───────────────────────────────────────
-                  if (!_useDefault && _previewUrl.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      _previewUrl,
-                      style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 12,
-                          color: scheme.primary),
-                    ),
-                  ],
+                      // ── Scheme ─────────────────────────────────────────
+                      _FieldRow(
+                        label: 'Scheme',
+                        child: DropdownButtonFormField<String>(
+                          value: _scheme,
+                          isDense: true,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'http', child: Text('HTTP')),
+                            DropdownMenuItem(
+                                value: 'https', child: Text('HTTPS')),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _scheme = v!;
+                            _detectPreset();
+                          }),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
 
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _saving ? null : _save,
-                      child: _saving
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Text('Save & Apply'),
-                    ),
-                  ),
-                  if (_result != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_result!,
-                        style: TextStyle(fontSize: 12, color: scheme.outline)),
+                      // ── Host / IP ──────────────────────────────────────
+                      _FieldRow(
+                        label: 'Host / IP',
+                        child: TextField(
+                          controller: _hostCtrl,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            hintText: 'api.example.com or 192.168.1.x',
+                          ),
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                          onChanged: (_) => setState(_detectPreset),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // ── Port (optional) ────────────────────────────────
+                      _FieldRow(
+                        label: 'Port',
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            width: 120,
+                            child: TextField(
+                              controller: _portCtrl,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                hintText: 'optional',
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(_detectPreset),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // ── Advanced: base path ────────────────────────────
+                      InkWell(
+                        onTap: () =>
+                            setState(() => _showAdvanced = !_showAdvanced),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Text('Advanced',
+                                  style: TextStyle(
+                                      fontSize: 12, color: scheme.primary)),
+                              Icon(
+                                  _showAdvanced
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 16,
+                                  color: scheme.primary),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_showAdvanced)
+                        _FieldRow(
+                          label: 'Base path',
+                          child: TextField(
+                            controller: _pathCtrl,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              hintText: 'optional, e.g. /waha',
+                            ),
+                            autocorrect: false,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+
+                      // ── URL preview (read-only) ────────────────────────
+                      if (draftUrl.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          draftOk ? draftUrl : '$draftUrl  ✗ $_draftError',
+                          style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              color: draftOk ? scheme.primary : scheme.error),
+                        ),
+                      ],
+
+                      // ── Active indicator ───────────────────────────────
+                      if (AppConfig.isCustomConnectionActive) ...[
+                        const SizedBox(height: 8),
+                        Text('Active:',
+                            style:
+                                TextStyle(fontSize: 12, color: scheme.outline)),
+                        Text(
+                          AppConfig.apiBaseUrl,
+                          style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                    if (_needsApply) ...[
+                      const SizedBox(height: 14),
+                      if (_credsNeeded) ...[
+                        Text(
+                          browsingModeService.mode == BrowsingMode.kiosk
+                              ? 'Sign in to the ${_customOn ? 'new' : 'default'} server (device login — not saved)'
+                              : 'Sign in to the ${_customOn ? 'new' : 'default'} server (not saved)',
+                          style: TextStyle(fontSize: 12, color: scheme.outline),
+                        ),
+                        const SizedBox(height: 6),
+                        _FieldRow(
+                          label: 'User',
+                          child: TextField(
+                            controller: _userCtrl,
+                            decoration: InputDecoration(
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                hintText: authService.username != null
+                                    ? 'optional — ${authService.username}'
+                                    : 'username'),
+                            autocorrect: false,
+                            enableSuggestions: false,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _FieldRow(
+                          label: browsingModeService.mode == BrowsingMode.kiosk
+                              ? 'PIN'
+                              : 'Password',
+                          child: TextField(
+                            controller: _secretCtrl,
+                            obscureText: true,
+                            enableSuggestions: false,
+                            autocorrect: false,
+                            decoration: const InputDecoration(
+                                border: OutlineInputBorder(), isDense: true),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: _saving ? null : _apply,
+                          child: _saving
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : Text(_customOn
+                                  ? 'Save & Apply'
+                                  : 'Use app default'),
+                        ),
+                      ),
+                    ],
+                    if (_result != null) ...[
+                      const SizedBox(height: 8),
+                      Text(_result!,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: _resultIsError
+                                  ? scheme.error
+                                  : scheme.outline)),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],
@@ -1421,8 +1799,7 @@ class _ServerConnectionPanelState extends State<_ServerConnectionPanel> {
 class _FieldRow extends StatelessWidget {
   final String label;
   final Widget child;
-  final bool enabled;
-  const _FieldRow({required this.label, required this.child, this.enabled = true});
+  const _FieldRow({required this.label, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -1431,12 +1808,12 @@ class _FieldRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 52,
+          width: 72,
           child: Text(
             label,
             style: TextStyle(
               fontSize: 13,
-              color: enabled ? scheme.onSurface : scheme.outline,
+              color: scheme.onSurface,
             ),
           ),
         ),

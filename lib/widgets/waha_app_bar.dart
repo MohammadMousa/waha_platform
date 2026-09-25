@@ -11,7 +11,17 @@ import 'profile_sheet.dart';
 class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget> extraActions;
-  const WahaAppBar({super.key, required this.title, this.extraActions = const []});
+  // Off lets a caller swap in its own language control (e.g. Browse uses the
+  // plain globe-icon style from cart_screen.dart instead) without also
+  // showing this one — keeps the change scoped to that one screen rather
+  // than restyling every WahaAppBar user.
+  final bool showLangToggle;
+  const WahaAppBar({
+    super.key,
+    required this.title,
+    this.extraActions = const [],
+    this.showLangToggle = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +46,7 @@ class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
               builder: (_) => const ProfileSheet(),
             ),
           ),
-        if (!isNormal)
+        if (!isNormal && showLangToggle)
           const _LangToggleButton(),
       ],
     );

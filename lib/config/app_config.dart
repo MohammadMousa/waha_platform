@@ -1,56 +1,72 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-import '../services/local_prefs.dart';
 import '../state/browsing_mode_service.dart';
+import 'connection_settings.dart';
 
 class AppConfig {
   AppConfig._();
 
+  /// The Custom Connection switch and its saved fields. Listen to this to
+  /// react when the active server changes (footer, native log uploader).
+  static final ConnectionSettings connection = ConnectionSettings();
+
+  static const _buildDefine = String.fromEnvironment('API_BASE_URL');
+
   /// Resolves in this order:
-  /// 1. `--dart-define=API_BASE_URL=...` at build/run time (always wins).
-  /// 2. Runtime override stored by Settings → Server Connection panel.
+  /// 1. Custom Connection, when switched ON in Settings → Server Connection
+  ///    (and its fields form a valid address). Overrides a build-time URL.
+  /// 2. `--dart-define=API_BASE_URL=...` at build/run time — the project/build
+  ///    default, and what Custom Connection OFF returns to.
   /// 3. Platform default — emulator alias on Android, origin host on web,
-  ///    localhost elsewhere. On a real Android device the default resolves
-  ///    to the emulator alias (unreachable) — set the URL once via the
-  ///    Server Connection panel to point at the LAN IP.
+  ///    localhost elsewhere. On a real Android device this is unreachable, so
+  ///    pass API_BASE_URL or turn Custom Connection on.
   ///
   /// Never hardcode a LAN IP here — use the Server Connection panel instead.
-  static String get apiBaseUrl {
-    const override = String.fromEnvironment('API_BASE_URL');
-    if (override.isNotEmpty) return override;
+  static String get apiBaseUrl => resolveApiBaseUrl(
+        customActive: connection.customActive,
+        customUrl: connection.custom.url,
+        buildDefine: _buildDefine,
+        platformDefault: _platformDefault,
+      );
 
-    // Runtime override persisted by Settings → Server Connection panel.
-    // On Android, skip stored localhost values — localhost resolves to the
-    // device itself, not the backend server.
-    final stored = LocalPrefs.apiBaseUrl;
-    final storedIsUsable = stored != null &&
-        stored.isNotEmpty &&
-        (!Platform.isAndroid || !stored.contains('localhost'));
-    if (storedIsUsable) return stored;
+  /// The default used when Custom Connection is OFF (build define, else
+  /// platform default). Shown in Settings so the operator sees what OFF means.
+  static String get defaultApiBaseUrl =>
+      _buildDefine.isNotEmpty ? _buildDefine : _platformDefault;
 
+  static String get _platformDefault {
     if (kIsWeb) return 'http://${Uri.base.host}:8081';
     if (Platform.isAndroid) return 'http://10.0.2.2:8081';
     return 'http://localhost:8081';
   }
 
-  /// True when a real server address is already known — a build-time
-  /// `--dart-define=API_BASE_URL=...` or a value already saved by the
-  /// Server Connection panel — as opposed to falling through to the
-  /// unreachable platform default above. Used to skip first-launch LAN
-  /// auto-discovery: without this, main.dart's discovery gate only checked
-  /// the stored preference, so a release build shipped with API_BASE_URL
-  /// baked in still ran the "Server Found" probe/prompt on every fresh
-  /// install for no reason — the address was already known before
-  /// discovery ever ran.
-  static bool get hasExplicitApiBaseUrl {
-    const override = String.fromEnvironment('API_BASE_URL');
-    if (override.isNotEmpty) return true;
-    final stored = LocalPrefs.apiBaseUrl;
-    return stored != null &&
-        stored.isNotEmpty &&
-        (!Platform.isAndroid || !stored.contains('localhost'));
+  /// Pure precedence rule — see [apiBaseUrl].
+  static String resolveApiBaseUrl({
+    required bool customActive,
+    required String customUrl,
+    required String buildDefine,
+    required String platformDefault,
+  }) {
+    if (customActive && customUrl.isNotEmpty) return customUrl;
+    if (buildDefine.isNotEmpty) return buildDefine;
+    return platformDefault;
   }
+
+  /// True while a Custom Connection is overriding the project default.
+  static bool get isCustomConnectionActive => connection.customActive;
+
+  /// [apiBaseUrl] with a "(custom)" marker when it isn't the project default —
+  /// for the footer and Session info.
+  static String get apiBaseUrlLabel =>
+      isCustomConnectionActive ? '$apiBaseUrl (custom)' : apiBaseUrl;
+
+  /// Runs the one-time move from the old single-URL setting. Call once after
+  /// LocalPrefs.init().
+  static Future<void> initConnection() => connection.migrateLegacy(
+        hasBuildDefine: _buildDefine.isNotEmpty,
+        isAndroid: !kIsWeb && Platform.isAndroid,
+      );
 
   /// Web-only, ephemeral: a `?mode=` URL query param. This is the actual
   /// real-world mechanism for entering Shopping mode — a customer scans a
@@ -90,4 +106,3 @@ class AppConfig {
   static bool get simulatorAvailable =>
       const bool.fromEnvironment('ENABLE_SIMULATOR', defaultValue: false);
 }
-

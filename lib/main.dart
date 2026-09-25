@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -14,8 +13,8 @@ import 'services/api_client.dart';
 import 'services/app_messenger.dart';
 import 'services/geidea_terminal_bridge.dart';
 import 'services/geidea_usb_activity_logger.dart';
+import 'services/app_info.dart';
 import 'services/local_prefs.dart';
-import 'services/server_discovery.dart';
 import 'services/trace_log.dart';
 import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
@@ -25,6 +24,8 @@ import 'state/locale_service.dart';
 import 'state/order_flow_controller.dart';
 import 'state/permission_service.dart';
 import 'state/simulator_service.dart';
+import 'state/startup_connection.dart';
+import 'widgets/connection_gate_overlay.dart';
 import 'state/store_config_service.dart';
 import 'widgets/kiosk_idle_guard.dart';
 
@@ -57,6 +58,8 @@ void main() {
       await AudioPlayer.global.setAudioContext(AudioContext());
     }
     await LocalPrefs.init();
+    await AppInfo.init();
+    await AppConfig.initConnection();
     // Effective = dart-define seeds the persisted flag once on first run,
     // then the Settings toggle is the durable control from then on (same
     // pattern as the dart-define mode fallback below) — OR'd, same
@@ -129,32 +132,21 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   final beforeCountdown = LocalPrefs.beforeCountdownSeconds;
   final afterWarn = LocalPrefs.afterWarnSeconds;
   final afterCountdown = LocalPrefs.afterCountdownSeconds;
-  if (beforeWarn != null || beforeCountdown != null || afterWarn != null || afterCountdown != null) {
+  if (beforeWarn != null ||
+      beforeCountdown != null ||
+      afterWarn != null ||
+      afterCountdown != null) {
     kioskTimerConfig.update(
-      beforeInvoiceIdleWarningAfter: beforeWarn != null ? Duration(seconds: beforeWarn) : null,
+      beforeInvoiceIdleWarningAfter:
+          beforeWarn != null ? Duration(seconds: beforeWarn) : null,
       beforeInvoiceWarningCountdown:
           beforeCountdown != null ? Duration(seconds: beforeCountdown) : null,
-      afterInvoiceIdleWarningAfter: afterWarn != null ? Duration(seconds: afterWarn) : null,
+      afterInvoiceIdleWarningAfter:
+          afterWarn != null ? Duration(seconds: afterWarn) : null,
       afterInvoiceWarningCountdown:
           afterCountdown != null ? Duration(seconds: afterCountdown) : null,
       persist: false,
     );
-  }
-
-  // First-launch auto-discovery: if running on Android with no server
-  // address already known — neither a stored one nor a build-time
-  // --dart-define=API_BASE_URL — probe the local subnet for a responding
-  // backend. If found, save the URL now so resolveStartupAuth below uses
-  // the correct host immediately. justDiscoveredUrl bridges the result to
-  // LandingScreen for the UI prompt.
-  if (!kIsWeb && Platform.isAndroid && !AppConfig.hasExplicitApiBaseUrl) {
-    final found = await ServerDiscovery.discover();
-    if (found != null) {
-      await LocalPrefs.setApiBaseUrl(found);
-      ServerDiscovery.justDiscoveredUrl = found;
-    } else {
-      ServerDiscovery.justDiscoveredUrl = ''; // ran but nothing found
-    }
   }
 
   // Auth resolution — reuses the shared apiClient passed in (see main()'s
@@ -167,7 +159,16 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   // there's a session, rather than flashing a logged-out state for a
   // moment first. Mode must already be resolved by this point — Shopping's
   // auto-account behavior depends on it.
-  await authService.resolveStartupAuth(apiClient, browsingModeService.mode);
+  // If the server can't be reached at all, don't sit through the slow
+  // timeouts of every call below — show the "Connecting…" popup instead,
+  // which retries on a growing schedule and finishes this sign-in once the
+  // server answers (see StartupConnection).
+  final reachError = await apiClient.probe();
+  if (reachError != null) {
+    startupConnection.begin(apiClient, reachError);
+  } else {
+    await authService.resolveStartupAuth(apiClient, browsingModeService.mode);
+  }
 
   // Geidea USB terminal (card-present payment) — Kiosk-only, matching
   // payment_methods.available_modes for the 'terminal' row. Fire-and-forget:
@@ -178,7 +179,11 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
     unawaited(GeideaTerminalBridge.instance.initialize());
     UsbDiagnostics.logSnapshot('app start');
     // So the native log viewer can upload logs even when Flutter can't start.
-    unawaited(GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl));
+    unawaited(
+        GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl));
+    // Keep the native uploader pointed at whichever server is active now.
+    AppConfig.connection.addListener(() => unawaited(
+        GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl)));
   }
 }
 
@@ -239,10 +244,14 @@ class WahaApp extends StatelessWidget {
                 navigatorKey: navigatorKey,
                 navigatorObservers: [KioskRouteObserver()],
                 onGenerateRoute: onGenerateRoute,
+                // Covers every route while the server is unreachable at
+                // startup; needs no Overlay so it can sit above the Navigator.
+                builder: (context, child) =>
+                    ConnectionGateOverlay(child: child ?? const SizedBox.shrink()),
                 initialRoute: Routes.landing,
-                // No `builder` override here on purpose — the simulator overlay
-                // is stacked per-route inside onGenerateRoute instead, so it
-                // lives inside the Navigator's Overlay. See app_router.dart.
+                // The simulator overlay is stacked per-route inside
+                // onGenerateRoute (it needs the Navigator's Overlay); only
+                // the overlay-free connection popup lives in `builder`.
               ),
             ),
           );

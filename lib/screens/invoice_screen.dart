@@ -1963,7 +1963,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
 
     final TerminalSession session;
     try {
-      session = await widget.apiClient.createTerminalSession(widget.orderId);
+      session = await widget.apiClient.createTerminalSession(widget.orderId, token: authService.token);
     } catch (e) {
       TraceLog.log('Terminal: backend session create failed: $e');
       if (mounted) {
@@ -2031,6 +2031,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
           session.id,
           authCode: authCode,
           notes: {...result.details, 'vendor': 'geidea'},
+          token: authService.token,
         );
         final order = await widget.apiClient.getOrder(widget.orderId);
         TraceLog.log('Terminal: session ${session.id} confirmed to backend, order paid');
@@ -2048,7 +2049,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       }
     } else {
       TraceLog.log('Terminal: declined/failed — ${result.errorMessage ?? "no message"}');
-      try { await widget.apiClient.cancelTerminalSession(session.id); } catch (_) {}
+      try { await widget.apiClient.cancelTerminalSession(session.id, token: authService.token); } catch (_) {}
       if (mounted) {
         setState(() {
           _failed = true;
@@ -2068,7 +2069,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     TraceLog.log('Terminal: payment cancelled by user');
     final id = _session?.id;
     if (id != null) {
-      try { await widget.apiClient.cancelTerminalSession(id); } catch (_) {}
+      try { await widget.apiClient.cancelTerminalSession(id, token: authService.token); } catch (_) {}
     }
     unawaited(GeideaTerminalBridge.instance.cancelPayment());
     if (mounted) Navigator.pop(context, null);
@@ -2123,9 +2124,12 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
 // Flutter's built-in Material icon set has no dedicated "handheld
 // card-reader device" glyph — the bare Icons.contactless wave alone reads
 // as a generic NFC symbol, not a terminal, and Icons.point_of_sale reads
-// as a cash register. This composes an actual small reader-device shape
-// instead: a rounded body, a screen showing the tap-to-pay wave, and a
-// keypad hint below it — no external asset needed.
+// as a cash register. This composes an actual small device shape instead —
+// now a real PHONE silhouette (a notch/speaker at the top, a home-indicator
+// bar at the bottom, per the user's request), since the physical Geidea
+// terminal (PAX A920Pro) is itself phone-shaped — not the earlier abstract
+// "card reader + keypad dots" look. No fill behind the contactless icon —
+// just the icon on the card's own background. No external asset needed.
 class _TerminalIcon extends StatelessWidget {
   final Color color;
   const _TerminalIcon({required this.color});
@@ -2134,47 +2138,41 @@ class _TerminalIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 68,
-      height: 88,
+      width: 60,
+      height: 96,
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: color, width: 2.5),
         ),
         child: Column(
           children: [
-            // Screen — this is what makes it read as a device, not just a
-            // floating NFC symbol.
+            // Notch/speaker — reads as a phone's top edge.
+            Container(
+              width: 18,
+              height: 4,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Screen — the tap-to-pay wave, no fill behind it.
             Expanded(
               child: Container(
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                ),
                 alignment: Alignment.center,
-                child: Icon(Icons.contactless, color: scheme.surface, size: 26),
+                child: Icon(Icons.contactless, color: color, size: 30),
               ),
             ),
-            const SizedBox(height: 8),
-            // Keypad hint
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                3,
-                (i) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Container(
-                    width: 8,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
+            // Home indicator — reads as a phone's bottom edge.
+            Container(
+              width: 24,
+              height: 3,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ],

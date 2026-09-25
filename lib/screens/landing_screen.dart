@@ -23,7 +23,6 @@ import '../widgets/product_detail_sheet.dart';
 import '../widgets/product_image.dart';
 import '../widgets/admin_drawer.dart';
 import '../widgets/waha_app_bar.dart';
-import '../services/server_discovery.dart';
 import '../widgets/waha_bottom_nav.dart';
 import '../config/app_config.dart';
 
@@ -91,7 +90,6 @@ class _LandingScreenState extends State<LandingScreen> {
     authService.addListener(_onConfigChanged);
     storeConfigService.addListener(_onConfigChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkServerDiscovery();
       // Eagerly check — fires background update if auth+store already ready,
       // without waiting for a state change notification.
       _onConfigChanged();
@@ -241,40 +239,6 @@ class _LandingScreenState extends State<LandingScreen> {
     } catch (e) {
       _log('❌ $pageKey — background update failed: $e');
     }
-  }
-
-  void _checkServerDiscovery() {
-    final discovered = ServerDiscovery.justDiscoveredUrl;
-    if (discovered == null || !mounted) return;
-    ServerDiscovery.justDiscoveredUrl = null; // consume — show only once
-
-    final found = discovered.isNotEmpty;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(found ? 'Server Found' : 'Server Not Found'),
-        content: Text(
-          found
-              ? 'Auto-connected to:\n$discovered\n\nYou can change this any time in Settings → Server Connection.'
-              : 'No server found on your network.\n\nOpen Settings → Server Connection to enter the URL manually.',
-        ),
-        actions: [
-          if (!found)
-            TextButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).pushNamed(Routes.settings);
-              },
-              child: const Text('Open Settings'),
-            ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   // WebView supported on web (iframe), Android, and iOS.

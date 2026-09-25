@@ -7,6 +7,7 @@ import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../state/auth_service.dart';
+import '../state/browsing_mode_service.dart';
 import '../state/edit_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
@@ -159,12 +160,29 @@ class _BrowseScreenState extends State<BrowseScreen> {
         flow.order?.currency;
 
     final canEditProducts = context.watch<PermissionService>().can('EDIT_PRODUCTS');
+    final mode = context.watch<BrowsingModeService>().mode;
 
     return Scaffold(
       appBar: WahaAppBar(
         title: widget.browseTitle ?? widget.searchQuery ?? l10n.browseTitle,
+        showLangToggle: false,
         extraActions: [
           if (canEditProducts) const EditModeToggle(),
+          // Same plain globe-icon style as cart_screen.dart's language
+          // button, in place of WahaAppBar's own text-pill toggle. Same
+          // visibility rule as before (Kiosk/Shopping only) — only the style
+          // changed, not when it shows.
+          if (mode != BrowsingMode.normal)
+            IconButton(
+              icon: const Icon(Icons.language_outlined),
+              tooltip: l10n.settingsLanguage,
+              onPressed: () {
+                final next = localeService.locale.languageCode == 'en'
+                    ? const Locale('ar')
+                    : const Locale('en');
+                localeService.setLocale(next);
+              },
+            ),
         ],
       ),
       bottomNavigationBar: const WahaBottomNav(current: BottomNavTab.home),

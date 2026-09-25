@@ -18,9 +18,54 @@ import 'api_exceptions.dart';
 
 class ApiClient {
   final http.Client _http;
-  ApiClient({http.Client? httpClient}) : _http = httpClient ?? http.Client();
 
-  Uri _uri(String path) => Uri.parse('${AppConfig.apiBaseUrl}$path');
+  /// When set, this client talks to that server instead of the active one —
+  /// used only to test and sign in to a candidate server before switching to
+  /// it (see ConnectionSwitcher). The shared app client leaves it null.
+  final String? _baseUrl;
+
+  ApiClient({http.Client? httpClient, String? baseUrl})
+      : _http = httpClient ?? http.Client(),
+        _baseUrl = baseUrl;
+
+  Uri _uri(String path) =>
+      Uri.parse('${_baseUrl ?? AppConfig.apiBaseUrl}$path');
+
+  /// Reachability check for a candidate server: unauthenticated
+  /// GET /api/config, 5s, no retry. Unlike [getConfig] it says *why* it
+  /// failed. Returns null on success, otherwise a short human message.
+  Future<String?> probe() async {
+    try {
+      final resp = await _http
+          .get(_uri('/api/config'))
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode != 200) {
+        return 'Server answered HTTP ${resp.statusCode} — not a Waha server, or wrong base path';
+      }
+      final body = jsonDecode(resp.body);
+      if (body is! Map) {
+        return 'Server answered, but not with Waha config — wrong address?';
+      }
+      return null;
+    } on FormatException {
+      return 'Server answered, but not with Waha config — wrong address?';
+    } catch (e) {
+      final t = e.toString();
+      if (t.contains('TimeoutException')) {
+        return 'No answer within 5 seconds — check host, port and network';
+      }
+      if (t.contains('HandshakeException') || t.contains('CERTIFICATE')) {
+        return 'Secure connection failed — check HTTPS vs HTTP and the certificate';
+      }
+      if (t.contains('Connection refused')) {
+        return 'Connection refused — nothing is listening on that host/port';
+      }
+      if (t.contains('Failed host lookup')) {
+        return 'Host not found — check the name or IP';
+      }
+      return 'Cannot reach the server ($t)';
+    }
+  }
 
   Map<String, String> _headers({String? token}) => {
         'Content-Type': 'application/json',
@@ -32,7 +77,8 @@ class ApiClient {
   String _extractMessage(http.Response resp) {
     try {
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
-      return body['message'] as String? ?? 'Request failed (${resp.statusCode})';
+      return body['message'] as String? ??
+          'Request failed (${resp.statusCode})';
     } catch (_) {
       return 'Request failed (${resp.statusCode})';
     }
@@ -88,7 +134,8 @@ class ApiClient {
       ),
     );
     if (resp.statusCode == 200) {
-      return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return AuthSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 409) throw UsernameTakenException(409, msg);
@@ -110,7 +157,8 @@ class ApiClient {
       ),
     );
     if (resp.statusCode == 200) {
-      return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return AuthSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
@@ -123,7 +171,8 @@ class ApiClient {
       () => _http.post(_uri('/api/auth/guest'), headers: _headers()),
     );
     if (resp.statusCode == 200) {
-      return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return AuthSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
@@ -149,18 +198,49 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
+  // POST /api/kiosk/auth/pin/verify — checks the device PIN for the on-device
+  // Settings gate. Bearer device token; no new session; its wrong-attempt
+  // counter is separate from the device login lockout. Returns null when the
+  // PIN is right, otherwise a short message to show (wrong PIN, cooldown,
+  // expired session, network problem).
+  Future<String?> verifyKioskPin(String token, String pin) async {
+    try {
+      final resp = await _http
+          .post(_uri('/api/kiosk/auth/pin/verify'),
+              headers: _headers(token: token),
+              body: jsonEncode({'pinCode': pin}))
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body) as Map<String, dynamic>;
+        return body['valid'] == true ? null : 'Incorrect PIN';
+      }
+      if (resp.statusCode == 429) return _extractMessage(resp);
+      if (resp.statusCode == 400) return 'PIN must be 6 digits';
+      if (resp.statusCode == 401) {
+        return 'Session expired — restart the app and sign in again';
+      }
+      return _extractMessage(resp);
+    } catch (_) {
+      return 'Cannot reach the server to check the PIN';
+    }
+  }
+
   // POST /api/kiosk/auth/logout
   Future<void> kioskLogout(String token) async {
     final resp = await _send(
-      () => _http.post(_uri('/api/kiosk/auth/logout'), headers: _headers(token: token)),
+      () => _http.post(_uri('/api/kiosk/auth/logout'),
+          headers: _headers(token: token)),
     );
-    if (resp.statusCode != 200) throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    if (resp.statusCode != 200) {
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }
   }
 
   // POST /api/auth/logout
   Future<void> logout(String token) async {
     final resp = await _send(
-      () => _http.post(_uri('/api/auth/logout'), headers: _headers(token: token)),
+      () =>
+          _http.post(_uri('/api/auth/logout'), headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) return;
     final msg = _extractMessage(resp);
@@ -174,7 +254,8 @@ class ApiClient {
       () => _http.get(_uri('/api/auth/me'), headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) {
-      return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return AuthSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
@@ -195,7 +276,8 @@ class ApiClient {
       ),
     );
     if (resp.statusCode == 200) {
-      return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return AuthSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
@@ -205,7 +287,9 @@ class ApiClient {
   // GET /api/config — public, no auth. Returns system_properties as key→value map.
   Future<Map<String, String>> getConfig() async {
     try {
-      final resp = await _http.get(_uri('/api/config')).timeout(const Duration(seconds: 5));
+      final resp = await _http
+          .get(_uri('/api/config'))
+          .timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final raw = jsonDecode(resp.body) as Map<String, dynamic>;
         return raw.map((k, v) => MapEntry(k, v.toString()));
@@ -219,7 +303,9 @@ class ApiClient {
     final resp = await _send(() => _http.get(_uri('/api/stores')));
     if (resp.statusCode == 200) {
       final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) => Store.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => Store.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
@@ -228,11 +314,14 @@ class ApiClient {
   // non-public nodes. Requires MANAGE_STORES permission on the server.
   Future<List<Store>> getAdminStores(String token) async {
     final resp = await _send(
-      () => _http.get(_uri('/api/stores/admin'), headers: _headers(token: token)),
+      () =>
+          _http.get(_uri('/api/stores/admin'), headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) {
       final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) => Store.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => Store.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
@@ -279,7 +368,8 @@ class ApiClient {
       ),
     );
     if (resp.statusCode == 200) {
-      return ProductPage.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return ProductPage.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
@@ -304,7 +394,8 @@ class ApiClient {
       ),
     );
     if (resp.statusCode == 200) {
-      return ProductPage.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return ProductPage.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
@@ -352,13 +443,16 @@ class ApiClient {
     );
     if (resp.statusCode == 200) {
       final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) => PaymentMethod.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => PaymentMethod.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // PUT /api/config — update system properties (requires MANAGE_STORES)
-  Future<void> updateConfig(Map<String, String> updates, {required String token}) async {
+  Future<void> updateConfig(Map<String, String> updates,
+      {required String token}) async {
     final resp = await _send(
       () => _http.put(
         _uri('/api/config'),
@@ -371,7 +465,8 @@ class ApiClient {
   }
 
   // GET /api/payment-methods/admin?storeId= — all methods with store active state
-  Future<List<AdminPaymentMethodView>> getAdminPaymentMethods({int? storeId, String? token}) async {
+  Future<List<AdminPaymentMethodView>> getAdminPaymentMethods(
+      {int? storeId, String? token}) async {
     final resp = await _send(
       () => _http.get(
         _uri('/api/payment-methods/admin').replace(queryParameters: {
@@ -382,13 +477,17 @@ class ApiClient {
     );
     if (resp.statusCode == 200) {
       final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) => AdminPaymentMethodView.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map(
+              (e) => AdminPaymentMethodView.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // PUT /api/payment-methods/{id}/store-active?active=&storeId=
-  Future<void> setPaymentMethodStoreActive(int id, {required bool active, int? storeId, String? token}) async {
+  Future<void> setPaymentMethodStoreActive(int id,
+      {required bool active, int? storeId, String? token}) async {
     final resp = await _send(
       () => _http.put(
         _uri('/api/payment-methods/$id/store-active').replace(queryParameters: {
@@ -405,7 +504,8 @@ class ApiClient {
   // ---- Cart / order ----------------------------------------------------
 
   // POST /api/orders/quote
-  Future<Quote> quote(List<CartItem> items, {int? storeId, String? token}) async {
+  Future<Quote> quote(List<CartItem> items,
+      {int? storeId, String? token}) async {
     final resp = await _send(
       () => _http.post(
         _uri('/api/orders/quote'),
@@ -467,7 +567,9 @@ class ApiClient {
     );
     if (resp.statusCode == 200) {
       final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) => WahaOrder.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => WahaOrder.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
@@ -475,7 +577,8 @@ class ApiClient {
   // DELETE /api/orders/{id} — user cancellation (CREATED only)
   Future<void> cancelOrder(String token, String orderId) async {
     final resp = await _send(
-      () => _http.delete(_uri('/api/orders/$orderId'), headers: _headers(token: token)),
+      () => _http.delete(_uri('/api/orders/$orderId'),
+          headers: _headers(token: token)),
     );
     if (resp.statusCode == 200 || resp.statusCode == 204) return;
     final msg = _extractMessage(resp);
@@ -526,7 +629,6 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-
   // ── Terminal payment endpoints (card-present, e.g. Geidea) ────────────────
   //
   // Same endpoints originally built for the waha_terminal NFC companion
@@ -536,12 +638,15 @@ class ApiClient {
   // SDK callback returns, so it confirms/cancels immediately instead of
   // waiting for a second device to do it over HTTP.
 
-  Future<TerminalSession> createTerminalSession(String orderId) async {
+  Future<TerminalSession> createTerminalSession(String orderId,
+      {String? token}) async {
     final resp = await _send(
-      () => _http.post(_uri('/api/orders/$orderId/terminal-session'), headers: _headers()),
+      () => _http.post(_uri('/api/orders/$orderId/terminal-session'),
+          headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) {
-      return TerminalSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return TerminalSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 404) throw OrderNotFoundException(404, msg);
@@ -553,11 +658,13 @@ class ApiClient {
   // the full terminal transaction JSON (rrn, masked card number, terminal
   // id, ...) for audit/receipt purposes — free-form JSON server-side.
   Future<void> confirmTerminalSession(String sessionId,
-      {required String authCode, required Map<String, dynamic> notes}) async {
+      {required String authCode,
+      required Map<String, dynamic> notes,
+      String? token}) async {
     final resp = await _send(
       () => _http.post(
         _uri('/api/terminal-sessions/$sessionId/confirm'),
-        headers: _headers(),
+        headers: _headers(token: token),
         body: jsonEncode({'authCode': authCode, 'notes': notes}),
       ),
     );
@@ -567,8 +674,10 @@ class ApiClient {
 
   // Declined/error/gave up. Closes the PENDING record; does not preserve a
   // decline reason server-side (flagged to backend, accepted as-is for now).
-  Future<void> cancelTerminalSession(String sessionId) async {
-    await _send(() => _http.post(_uri('/api/terminal-sessions/$sessionId/cancel'), headers: _headers()));
+  Future<void> cancelTerminalSession(String sessionId, {String? token}) async {
+    await _send(() => _http.post(
+        _uri('/api/terminal-sessions/$sessionId/cancel'),
+        headers: _headers(token: token)));
   }
 
   // GET /api/orders/{id}
@@ -585,17 +694,21 @@ class ApiClient {
   // ── Odoo admin endpoints ──────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> odooStatus(String token, {int? storeId}) async {
-    final uri = _uri('/api/admin/odoo/status')
-        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
-    final resp = await _send(() => _http.get(uri, headers: _headers(token: token)));
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    final uri = _uri('/api/admin/odoo/status').replace(
+        queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp =
+        await _send(() => _http.get(uri, headers: _headers(token: token)));
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<void> oodooConfigure(String token, String baseUrl, String apiKey,
-      String username, {String? customerOverride, int? storeId}) async {
-    final uri = _uri('/api/admin/odoo/configure')
-        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+  Future<void> oodooConfigure(
+      String token, String baseUrl, String apiKey, String username,
+      {String? customerOverride, int? storeId}) async {
+    final uri = _uri('/api/admin/odoo/configure').replace(
+        queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
     final body = <String, dynamic>{
       'baseUrl': baseUrl,
       'apiKey': apiKey,
@@ -605,27 +718,32 @@ class ApiClient {
     };
     final resp = await _send(
       () => _http.post(uri,
-          headers: _headers(token: token),
-          body: jsonEncode(body)),
+          headers: _headers(token: token), body: jsonEncode(body)),
     );
-    if (resp.statusCode != 200) throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    if (resp.statusCode != 200) {
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }
   }
 
   Future<int> oodooPullCategories(String token, {int? storeId}) async {
-    final uri = _uri('/api/admin/odoo/pull/categories')
-        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
-    final resp = await _send(() => _http.post(uri, headers: _headers(token: token)));
+    final uri = _uri('/api/admin/odoo/pull/categories').replace(
+        queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp =
+        await _send(() => _http.post(uri, headers: _headers(token: token)));
     if (resp.statusCode == 200) {
-      return (jsonDecode(resp.body) as Map<String, dynamic>)['pulled'] as int? ?? 0;
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['pulled']
+              as int? ??
+          0;
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   /// Returns (pulled, visible) — pulled = new/updated from Odoo, visible = total accessible to store.
   Future<(int, int)> oodooPullProducts(String token, {int? storeId}) async {
-    final uri = _uri('/api/admin/odoo/pull/products')
-        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
-    final resp = await _send(() => _http.post(uri, headers: _headers(token: token)));
+    final uri = _uri('/api/admin/odoo/pull/products').replace(
+        queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp =
+        await _send(() => _http.post(uri, headers: _headers(token: token)));
     if (resp.statusCode == 200) {
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       return (body['pulled'] as int? ?? 0, body['visible'] as int? ?? 0);
@@ -634,20 +752,25 @@ class ApiClient {
   }
 
   Future<int> oodooPushOrders(String token, {int? storeId}) async {
-    final uri = _uri('/api/admin/odoo/push/orders')
-        .replace(queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
-    final resp = await _send(() => _http.post(uri, headers: _headers(token: token)));
+    final uri = _uri('/api/admin/odoo/push/orders').replace(
+        queryParameters: storeId != null ? {'storeId': '$storeId'} : null);
+    final resp =
+        await _send(() => _http.post(uri, headers: _headers(token: token)));
     if (resp.statusCode == 200) {
-      return (jsonDecode(resp.body) as Map<String, dynamic>)['pushed'] as int? ?? 0;
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['pushed']
+              as int? ??
+          0;
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // ---- Resource Library -----------------------------------------------
 
-  Future<List<ResourceDirectory>> getDirectories(String store, String token) async {
+  Future<List<ResourceDirectory>> getDirectories(
+      String store, String token) async {
     final resp = await _send(
-      () => _http.get(_uri('/api/resources/$store/directories'), headers: _headers(token: token)),
+      () => _http.get(_uri('/api/resources/$store/directories'),
+          headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) {
       return (jsonDecode(resp.body) as List)
@@ -657,7 +780,8 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<ResourceDirectory> createDirectory(String store, String name, String token) async {
+  Future<ResourceDirectory> createDirectory(
+      String store, String name, String token) async {
     final resp = await _send(
       () => _http.post(
         _uri('/api/resources/$store/directories'),
@@ -666,14 +790,17 @@ class ApiClient {
       ),
     );
     if (resp.statusCode == 200) {
-      return ResourceDirectory.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return ResourceDirectory.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<List<ResourceAsset>> getAssets(String store, String dir, String token) async {
+  Future<List<ResourceAsset>> getAssets(
+      String store, String dir, String token) async {
     final resp = await _send(
-      () => _http.get(_uri('/api/resources/$store/directories/$dir'), headers: _headers(token: token)),
+      () => _http.get(_uri('/api/resources/$store/directories/$dir'),
+          headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) {
       return (jsonDecode(resp.body) as List)
@@ -683,8 +810,8 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<ResourceAsset> uploadAsset(
-      String store, String dir, List<int> bytes, String filename, String mimeType, String token,
+  Future<ResourceAsset> uploadAsset(String store, String dir, List<int> bytes,
+      String filename, String mimeType, String token,
       {String? nameOverride}) async {
     final uri = _uri('/api/resources/$store/directories/$dir');
     final request = http.MultipartRequest('POST', uri)
@@ -713,7 +840,8 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<void> deleteAsset(String store, String dir, String name, String token) async {
+  Future<void> deleteAsset(
+      String store, String dir, String name, String token) async {
     final resp = await _send(
       () => _http.delete(_uri('/api/resources/$store/directories/$dir/$name'),
           headers: _headers(token: token)),
@@ -722,7 +850,8 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<void> moveAsset(String store, String dir, String name, String targetDir, String token) async {
+  Future<void> moveAsset(String store, String dir, String name,
+      String targetDir, String token) async {
     final resp = await _send(
       () => _http.patch(
         _uri('/api/resources/$store/directories/$dir/$name/move'),
@@ -734,7 +863,8 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<void> renameAsset(String store, String dir, String name, String newName, String token) async {
+  Future<void> renameAsset(String store, String dir, String name,
+      String newName, String token) async {
     final resp = await _send(
       () => _http.patch(
         _uri('/api/resources/$store/directories/$dir/$name/rename'),
@@ -747,17 +877,21 @@ class ApiClient {
   }
 
   // GET /api/stores/{id}/admin — full admin detail including active/public flags.
-  Future<Map<String, dynamic>?> getStoreAdminDetails(int storeId, {required String token}) async {
+  Future<Map<String, dynamic>?> getStoreAdminDetails(int storeId,
+      {required String token}) async {
     final resp = await _send(
       () => _http.get(_uri('/api/stores/$storeId/admin'),
           headers: _headers(token: token)),
     );
     if (resp.statusCode == 404) return null;
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<void> addProductGalleryImage(int productId, int resourceId, {required String token}) async {
+  Future<void> addProductGalleryImage(int productId, int resourceId,
+      {required String token}) async {
     final resp = await _send(
       () => _http.post(_uri('/api/products/$productId/images'),
           headers: _headers(token: token),
@@ -767,7 +901,8 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<void> removeProductGalleryImage(int productId, int resourceId, {required String token}) async {
+  Future<void> removeProductGalleryImage(int productId, int resourceId,
+      {required String token}) async {
     final resp = await _send(
       () => _http.delete(_uri('/api/products/$productId/images/$resourceId'),
           headers: _headers(token: token)),
@@ -779,33 +914,41 @@ class ApiClient {
   // ---- Admin user endpoints ------------------------------------------
 
   // GET /api/admin/users?accountType=
-  Future<List<AccountUser>> getAdminAccounts(String token, {String? accountType}) async {
+  Future<List<AccountUser>> getAdminAccounts(String token,
+      {String? accountType}) async {
     final uri = _uri('/api/admin/users').replace(
-      queryParameters: accountType != null ? {'accountType': accountType} : null,
+      queryParameters:
+          accountType != null ? {'accountType': accountType} : null,
     );
-    final resp = await _send(() => _http.get(uri, headers: _headers(token: token)));
+    final resp =
+        await _send(() => _http.get(uri, headers: _headers(token: token)));
     if (resp.statusCode == 200) {
       final list = jsonDecode(utf8.decode(resp.bodyBytes)) as List<dynamic>;
-      return list.map((e) => AccountUser.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => AccountUser.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // POST /api/admin/users
-  Future<int> createAdminAccount(Map<String, dynamic> body, {required String token}) async {
+  Future<int> createAdminAccount(Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.post(_uri('/api/admin/users'),
           headers: _headers(token: token), body: jsonEncode(body)),
     );
     if (resp.statusCode == 200) {
-      final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      final json =
+          jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
       return (json['id'] as num).toInt();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // PATCH /api/admin/users/{id}
-  Future<void> patchAdminAccount(int id, Map<String, dynamic> body, {required String token}) async {
+  Future<void> patchAdminAccount(int id, Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.patch(_uri('/api/admin/users/$id'),
           headers: _headers(token: token), body: jsonEncode(body)),
@@ -817,7 +960,8 @@ class ApiClient {
   // DELETE /api/admin/users/{id}
   Future<void> deleteAdminAccount(int id, {required String token}) async {
     final resp = await _send(
-      () => _http.delete(_uri('/api/admin/users/$id'), headers: _headers(token: token)),
+      () => _http.delete(_uri('/api/admin/users/$id'),
+          headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) return;
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
@@ -826,7 +970,8 @@ class ApiClient {
   // ---- Admin edit endpoints -------------------------------------------
 
   // PATCH /api/products/{id}
-  Future<void> patchProduct(int id, Map<String, dynamic> body, {required String token}) async {
+  Future<void> patchProduct(int id, Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.patch(_uri('/api/products/$id'),
           headers: _headers(token: token), body: jsonEncode(body)),
@@ -836,7 +981,8 @@ class ApiClient {
   }
 
   // PATCH /api/categories/{id}
-  Future<void> patchCategory(int id, Map<String, dynamic> body, {required String token}) async {
+  Future<void> patchCategory(int id, Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.patch(_uri('/api/categories/$id'),
           headers: _headers(token: token), body: jsonEncode(body)),
@@ -846,7 +992,8 @@ class ApiClient {
   }
 
   // PATCH /api/stores/{id}
-  Future<void> patchStore(int id, Map<String, dynamic> body, {required String token}) async {
+  Future<void> patchStore(int id, Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.patch(_uri('/api/stores/$id'),
           headers: _headers(token: token), body: jsonEncode(body)),
@@ -855,13 +1002,15 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
-  Future<int> createStore(Map<String, dynamic> body, {required String token}) async {
+  Future<int> createStore(Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.post(_uri('/api/stores'),
           headers: _headers(token: token), body: jsonEncode(body)),
     );
     if (resp.statusCode == 200) {
-      final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      final json =
+          jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
       return (json['id'] as num).toInt();
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
@@ -879,13 +1028,15 @@ class ApiClient {
     );
     if (resp.statusCode == 404) return null;
     if (resp.statusCode == 200) {
-      return ReceiptInfoData.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      return ReceiptInfoData.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
     }
     throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // PATCH /api/receipt-info
-  Future<void> patchReceiptInfo(Map<String, dynamic> body, {required String token}) async {
+  Future<void> patchReceiptInfo(Map<String, dynamic> body,
+      {required String token}) async {
     final resp = await _send(
       () => _http.patch(_uri('/api/receipt-info'),
           headers: _headers(token: token), body: jsonEncode(body)),
@@ -974,7 +1125,8 @@ class ResourceDirectory {
   final String name;
   const ResourceDirectory({required this.id, required this.name});
   factory ResourceDirectory.fromJson(Map<String, dynamic> json) =>
-      ResourceDirectory(id: (json['id'] as num).toInt(), name: json['name'] as String);
+      ResourceDirectory(
+          id: (json['id'] as num).toInt(), name: json['name'] as String);
 }
 
 class ResourceAsset {
@@ -984,22 +1136,26 @@ class ResourceAsset {
   final int sizeBytes;
   final String sha256;
   const ResourceAsset({
-    required this.id, required this.name, required this.mimeType,
-    required this.sizeBytes, required this.sha256,
+    required this.id,
+    required this.name,
+    required this.mimeType,
+    required this.sizeBytes,
+    required this.sha256,
   });
   factory ResourceAsset.fromJson(Map<String, dynamic> json) => ResourceAsset(
-    id: (json['id'] as num).toInt(),
-    name: json['name'] as String,
-    mimeType: json['mimeType'] as String,
-    sizeBytes: (json['sizeBytes'] as num).toInt(),
-    sha256: json['sha256'] as String,
-  );
+        id: (json['id'] as num).toInt(),
+        name: json['name'] as String,
+        mimeType: json['mimeType'] as String,
+        sizeBytes: (json['sizeBytes'] as num).toInt(),
+        sha256: json['sha256'] as String,
+      );
   bool get isImage => mimeType.startsWith('image/');
   bool get isHtml {
     if (mimeType == 'text/html') return true;
     final n = name.toLowerCase();
     return n.endsWith('.html') || n.endsWith('.htm');
   }
+
   String publicUrl(String store, String dir) => '/resource/$store/$dir/$name';
 }
 
@@ -1026,7 +1182,8 @@ class ReceiptInfoData {
     this.paidInvoiceTitle,
   });
 
-  factory ReceiptInfoData.fromJson(Map<String, dynamic> json) => ReceiptInfoData(
+  factory ReceiptInfoData.fromJson(Map<String, dynamic> json) =>
+      ReceiptInfoData(
         storeId: (json['storeId'] as num).toInt(),
         nameAr: json['nameAr'] as String?,
         nameEn: json['nameEn'] as String?,
@@ -1045,7 +1202,8 @@ class LandingPageInfo {
   final String pageKey;
   final String scope; // "local" | "global"
   final String store;
-  final String resourceUrl; // relative, e.g. /resource/root/pages/KIOSK_LANDING.html
+  final String
+      resourceUrl; // relative, e.g. /resource/root/pages/KIOSK_LANDING.html
   final String contentHash;
 
   const LandingPageInfo({
@@ -1056,11 +1214,12 @@ class LandingPageInfo {
     required this.contentHash,
   });
 
-  factory LandingPageInfo.fromJson(Map<String, dynamic> json) => LandingPageInfo(
-    pageKey: json['page_key'] as String,
-    scope: json['scope'] as String,
-    store: json['store'] as String,
-    resourceUrl: json['resource_url'] as String,
-    contentHash: json['content_hash'] as String,
-  );
+  factory LandingPageInfo.fromJson(Map<String, dynamic> json) =>
+      LandingPageInfo(
+        pageKey: json['page_key'] as String,
+        scope: json['scope'] as String,
+        store: json['store'] as String,
+        resourceUrl: json['resource_url'] as String,
+        contentHash: json['content_hash'] as String,
+      );
 }

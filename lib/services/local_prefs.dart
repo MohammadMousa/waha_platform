@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/connection_settings.dart' show CustomConnection;
+
 /// Thin persistence facade — every runtime-configurable service
 /// (BrowsingModeService, StoreConfigService, LocaleService,
 /// KioskTimerConfig, AuthService) goes through this instead of
@@ -22,7 +24,8 @@ class LocalPrefs {
   static SharedPreferences get _p {
     final prefs = _prefs;
     if (prefs == null) {
-      throw StateError('LocalPrefs.init() must be awaited before use — see main.dart');
+      throw StateError(
+          'LocalPrefs.init() must be awaited before use — see main.dart');
     }
     return prefs;
   }
@@ -45,14 +48,34 @@ class LocalPrefs {
   static int? get storeId => _p.getInt(_kStoreId);
   static Future<void> setStoreId(int value) => _p.setInt(_kStoreId, value);
 
+  static Future<void> clearStoreIds() async {
+    await _p.remove(_kStoreId);
+    await _p.remove(_kDefaultStoreId);
+  }
+
+  /// Forgets the cached landing pages' hashes/URLs so the next launch of any
+  /// landing page downloads fresh from whichever server is now active.
+  static Future<void> clearLandingCacheMeta() async {
+    for (final k in _p.getKeys().toList()) {
+      if (k.startsWith('waha.landing_hash.') ||
+          k.startsWith('waha.landing_res_url.') ||
+          k == _kLandingNormalKey) {
+        await _p.remove(k);
+      }
+    }
+  }
+
   static int? get defaultStoreId => _p.getInt(_kDefaultStoreId);
-  static Future<void> setDefaultStoreId(int value) => _p.setInt(_kDefaultStoreId, value);
+  static Future<void> setDefaultStoreId(int value) =>
+      _p.setInt(_kDefaultStoreId, value);
 
   static const _kKioskUsername = 'waha.kiosk_username';
   static String? get kioskUsername => _p.getString(_kKioskUsername);
-  static Future<void> setKioskUsername(String value) => _p.setString(_kKioskUsername, value);
+  static Future<void> setKioskUsername(String value) =>
+      _p.setString(_kKioskUsername, value);
 
   static const _kKioskPin = 'waha.kiosk_pin';
+
   /// Cached device username/PIN — the Kiosk-mode equivalent of
   /// authUsername/authPassword above (same plaintext-storage tradeoff:
   /// this is the device's own credential, re-used to re-authenticate on
@@ -77,7 +100,8 @@ class LocalPrefs {
   /// app restart. Cleared on logout, not just overwritten, since `remove`
   /// and `setString(null)` aren't the same thing in SharedPreferences.
   static String? get authToken => _p.getString(_kAuthToken);
-  static Future<void> setAuthToken(String value) => _p.setString(_kAuthToken, value);
+  static Future<void> setAuthToken(String value) =>
+      _p.setString(_kAuthToken, value);
   static Future<void> clearAuthToken() => _p.remove(_kAuthToken);
 
   /// Cached username/password, per explicit MVP direction: no refresh-
@@ -91,7 +115,8 @@ class LocalPrefs {
   /// this goes anywhere near a real deployment.
   static String? get authUsername => _p.getString(_kAuthUsername);
   static String? get authPassword => _p.getString(_kAuthPassword);
-  static Future<void> setAuthCredentials(String username, String password) async {
+  static Future<void> setAuthCredentials(
+      String username, String password) async {
     await _p.setString(_kAuthUsername, username);
     await _p.setString(_kAuthPassword, password);
   }
@@ -153,7 +178,8 @@ class LocalPrefs {
   // own 10-tap reveal gesture). This override only ever affects whether the
   // SimulatorOverlay widget itself renders, nothing else.
   static const _kSimulatorForceEnabled = 'waha.simulator_force_enabled';
-  static bool get simulatorForceEnabled => _p.getBool(_kSimulatorForceEnabled) ?? false;
+  static bool get simulatorForceEnabled =>
+      _p.getBool(_kSimulatorForceEnabled) ?? false;
   static Future<void> setSimulatorForceEnabled(bool value) =>
       _p.setBool(_kSimulatorForceEnabled, value);
 
@@ -161,7 +187,8 @@ class LocalPrefs {
   // scan sound already confirms success, so the toast is opt-in extra
   // feedback rather than something shown to every customer.
   static const _kShowScanSuccessToast = 'waha.show_scan_success_toast';
-  static bool get showScanSuccessToast => _p.getBool(_kShowScanSuccessToast) ?? false;
+  static bool get showScanSuccessToast =>
+      _p.getBool(_kShowScanSuccessToast) ?? false;
   static Future<void> setShowScanSuccessToast(bool value) =>
       _p.setBool(_kShowScanSuccessToast, value);
 
@@ -170,7 +197,8 @@ class LocalPrefs {
   // Buy&Pay/Cancel buttons there. This is an explicit opt-in to bring it back
   // for a deployment that wants it.
   static const _kShowCartMenuInKiosk = 'waha.show_cart_menu_kiosk';
-  static bool get showCartMenuInKiosk => _p.getBool(_kShowCartMenuInKiosk) ?? false;
+  static bool get showCartMenuInKiosk =>
+      _p.getBool(_kShowCartMenuInKiosk) ?? false;
   static Future<void> setShowCartMenuInKiosk(bool value) =>
       _p.setBool(_kShowCartMenuInKiosk, value);
 
@@ -181,7 +209,8 @@ class LocalPrefs {
   // kiosk hardware — the checkbox stays as a manual fallback in case a
   // specific device needs it disabled again, but the default is trusted.
   static const _kKioskTimersEnabled = 'waha.kiosk_timers_enabled';
-  static bool get kioskTimersEnabled => _p.getBool(_kKioskTimersEnabled) ?? true;
+  static bool get kioskTimersEnabled =>
+      _p.getBool(_kKioskTimersEnabled) ?? true;
   static Future<void> setKioskTimersEnabled(bool value) =>
       _p.setBool(_kKioskTimersEnabled, value);
 
@@ -205,9 +234,20 @@ class LocalPrefs {
   // here so the default can evolve without a stale empty list looking
   // identical to an intentional "hide everything" choice.
   static const _kSimPinnedButtons = 'waha.sim_pinned_buttons';
-  static List<String>? get simPinnedButtons => _p.getStringList(_kSimPinnedButtons);
+  static List<String>? get simPinnedButtons =>
+      _p.getStringList(_kSimPinnedButtons);
   static Future<void> setSimPinnedButtons(List<String> ids) =>
       _p.setStringList(_kSimPinnedButtons, ids);
+
+  // Whether the session-info footer (username/store slug/host/app-mode
+  // strip) is showing. A real, persisted setting — toggleable from the
+  // simulator cluster's own button AND from a switch in Settings, both
+  // reading/writing this same value, not just an in-memory simulator flag.
+  // Off by default, same as the other diagnostic-only toggles here.
+  static const _kShowSessionFooter = 'waha.show_session_footer';
+  static bool get showSessionFooter => _p.getBool(_kShowSessionFooter) ?? false;
+  static Future<void> setShowSessionFooter(bool value) =>
+      _p.setBool(_kShowSessionFooter, value);
 
   static const _kSimProductCodes = 'waha.sim_product_codes';
   static List<String> get simProductCodes =>
@@ -243,12 +283,41 @@ class LocalPrefs {
   static Future<void> setSimCacheLimit(int value) =>
       _p.setInt(_kSimCacheLimit, value);
 
-  // Runtime API base URL — overrides platform default when set.
-  // Persisted so kiosk devices survive reboots without reconfiguration.
-  static const _kApiBaseUrl = 'waha.api_base_url';
-  static String? get apiBaseUrl => _p.getString(_kApiBaseUrl);
-  static Future<void> setApiBaseUrl(String value) => _p.setString(_kApiBaseUrl, value);
-  static Future<void> clearApiBaseUrl() => _p.remove(_kApiBaseUrl);
+  // Custom Connection — an explicit override of the project/build default
+  // server. The fields are kept while the switch is OFF and change only when
+  // the user edits them. Persisted so kiosk devices survive reboots.
+  static const _kCustomConnEnabled = 'waha.custom_conn_enabled';
+  static const _kCustomConnScheme = 'waha.custom_conn_scheme';
+  static const _kCustomConnHost = 'waha.custom_conn_host';
+  static const _kCustomConnPort = 'waha.custom_conn_port';
+  static const _kCustomConnBasePath = 'waha.custom_conn_base_path';
+
+  static bool get customConnectionEnabled =>
+      _p.getBool(_kCustomConnEnabled) ?? false;
+  static Future<void> setCustomConnectionEnabled(bool value) =>
+      _p.setBool(_kCustomConnEnabled, value);
+  static String get customConnScheme =>
+      _p.getString(_kCustomConnScheme) ?? 'http';
+  static String get customConnHost => _p.getString(_kCustomConnHost) ?? '';
+  static int? get customConnPort => _p.getInt(_kCustomConnPort);
+  static String get customConnBasePath =>
+      _p.getString(_kCustomConnBasePath) ?? '';
+
+  static Future<void> setCustomConnection(CustomConnection c) async {
+    await _p.setString(_kCustomConnScheme, c.scheme);
+    await _p.setString(_kCustomConnHost, c.host);
+    if (c.port == null) {
+      await _p.remove(_kCustomConnPort);
+    } else {
+      await _p.setInt(_kCustomConnPort, c.port!);
+    }
+    await _p.setString(_kCustomConnBasePath, c.basePath);
+  }
+
+  // Old single-URL setting, read only by the one-time migration.
+  static const _kLegacyApiBaseUrl = 'waha.api_base_url';
+  static String? get legacyApiBaseUrl => _p.getString(_kLegacyApiBaseUrl);
+  static Future<void> clearLegacyApiBaseUrl() => _p.remove(_kLegacyApiBaseUrl);
 
   // Landing page cache — hash only; HTML bytes live in LandingCache files.
   // Separate key per page (KIOSK_LANDING, SHOPPING_LANDING, CLIENT_LANDING, ADMIN_LANDING).
