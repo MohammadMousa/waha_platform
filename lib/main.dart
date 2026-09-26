@@ -26,6 +26,7 @@ import 'state/permission_service.dart';
 import 'state/simulator_service.dart';
 import 'state/startup_connection.dart';
 import 'widgets/connection_gate_overlay.dart';
+import 'widgets/screen_scale.dart';
 import 'state/store_config_service.dart';
 import 'widgets/kiosk_idle_guard.dart';
 
@@ -246,8 +247,10 @@ class WahaApp extends StatelessWidget {
                 onGenerateRoute: onGenerateRoute,
                 // Covers every route while the server is unreachable at
                 // startup; needs no Overlay so it can sit above the Navigator.
-                builder: (context, child) =>
-                    ConnectionGateOverlay(child: child ?? const SizedBox.shrink()),
+                builder: (context, child) => ScreenScale(
+                  child: ConnectionGateOverlay(
+                      child: child ?? const SizedBox.shrink()),
+                ),
                 initialRoute: Routes.landing,
                 // The simulator overlay is stacked per-route inside
                 // onGenerateRoute (it needs the Navigator's Overlay); only

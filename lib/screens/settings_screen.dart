@@ -16,6 +16,7 @@ import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
+import '../config/screen_factor.dart';
 import '../state/simulator_service.dart';
 import '../services/trace_log.dart';
 import '../services/usb_diagnostics.dart';
@@ -465,6 +466,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_devUnlocked) ...[
             const SizedBox(height: 20),
             const ServerConnectionPanel(),
+            const SizedBox(height: 20),
+            const ScreenFactorPanel(),
             const SizedBox(height: 20),
             _DevToolsPanel(
               storeIdController: _storeId,
@@ -1040,15 +1043,42 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
 // Same 4 fields as _SessionInfoFooter (simulator_overlay.dart) — keep them
 // identical if either changes — plus this build's version, build number and
 // build time, which the footer doesn't show.
+/// The real screen size in logical pixels (not the scaled virtual one the app
+/// lays itself out on).
+Size realLogicalScreenSize() {
+  final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+  if (view == null) return Size.zero;
+  return view.physicalSize / view.devicePixelRatio;
+}
+
+/// "auto -> Large kiosk 2.20x" / "manual: Small kiosk 1.63x".
+String screenFactorSummary() {
+  final size = realLogicalScreenSize();
+  final f = screenFactor.scaleFor(size).toStringAsFixed(2);
+  if (screenFactor.mode == ScreenFactorMode.manual) {
+    return 'manual: ${screenFactor.manualMachine.label} ${f}x';
+  }
+  return 'auto -> ${classifyScreen(size).label} ${f}x';
+}
+
 String sessionInfoText() {
   final username = authService.username ?? '—';
   final storeSlug = storeConfigService.storeSlug ?? '—';
   final host = AppConfig.apiBaseUrlLabel;
   final mode = browsingModeService.mode.name;
+  final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+  final screen = view == null
+      ? '—'
+      : '${view.physicalSize.width.round()}x${view.physicalSize.height.round()} px '
+          '@ ${view.devicePixelRatio.toStringAsFixed(2)}x = '
+          '${(view.physicalSize.width / view.devicePixelRatio).round()}x'
+          '${(view.physicalSize.height / view.devicePixelRatio).round()} dp';
   return 'user:    $username\n'
       'store:   $storeSlug\n'
       'host:    $host\n'
       'mode:    $mode\n'
+      'screen:  $screen\n'
+      'factor:  ${screenFactorSummary()}\n'
       'version: ${AppInfo.version}\n'
       'build:   ${AppInfo.buildNumber}\n'
       'built:   ${AppInfo.buildTime}';
@@ -1820,6 +1850,70 @@ class _FieldRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: child),
       ],
+    );
+  }
+}
+
+
+/// Settings section: Auto (default) or a manual pick of which machine this
+/// screen should look like. Applies live; saved on the device.
+class ScreenFactorPanel extends StatelessWidget {
+  const ScreenFactorPanel({super.key});
+
+  Widget _choice(BuildContext context, String title, String? subtitle,
+      bool selected, VoidCallback onTap) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListTile(
+      dense: true,
+      title: Text(title),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle,
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(fontSize: 11)),
+      trailing: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        color: selected ? scheme.primary : scheme.outline,
+      ),
+      onTap: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: screenFactor,
+      builder: (context, _) {
+        final manual = screenFactor.mode == ScreenFactorMode.manual;
+        return Card(
+          child: ExpansionTile(
+            leading: const Icon(Icons.aspect_ratio),
+            title: const TitleWithInfo(
+              'Screen factor',
+              'Scales the whole app so controls look the same size on every '
+                  'screen. Auto picks Mobile / Small kiosk / Large kiosk from '
+                  'the real screen size (phones are never scaled). Manual '
+                  'forces one of them — use it if Auto guessed wrong. Applies '
+                  'immediately and is saved on this device.',
+            ),
+            subtitle: Text(screenFactorSummary(),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            children: [
+              _choice(context, 'Auto (default)', null, !manual,
+                  screenFactor.setAuto),
+              for (final m in ScreenMachine.values)
+                _choice(
+                  context,
+                  'Manual: ${m.label}',
+                  '${m.designWidth.round()} x ${m.designHeight.round()}',
+                  manual && screenFactor.manualMachine == m,
+                  () => screenFactor.setManual(m),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
   }
 }

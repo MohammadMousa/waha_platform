@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -27,8 +29,31 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
   bool _submitting = false;
   String? _error;
 
+  // Lockout: while > 0 the form is disabled and the banner ticks down.
+  int _lockSecondsLeft = 0;
+  Timer? _lockTimer;
+  bool get _locked => _lockSecondsLeft > 0;
+  String _lockHeadline = 'Account temporarily locked.';
+
+  void _startLock(int seconds) {
+    _lockTimer?.cancel();
+    setState(() => _lockSecondsLeft = seconds);
+    _lockTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() {
+        _lockSecondsLeft--;
+        if (_lockSecondsLeft <= 0) {
+          _lockSecondsLeft = 0;
+          _error = null;
+          t.cancel();
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
+    _lockTimer?.cancel();
     _username.dispose();
     _pin.dispose();
     super.dispose();
@@ -59,8 +84,17 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
         Navigator.of(context)
             .pushNamedAndRemoveUntil(Routes.landing, (r) => false);
       }
+    } on AccountLockedException catch (e) {
+      final wait = e.retryAfterSeconds;
+      if (!mounted) return;
+      if (wait != null && wait > 0) {
+        _lockHeadline = e.headline;
+        _startLock(wait);
+      } else {
+        setState(() => _error = loginFailureText(e));
+      }
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = loginFailureText(e));
     } on NetworkException catch (_) {
       // Distinct type from ApiException (see api_exceptions.dart) — a
       // timeout or unreachable server was previously falling through
@@ -71,7 +105,9 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
             'Could not reach the server. Check your connection and try again.');
       }
     } catch (_) {
-      if (mounted) setState(() => _error = 'Something went wrong. Please try again.');
+      if (mounted) {
+        setState(() => _error = 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -125,7 +161,7 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
                           controller: _username,
                           textInputAction: TextInputAction.next,
                           autocorrect: false,
-                          enabled: !_submitting,
+                          enabled: !_submitting && !_locked,
                           decoration: InputDecoration(
                             labelText: l10n.authUsername,
                             prefixIcon: const Icon(Icons.person_outline),
@@ -143,7 +179,7 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
                           // the max — it never required exactly 4.
                           maxLength: 6,
                           textInputAction: TextInputAction.done,
-                          enabled: !_submitting,
+                          enabled: !_submitting && !_locked,
                           onSubmitted: (_) => _submit(),
                           decoration: InputDecoration(
                             labelText: l10n.authPinCode,
@@ -159,7 +195,7 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
                             ),
                           ),
                         ),
-                        if (_error != null) ...[
+                        if (_locked || _error != null) ...[
                           const SizedBox(height: 12),
                           Container(
                             padding: const EdgeInsets.all(10),
@@ -167,13 +203,17 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
                               color: scheme.errorContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(_error!,
-                                style: TextStyle(color: scheme.onErrorContainer)),
+                            child: Text(
+                                _locked
+                                    ? '$_lockHeadline Try again in ${formatMmSs(_lockSecondsLeft)}'
+                                    : _error!,
+                                style:
+                                    TextStyle(color: scheme.onErrorContainer)),
                           ),
                         ],
                         const SizedBox(height: 20),
                         FilledButton(
-                          onPressed: _submitting ? null : _submit,
+                          onPressed: (_submitting || _locked) ? null : _submit,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
@@ -181,7 +221,8 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2))
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
                               : Text(l10n.authLoginCta,
                                   style: const TextStyle(fontSize: 16)),
                         ),

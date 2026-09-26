@@ -127,7 +127,12 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
             ),
             subtitle: const Text('Shows the floating dev-tools cluster',
                 maxLines: 1, overflow: TextOverflow.ellipsis),
-            value: !sim.devToolsHidden,
+            // ON only when the cluster can really appear: the build allows
+            // it (or it was force-enabled here) and it isn't hidden. Saved
+            // leftovers from another build no longer read as ON.
+            value: (AppConfig.simulatorAvailable ||
+                    LocalPrefs.simulatorForceEnabled) &&
+                !sim.devToolsHidden,
             onChanged: (value) {
               LocalPrefs.setSimulatorForceEnabled(value);
               if (value) {

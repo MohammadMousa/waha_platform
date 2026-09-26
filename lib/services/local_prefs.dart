@@ -287,6 +287,18 @@ class LocalPrefs {
   // server. The fields are kept while the switch is OFF and change only when
   // the user edits them. Persisted so kiosk devices survive reboots.
   static const _kCustomConnEnabled = 'waha.custom_conn_enabled';
+  // Screen factor (UI scaling): 'auto' | 'manual', plus the manual machine.
+  static const _kScreenFactorMode = 'waha.screen_factor_mode';
+  static const _kScreenFactorMachine = 'waha.screen_factor_machine';
+  static String get screenFactorMode =>
+      _p.getString(_kScreenFactorMode) ?? 'auto';
+  static Future<void> setScreenFactorMode(String v) =>
+      _p.setString(_kScreenFactorMode, v);
+  static String get screenFactorMachine =>
+      _p.getString(_kScreenFactorMachine) ?? 'largeKiosk';
+  static Future<void> setScreenFactorMachine(String v) =>
+      _p.setString(_kScreenFactorMachine, v);
+
   static const _kCustomConnScheme = 'waha.custom_conn_scheme';
   static const _kCustomConnHost = 'waha.custom_conn_host';
   static const _kCustomConnPort = 'waha.custom_conn_port';

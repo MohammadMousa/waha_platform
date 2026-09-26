@@ -92,6 +92,10 @@ class ConnectionSwitcher {
     final AuthSession session;
     try {
       session = await _signIn(probeClient, mode, signInAs);
+    } on AccountLockedException catch (e) {
+      return SwitchResult.failure('login', loginFailureText(e));
+    } on InvalidCredentialsException catch (e) {
+      return SwitchResult.failure('login', loginFailureText(e));
     } on UnauthorizedException catch (e) {
       return SwitchResult.failure('login', 'Sign-in rejected: ${e.message}');
     } on ApiException catch (e) {

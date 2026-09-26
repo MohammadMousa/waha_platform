@@ -285,6 +285,14 @@ class MainActivity : FlutterActivity() {
                         detectTerminal(source)
                         result.success(true)
                     }
+                    "prepareTerminal" -> {
+                        val reason = call.argument<String>("reason") ?: "payment"
+                        // Blocking wait for the port event — off the main thread.
+                        Thread {
+                            val ready = prepareTerminalBlocking(reason)
+                            runOnUiThread { result.success(ready) }
+                        }.start()
+                    }
                     "logTrace" -> {
                         // Diagnostic-only: lets the Dart side (see
                         // lib/services/trace_log.dart) write into the same
@@ -385,7 +393,17 @@ class MainActivity : FlutterActivity() {
                         // purchase transaction already handed to the terminal
                         // runs to completion regardless (see the Dart-side
                         // comment on GeideaTerminalBridge.cancelPayment / the
-                        // Kiosk's own _cancel()). Acknowledged as a no-op.
+                        // Kiosk's own _cancel()). What we CAN do: stop waiting
+                        // on it, and remember that we walked away, so a late
+                        // approval is logged as "customer paid, order not
+                        // recorded" (same breadcrumb as a timeout). The USB
+                        // connection itself is cleaned up by the next
+                        // prepareTerminal() at the start of the next payment.
+                        if (paymentInFlight) {
+                            logTrace("cancelPayment: payment abandoned by the user while waiting on the terminal")
+                            dartGaveUp = true
+                            stopPaymentHeartbeat()
+                        }
                         result.success(true)
                     }
                     else -> result.notImplemented()
@@ -579,6 +597,46 @@ class MainActivity : FlutterActivity() {
         // What the SDK believes a moment after the reconnect attempt.
         diagHandler.postDelayed({ logTrace("detect($source)+1.5s ${TerminalDiagnostics.sdkState(terminalResponder)}") }, 1500)
     }
+
+    /**
+     * Clean start for a payment: drop whatever USB connection the SDK still
+     * holds (from app start, an earlier payment, a cancel or a timeout), open
+     * a fresh one and wait until the serial port REALLY opens. Returns true
+     * only on PORT_OPEN_OK — never on the SDK's "connected" flag, which
+     * doesn't prove the port opened. Without the disconnect first, the new
+     * open collides with the connection we already hold and the SDK logs
+     * "Interface could not be claimed", after which a payment written to it
+     * gets no reply. Same disconnect/reconnect the diagnostics use.
+     *
+     * Runs on a worker thread (it waits); SDK calls hop to the main thread.
+     */
+    private fun prepareTerminalBlocking(reason: String): Boolean {
+        return synchronized(prepareLock) {
+            sendConnectionEvent("scanning", "Preparing terminal ($reason)")
+            logTrace("prepareTerminal($reason): disconnect + reconnect | ${TerminalDiagnostics.sdkState(terminalResponder)}")
+            stopPaymentHeartbeat() // an abandoned payment must not keep the wait/refuse flags up
+            val disconnected = CountDownLatch(1)
+            runOnUiThread {
+                try {
+                    terminalResponder?.disconnectUsbSerialConnection()
+                } catch (t: Throwable) {
+                    logTrace("prepareTerminal: disconnect threw ${t.javaClass.simpleName}: ${t.message}")
+                }
+                isUsbConnected = false
+                disconnected.countDown()
+            }
+            disconnected.await(2, TimeUnit.SECONDS)
+            Thread.sleep(400) // let Android release the interface
+            val since = System.currentTimeMillis()
+            runOnUiThread { tryConnect() }
+            val outcome = waitPortEvent(since, 6000)
+            val ready = outcome.startsWith("PORT_OPEN_OK")
+            logTrace("prepareTerminal($reason): ${if (ready) "READY" else "NOT READY"} — $outcome")
+            ready
+        }
+    }
+
+    private val prepareLock = Any()
 
     private fun checkCommunication(callback: (Map<String, Any?>) -> Unit) {
         // startCheckStatus is TCP-only (see class doc comment) — for USB,

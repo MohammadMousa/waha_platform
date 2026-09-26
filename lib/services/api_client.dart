@@ -34,7 +34,11 @@ class ApiClient {
   /// Reachability check for a candidate server: unauthenticated
   /// GET /api/config, 5s, no retry. Unlike [getConfig] it says *why* it
   /// failed. Returns null on success, otherwise a short human message.
+  /// The raw exception text of the last failed [probe], for a "Details" view.
+  String? lastProbeRaw;
+
   Future<String?> probe() async {
+    lastProbeRaw = null;
     try {
       final resp = await _http
           .get(_uri('/api/config'))
@@ -47,10 +51,12 @@ class ApiClient {
         return 'Server answered, but not with Waha config — wrong address?';
       }
       return null;
-    } on FormatException {
+    } on FormatException catch (e) {
+      lastProbeRaw = e.toString();
       return 'Server answered, but not with Waha config — wrong address?';
     } catch (e) {
       final t = e.toString();
+      lastProbeRaw = t;
       if (t.contains('TimeoutException')) {
         return 'No answer within 5 seconds — check host, port and network';
       }
@@ -82,6 +88,38 @@ class ApiClient {
     } catch (_) {
       return 'Request failed (${resp.statusCode})';
     }
+  }
+
+  /// Turns a failed login response into the specific exception: locked
+  /// (429/423 or code ACCOUNT_LOCKED), wrong credentials with tries left, or
+  /// the plain 401 an older backend sends. Reads snake_case and camelCase.
+  ApiException _loginFailure(http.Response resp) {
+    final msg = _extractMessage(resp);
+    Map<String, dynamic> body = const {};
+    try {
+      body = jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {}
+    int? intOf(String a, String b) {
+      final v = body[a] ?? body[b];
+      return v is num ? v.toInt() : null;
+    }
+
+    final code = body['code'];
+    if (code == 'ACCOUNT_LOCKED' ||
+        code == 'TOO_MANY_REQUESTS' ||
+        resp.statusCode == 429 ||
+        resp.statusCode == 423) {
+      return AccountLockedException(resp.statusCode, msg,
+          code: code is String ? code : null,
+          retryAfterSeconds: intOf('retry_after_seconds', 'retryAfterSeconds') ??
+              int.tryParse(resp.headers['retry-after'] ?? ''));
+    }
+    if (resp.statusCode == 401) {
+      return InvalidCredentialsException(401, msg,
+          attemptsRemaining: intOf('attempts_remaining', 'attemptsRemaining'),
+          maxAttempts: intOf('max_attempts', 'maxAttempts'));
+    }
+    return UnknownApiException(resp.statusCode, msg);
   }
 
   // Bounds every request the same way getConfig() already bounds itself.
@@ -160,9 +198,7 @@ class ApiClient {
       return AuthSession.fromJson(
           jsonDecode(resp.body) as Map<String, dynamic>);
     }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
-    throw UnknownApiException(resp.statusCode, msg);
+    throw _loginFailure(resp);
   }
 
   // POST /api/auth/guest — Shopping mode only, creates throwaway account
@@ -193,9 +229,7 @@ class ApiClient {
       return AuthSession.fromJson(jsonDecode(resp.body) as Map<String, dynamic>,
           usernameOverride: username);
     }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
-    throw UnknownApiException(resp.statusCode, msg);
+    throw _loginFailure(resp);
   }
 
   // POST /api/kiosk/auth/pin/verify — checks the device PIN for the on-device
@@ -214,7 +248,9 @@ class ApiClient {
         final body = jsonDecode(resp.body) as Map<String, dynamic>;
         return body['valid'] == true ? null : 'Incorrect PIN';
       }
-      if (resp.statusCode == 429) return _extractMessage(resp);
+      if (resp.statusCode == 429) {
+        return loginFailureText(_loginFailure(resp));
+      }
       if (resp.statusCode == 400) return 'PIN must be 6 digits';
       if (resp.statusCode == 401) {
         return 'Session expired — restart the app and sign in again';

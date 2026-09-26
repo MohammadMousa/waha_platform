@@ -41,12 +41,17 @@ class SimulatorOverlay extends StatelessWidget {
     // flipping "Enable simulator dev tools" in Settings changed the state
     // but nothing redrew the overlay — the toggle looked dead.
     final sim = context.watch<SimulatorService>();
+    // The footer has its own switch and shows exactly when that is ON,
+    // whether or not the dev-tools cluster is enabled.
+    final footerOnly = sim.showFooter
+        ? const Stack(children: [_SessionInfoFooter()])
+        : const SizedBox.shrink();
     if (!AppConfig.simulatorAvailable && !LocalPrefs.simulatorForceEnabled) {
-      return const SizedBox.shrink();
+      return footerOnly;
     }
 
-    // hideDevTools() hides everything — secret gesture on mode badge restores.
-    if (sim.devToolsHidden) return const SizedBox.shrink();
+    // hideDevTools() hides the cluster — secret gesture on mode badge restores.
+    if (sim.devToolsHidden) return footerOnly;
 
     // Footer sits flush at the bottom; the chip/cluster below is pushed up
     // above it when the footer is showing, so the two never overlap.

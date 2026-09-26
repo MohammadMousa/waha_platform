@@ -356,6 +356,25 @@ class GeideaTerminalBridge {
     return checkCommunication();
   }
 
+  /// Clean start for a payment: closes whatever USB connection the SDK still
+  /// holds, opens a fresh one, and returns true only when the serial port
+  /// really opened (not merely when the SDK says "connected"). False means
+  /// the terminal is not ready — don't start the payment.
+  Future<bool> prepareTerminal({String reason = 'payment'}) async {
+    if (_mock) {
+      await Future.delayed(const Duration(seconds: 1));
+      return true;
+    }
+    try {
+      final ok = await _methodChannel
+          .invokeMethod<bool>('prepareTerminal', {'reason': reason})
+          .timeout(const Duration(seconds: 15));
+      return ok ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> cancelPayment() async {
     if (_mock) return;
     try {

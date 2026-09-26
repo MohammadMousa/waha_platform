@@ -39,6 +39,59 @@ class UnauthorizedException extends ApiException {
   const UnauthorizedException(super.statusCode, super.message);
 }
 
+/// Login rejected because the credentials are wrong (401, code
+/// INVALID_CREDENTIALS) — carries how many tries are left before the lock, when
+/// the backend says so.
+class InvalidCredentialsException extends UnauthorizedException {
+  final int? attemptsRemaining;
+  final int? maxAttempts;
+  const InvalidCredentialsException(super.statusCode, super.message,
+      {this.attemptsRemaining, this.maxAttempts});
+}
+
+/// Login refused because the account/device is locked (429/423, code
+/// ACCOUNT_LOCKED) — not a wrong-PIN answer, and trying again before
+/// [retryAfterSeconds] only extends the wait on some servers.
+class AccountLockedException extends ApiException {
+  final int? retryAfterSeconds;
+
+  /// ACCOUNT_LOCKED, or TOO_MANY_REQUESTS when the whole network address is
+  /// being throttled (then the backend's own message is the one to show).
+  final String? code;
+  const AccountLockedException(super.statusCode, super.message,
+      {this.retryAfterSeconds, this.code});
+
+  bool get isIpThrottle => code == 'TOO_MANY_REQUESTS';
+
+  /// Headline for the banner, without the countdown.
+  String get headline =>
+      isIpThrottle ? message : 'Account temporarily locked.';
+}
+
+/// One line for a failed login, for screens that just show text.
+String loginFailureText(ApiException e) {
+  if (e is AccountLockedException) {
+    final s = e.retryAfterSeconds;
+    return s == null
+        ? (e.isIpThrottle ? e.message : '${e.headline} Try again later.')
+        : '${e.headline} Try again in ${formatMmSs(s)}';
+  }
+  if (e is InvalidCredentialsException && e.attemptsRemaining != null) {
+    final n = e.attemptsRemaining!;
+    return 'Invalid credentials. $n attempt${n == 1 ? '' : 's'} remaining '
+        'before temporary lock.';
+  }
+  return e.message;
+}
+
+/// 299 -> "04:59".
+String formatMmSs(int totalSeconds) {
+  final s = totalSeconds < 0 ? 0 : totalSeconds;
+  final m = (s ~/ 60).toString().padLeft(2, '0');
+  final r = (s % 60).toString().padLeft(2, '0');
+  return '$m:$r';
+}
+
 /// 409 on register — username already taken.
 class UsernameTakenException extends ApiException {
   const UsernameTakenException(super.statusCode, super.message);

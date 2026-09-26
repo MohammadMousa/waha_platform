@@ -13,7 +13,7 @@ import java.util.Locale
 // physically reach can still be inspected. Uses the backend's plain
 // `POST /api/resources` (multipart field "file"), which stores the bytes and
 // answers {id, sha256}; the text is then readable at
-// `<server>/api/resources/<id>` (served with its stored mime type).
+// `<server>/api/logs/<id>` (admin-only; device uploads are no longer public at /api/resources/<id>).
 //
 // TEMPORARY DIAGNOSTIC TOOL — must not reach production as it is. It uses the
 // backend's open, unauthenticated `POST /api/resources` (anyone can upload up
@@ -131,7 +131,8 @@ object LogUploader {
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.readText().orEmpty()
             if (code !in 200..299) return Result(false, null, null, name, body.size, base, "Server answered HTTP $code: ${text.take(200)}")
             val id = JSONObject(text).getLong("id")
-            Result(true, id, "$base/api/resources/$id", name, body.size, base, "Uploaded")
+            // Device uploads are no longer public at /api/resources/<id>; admins read them at /api/logs/<id> (needs an admin login).
+            Result(true, id, "$base/api/logs/$id", name, body.size, base, "Uploaded")
         } catch (t: Throwable) {
             Result(false, null, null, name, 0, base, "${t.javaClass.simpleName}: ${t.message}")
         }

@@ -487,6 +487,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         barrierDismissible: false,
         builder: (_) => Dialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+          // Without a cap the card grows to the full screen width on a kiosk.
+          constraints: const BoxConstraints(minWidth: 360, maxWidth: 520),
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: _TerminalPaymentScreen(
@@ -1949,10 +1951,10 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     // only at the one moment a stale "yes" would otherwise silently fail
     // the whole transaction with no card ever presented.
     TraceLog.log('Terminal: payment run start, order ${widget.orderId}');
-    final connected = await bridge.detectTerminal(source: 'payment');
+    final connected = await bridge.prepareTerminal(reason: 'payment start');
     if (!mounted) return;
     if (!connected) {
-      TraceLog.log('Terminal: not connected after reconnect attempt, aborting before charging');
+      TraceLog.log('Terminal: port did not open after a clean reconnect, aborting before charging');
       setState(() {
         _failed = true;
         _statusLabel = l10n.terminalNotConnected;
