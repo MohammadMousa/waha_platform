@@ -21,6 +21,7 @@ class AuthService extends ChangeNotifier {
   int? deviceId;
   String? username;
   int? sessionStoreId;
+  int? organizationId;
   int? defaultStoreId;
   String? mode;
 
@@ -44,6 +45,7 @@ class AuthService extends ChangeNotifier {
     deviceId = session.deviceId;
     username = session.username;
     sessionStoreId = session.storeId;
+    if (session.organizationId != null) organizationId = session.organizationId;
     defaultStoreId = session.defaultStoreId;
     mode = session.mode;
 

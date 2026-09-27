@@ -321,11 +321,12 @@ class ApiClient {
   }
 
   // GET /api/config — public, no auth. Returns system_properties as key→value map.
-  Future<Map<String, String>> getConfig() async {
+  Future<Map<String, String>> getConfig({int? orgId}) async {
     try {
-      final resp = await _http
-          .get(_uri('/api/config'))
-          .timeout(const Duration(seconds: 5));
+      final uri = orgId == null
+          ? _uri('/api/config')
+          : _uri('/api/config').replace(queryParameters: {'orgId': '$orgId'});
+      final resp = await _http.get(uri).timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final raw = jsonDecode(resp.body) as Map<String, dynamic>;
         return raw.map((k, v) => MapEntry(k, v.toString()));

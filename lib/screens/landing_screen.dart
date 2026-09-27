@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'dart:async';
+
 import '../l10n/generated/app_localizations.dart';
 import '../models/product.dart';
 import '../router/app_router.dart';
@@ -13,6 +15,7 @@ import '../services/landing_cache.dart';
 import '../services/local_prefs.dart';
 import '../services/trace_log.dart';
 import '../state/auth_service.dart';
+import '../state/locale_service.dart';
 import '../state/permission_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
@@ -48,6 +51,18 @@ class _LandingScreenState extends State<LandingScreen> {
   bool _updateDispatched = false;
   int?    _lastStoreId;   // detects store switches   → re-check
   String? _lastToken;     // detects token refresh    → re-check
+
+  // ── periodic re-check ────────────────────────────────────────────────────
+  // A kiosk can sit on this very screen instance for a whole session with
+  // none of the events above ever firing (no re-login, no store switch) — see
+  // the "no polling for commands" decision: this is a deliberate, narrow
+  // exception, just for content freshness, on an org-configurable interval.
+  // One self-rescheduling Timer, not Timer.periodic, so a changed interval
+  // takes effect on the very next tick instead of only after a restart.
+  static const _fallbackIntervalMinutes = 30; // used until the server says otherwise
+  bool _periodicStarted = false;
+  int _intervalMinutes = _fallbackIntervalMinutes;
+  Timer? _periodicTimer;
 
   // ── Dev logging ───────────────────────────────────────────────────────────
   static const _tag = '[LandingUpdate]';
@@ -100,6 +115,7 @@ class _LandingScreenState extends State<LandingScreen> {
   void dispose() {
     _toastEntry?.remove();
     _toastEntry = null;
+    _periodicTimer?.cancel();
     authService.removeListener(_onConfigChanged);
     storeConfigService.removeListener(_onConfigChanged);
     super.dispose();
@@ -171,11 +187,66 @@ class _LandingScreenState extends State<LandingScreen> {
       if (hasToken && hasStore) {
         _updateDispatched = true;
         _backgroundUpdateLanding();
+        _startPeriodicCheck();
       } else {
         _log('⏳ Waiting — token=${hasToken ? "ready" : "missing"}'
             '  store=${hasStore ? "ready" : "missing"}');
       }
     }
+  }
+
+  // Started once per screen instance (which, per the router, normally lives
+  // for the whole kiosk session — other routes push on top of it rather than
+  // replacing it) — so this keeps ticking even while the customer is on
+  // Scan/Cart/Settings, not only while Landing itself is on screen.
+  // A short, fixed first delay — NOT _intervalMinutes' fallback default.
+  // Otherwise a fresh app/session would wait out the 30-minute fallback
+  // before ever asking the server what the real interval is, even if the
+  // admin had set it to 1 minute (exactly the bug this comment replaced).
+  static const _firstCheckDelay = Duration(seconds: 30);
+
+  void _startPeriodicCheck() {
+    if (_periodicStarted) return;
+    _periodicStarted = true;
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer(_firstCheckDelay, _periodicCheck);
+  }
+
+  void _schedulePeriodicCheck() {
+    _periodicTimer?.cancel();
+    _periodicTimer =
+        Timer(Duration(minutes: _intervalMinutes), _periodicCheck);
+  }
+
+  Future<void> _periodicCheck() async {
+    if (!mounted) return;
+    final api = context.read<ApiClient>();
+    try {
+      final config =
+          await api.getConfig(orgId: authService.organizationId);
+      final rawInterval = config['check_landing_page_interval_minutes'];
+      final parsed = int.tryParse(rawInterval ?? '');
+      if (parsed != null) {
+        // Defense in depth — the backend already caps this too. 1440 = 24h,
+        // a round worst case: even untouched, a change is noticed within a day.
+        _intervalMinutes = parsed.clamp(1, 1440);
+      }
+
+      // Seed only: apply the org default language while nobody has ever
+      // explicitly picked one on THIS device (persist: false — an explicit
+      // pick in Settings, which persists, must always win from then on).
+      final lang = config['default_language']?.toLowerCase();
+      if (LocalPrefs.locale == null && (lang == 'ar' || lang == 'en')) {
+        localeService.setLocale(Locale(lang!), persist: false);
+      }
+    } catch (_) {
+      // Network hiccup — keep the previous interval, try again next tick.
+    }
+
+    // Bypasses _updateDispatched on purpose: that gate is "once per
+    // login/store", this is "periodically, regardless".
+    if (mounted) await _backgroundUpdateLanding();
+    if (mounted) _schedulePeriodicCheck();
   }
 
   Future<void> _backgroundUpdateLanding() async {

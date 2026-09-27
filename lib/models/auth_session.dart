@@ -5,6 +5,7 @@ class AuthSession {
   final String? username; // absent on device/employee login responses —
   // those identify by id, not username; callers pass usernameOverride.
   final int? storeId;
+  final int? organizationId;
   final int? defaultStoreId; // system-configured fallback store
   final String? mode; // NORMAL | KIOSK | SHOPPING
   final Map<String, String>? properties; // system properties map
@@ -16,6 +17,7 @@ class AuthSession {
     this.deviceId,
     this.username,
     this.storeId,
+    this.organizationId,
     this.defaultStoreId,
     this.mode,
     this.properties,
@@ -42,6 +44,7 @@ class AuthSession {
       deviceId: json['deviceId'] as int?,
       username: (json['username'] as String?) ?? usernameOverride,
       storeId: json['storeId'] as int?,
+      organizationId: json['organizationId'] as int?,
       defaultStoreId: json['defaultStoreId'] as int?,
       mode: json['mode'] as String?,
       properties: properties,
