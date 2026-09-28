@@ -232,13 +232,11 @@ class _LandingScreenState extends State<LandingScreen> {
         _intervalMinutes = parsed.clamp(1, 1440);
       }
 
-      // Seed only: apply the org default language while nobody has ever
-      // explicitly picked one on THIS device (persist: false — an explicit
-      // pick in Settings, which persists, must always win from then on).
-      final lang = config['default_language']?.toLowerCase();
-      if (LocalPrefs.locale == null && (lang == 'ar' || lang == 'en')) {
-        localeService.setLocale(Locale(lang!), persist: false);
-      }
+      // Same seed-only rule as the startup application in auth_service.dart
+      // (shared, not duplicated) — this just keeps it self-healing if the
+      // org's default changes later, while this device still has no local
+      // language choice.
+      applyLanguageSeed(config);
     } catch (_) {
       // Network hiccup — keep the previous interval, try again next tick.
     }

@@ -8,6 +8,7 @@ import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../services/local_prefs.dart';
 import 'browsing_mode_service.dart';
+import 'locale_service.dart';
 import 'permission_service.dart';
 import 'store_config_service.dart';
 
@@ -219,6 +220,7 @@ class AuthService extends ChangeNotifier {
         }
       }
       await resolveDefaultStore(api);
+      await _applyStartupLanguageSeed(api);
       return;
     }
 
@@ -267,6 +269,24 @@ class AuthService extends ChangeNotifier {
     // Always ensure store currency is resolved — it's in-memory only and
     // lost on every restart regardless of auth state.
     await resolveDefaultStore(api);
+    await _applyStartupLanguageSeed(api);
+  }
+
+  /// Applies the org's default_language right at startup, as soon as
+  /// organizationId is known (from the login just above) — NOT on the
+  /// Landing screen's later periodic timer, which is deliberately delayed to
+  /// avoid piling onto this same startup network burst. That delay makes
+  /// sense for the (heavier) landing-page-refresh check; it does not make
+  /// sense for one small language field, so this reads it separately, here,
+  /// right after login.
+  Future<void> _applyStartupLanguageSeed(ApiClient api) async {
+    final orgId = organizationId;
+    if (orgId == null) return;
+    try {
+      applyLanguageSeed(await api.getConfig(orgId: orgId));
+    } catch (_) {
+      // Network hiccup — the periodic check on Landing will pick it up later.
+    }
   }
 
   /// Fetches the server's store list and resolves currency + display name in-memory.

@@ -24,3 +24,16 @@ class LocaleService extends ChangeNotifier {
 }
 
 final localeService = LocaleService(const Locale('en'));
+
+/// Applies the organization's `default_language` property as a SEED only —
+/// while nobody has ever explicitly picked a language on THIS device
+/// (Settings' toggle persists via LocalPrefs.locale; this call never does).
+/// Once an explicit local choice exists, this is permanently a no-op for
+/// that device, even if the org's default later changes.
+void applyLanguageSeed(Map<String, String> config) {
+  if (LocalPrefs.locale != null) return;
+  final lang = config['default_language']?.toLowerCase();
+  if (lang == 'ar' || lang == 'en') {
+    localeService.setLocale(Locale(lang!), persist: false);
+  }
+}
