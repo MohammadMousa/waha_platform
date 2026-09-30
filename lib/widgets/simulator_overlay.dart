@@ -15,6 +15,7 @@ import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import '../utils/scan_actions.dart';
+import '../utils/scanner_manager.dart';
 import 'manual_code_dialog.dart';
 
 /// The floating button cluster from the reference screenshot, reworked as
@@ -194,6 +195,12 @@ class SimulatorOverlay extends StatelessWidget {
       await showUnpaidOrderBlockedDialog(context);
       return;
     }
+
+    // Same kiosk-command check as the real scan path (scan_actions.dart) —
+    // the simulator's camera button pushes the same CameraScanScreen, so a
+    // `cmd=` QR can reach here too, not just from real hardware.
+    if (await ScannerManager.instance.handle(context, code)) return;
+    if (!context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     try {

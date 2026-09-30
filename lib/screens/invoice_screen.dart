@@ -457,16 +457,31 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     );
   }
 
+  // The auto-select timer (_maybeStartAutoSelect) and a manual tap both call
+  // this directly, with nothing cancelling one when the other fires — a tap
+  // landing in the same instant the timer's last tick auto-picks would
+  // otherwise start two payment attempts for the same order. This flag is
+  // checked and set synchronously, before any await runs, so whichever call
+  // reaches here first wins and the other is a no-op — Dart's single-
+  // threaded event loop guarantees no interleaving between them. Reset once
+  // that attempt actually finishes (success, decline, cancel), not stuck
+  // forever — a real retry afterward must still work.
+  bool _methodHandling = false;
+
   void _handleMethod(PaymentMethod method) {
+    if (_methodHandling) return;
+    _methodHandling = true;
+    final Future<void> future;
     if (method.provider == 'SIMULATED') {
-      _paySimulated(outcome: 'SUCCESS');
+      future = _paySimulated(outcome: 'SUCCESS');
     } else if (method.provider == 'TERMINAL') {
-      _handleTerminal(method);
+      future = _handleTerminal(method);
     } else if (method.isPaymentUrl) {
-      _handlePaymentUrl(method);
+      future = _handlePaymentUrl(method);
     } else {
-      _payWithRedirect(method);
+      future = _payWithRedirect(method);
     }
+    future.whenComplete(() => _methodHandling = false);
   }
 
   Future<void> _handleTerminal(PaymentMethod method) async {
@@ -1936,22 +1951,27 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     final l10n = AppLocalizations.of(context)!;
     final bridge = GeideaTerminalBridge.instance;
 
-    // Always actively reconnect here, unconditionally — do NOT trust
-    // checkCommunication() alone first. It only reads MainActivity's last-
-    // known isUsbConnected flag, set by whichever USBConnectionListener
-    // callback fired last; nothing keeps it live between that callback and
-    // this exact moment. A client report of the transaction never reaching
-    // the physical terminal at all (no prompt, nothing) — while the app
-    // still believed it was connected — matches this exactly: the cached
-    // flag said true, startPurchaseTransaction() was called against a
-    // connection that had actually gone stale, and Geidea's SDK failed
-    // immediately, internally, before ever writing anything to the
-    // terminal for the customer to see. Forcing a fresh reconnect attempt
-    // right here, every time, closes that gap — costs a few seconds, but
-    // only at the one moment a stale "yes" would otherwise silently fail
-    // the whole transaction with no card ever presented.
+    // Settings → POS Terminal Options → "Reset Terminal before Payment",
+    // off by default. When ON: actively reconnect here, unconditionally —
+    // do NOT trust checkCommunication() alone first. It only reads
+    // MainActivity's last-known isUsbConnected flag, set by whichever
+    // USBConnectionListener callback fired last; nothing keeps it live
+    // between that callback and this exact moment. A client report of the
+    // transaction never reaching the physical terminal at all (no prompt,
+    // nothing) — while the app still believed it was connected — matches
+    // this exactly: the cached flag said true, startPurchaseTransaction()
+    // was called against a connection that had actually gone stale, and
+    // Geidea's SDK failed immediately, internally, before ever writing
+    // anything to the terminal for the customer to see. Forcing a fresh
+    // reconnect attempt right here closes that gap — but on real hardware
+    // it's sometimes slow enough (seconds, occasionally much longer) that
+    // the cashier cancels out of it before the terminal ever comes back —
+    // a lost sale caused by the safeguard itself. Default OFF skips this
+    // and goes straight to payment; ON is the fallback if that stale-
+    // connection bug resurfaces without it.
     TraceLog.log('Terminal: payment run start, order ${widget.orderId}');
-    final connected = await bridge.prepareTerminal(reason: 'payment start');
+    final connected = !LocalPrefs.resetTerminalBeforePayment ||
+        await bridge.prepareTerminal(reason: 'payment start');
     if (!mounted) return;
     if (!connected) {
       TraceLog.log('Terminal: port did not open after a clean reconnect, aborting before charging');

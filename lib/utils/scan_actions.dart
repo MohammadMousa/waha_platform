@@ -8,6 +8,7 @@ import '../services/local_prefs.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import 'locale_name.dart';
+import 'scanner_manager.dart';
 
 /// Pushes the camera scanner, and on a successful detection, adds it to
 /// the cart — the same action the Shopping-mode CTA on Landing/Cart uses.
@@ -39,11 +40,17 @@ Future<void> addScannedBarcodeToCart(BuildContext context, String barcode) async
   // An order has already been placed and isn't paid yet (customer is sitting
   // on the Invoice screen, or anywhere else mid-payment) — a scan here would
   // silently try to add to a cart that's no longer what's being paid for.
-  // Block it with an explicit message instead.
+  // Block it with an explicit message instead. Applies to a `cmd=` scan too,
+  // same as any other scan.
   if (flow.orderId != null && flow.order?.status != 'PAID') {
     await showUnpaidOrderBlockedDialog(context);
     return;
   }
+
+  // A kiosk command (QR prefixed `cmd=`), not a product code — see
+  // ScannerManager. Handled entirely there; never reaches product lookup.
+  if (await ScannerManager.instance.handle(context, barcode)) return;
+  if (!context.mounted) return;
 
   final messenger = ScaffoldMessenger.of(context);
   try {

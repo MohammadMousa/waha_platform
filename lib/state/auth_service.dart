@@ -6,6 +6,7 @@ import '../models/auth_session.dart';
 import '../models/store.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
+import '../services/geidea_terminal_bridge.dart';
 import '../services/local_prefs.dart';
 import 'browsing_mode_service.dart';
 import 'locale_service.dart';
@@ -46,7 +47,12 @@ class AuthService extends ChangeNotifier {
     deviceId = session.deviceId;
     username = session.username;
     sessionStoreId = session.storeId;
-    if (session.organizationId != null) organizationId = session.organizationId;
+    if (session.organizationId != null) {
+      organizationId = session.organizationId;
+      // Native (AutoLogUploader) has no other way to learn this — best
+      // effort, diagnostics only.
+      GeideaTerminalBridge.instance.setOrgId(organizationId);
+    }
     defaultStoreId = session.defaultStoreId;
     mode = session.mode;
 
@@ -80,11 +86,14 @@ class AuthService extends ChangeNotifier {
     permissionService.update(session.permissions);
   }
 
+  // Waha Rules (Auth): no password stored locally, for any login type —
+  // only the token, validated via GET /api/auth/me on the next start (see
+  // resolveStartupAuth). A rejected/expired token means signing in again
+  // by hand, never a silent replay of a cached password.
   Future<void> register(ApiClient api, String username, String password) async {
     final session = await api.register(username, password);
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
-    await LocalPrefs.setAuthCredentials(username, password);
     notifyListeners();
   }
 
@@ -94,7 +103,6 @@ class AuthService extends ChangeNotifier {
         .login(username, password, sessionProperties: {'mode': currentMode});
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
-    await LocalPrefs.setAuthCredentials(username, password);
     notifyListeners();
   }
 
@@ -109,17 +117,18 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Device identity for Kiosk mode — a fixed terminal login, not a
-  /// per-customer one. Credentials are cached (same as login()) so
-  /// resolveStartupAuth can re-authenticate this device on every launch:
-  /// there's no device-session equivalent of GET /api/auth/me to validate
-  /// a cached token against, only login, so startup always re-logs-in
-  /// rather than trying the token first.
+  /// per-customer one. The PIN is never cached (Waha Rules, Auth — no
+  /// password/PIN stored locally, for any login type); only the resulting
+  /// token is, same as login() below. resolveStartupAuth validates that
+  /// token via GET /api/kiosk/auth/me on every launch instead of replaying
+  /// the PIN — this only runs from a human typing it on the Device Login
+  /// screen, or that startup token check coming back rejected.
   Future<void> loginKiosk(
       ApiClient api, String username, String pinCode) async {
     final session = await api.kioskLogin(username, pinCode);
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
-    await LocalPrefs.setKioskCredentials(username, pinCode);
+    await LocalPrefs.setKioskUsernameCache(username);
     notifyListeners();
   }
 
@@ -191,11 +200,14 @@ class AuthService extends ChangeNotifier {
 
   /// Full startup auth resolution:
   ///   Kiosk: a separate identity domain entirely (POST /api/kiosk/auth/login,
-  ///     device/PIN — see docs/roles-permissions.md) — re-login with the
-  ///     cached device username/PIN, or stay logged out if the device has
-  ///     never been provisioned. Never anonymous, never the customer
-  ///     /api/auth/* domain below — the router gates every route behind
-  ///     isDeviceSession until the Device Login screen succeeds.
+  ///     device/PIN — see docs/roles-permissions.md), but validated the SAME
+  ///     way as Normal/Shopping below: try the cached TOKEN first via GET
+  ///     /api/kiosk/auth/me, never a cached PIN (Waha Rules, Auth — no
+  ///     password/PIN stored locally, for any login type). A rejected/
+  ///     missing token leaves the device logged out; the router gates every
+  ///     route behind isDeviceSession until a human logs in on the Device
+  ///     Login screen. Never anonymous, never the customer /api/auth/*
+  ///     domain below.
   ///   Normal/Shopping:
   ///     1. Try cached token via GET /api/auth/me.
   ///     2. If rejected, re-authenticate with cached credentials.
@@ -207,16 +219,38 @@ class AuthService extends ChangeNotifier {
     // shows immediately even in kiosk mode with no cached login.
     applyConfig(await api.getConfig());
 
+    // Same reasoning as the kiosk PIN purge below — a normal/shopping user
+    // logged in before this rule was enforced may still be carrying a
+    // plaintext cached password, and a valid never-expiring token means
+    // they may never hit logout() to trigger the existing cleanup there.
+    await LocalPrefs.clearAuthCredentials();
+
     if (mode == BrowsingMode.kiosk) {
-      final devUsername = LocalPrefs.kioskUsername;
-      final devPin = LocalPrefs.kioskPin;
-      if (devUsername != null && devPin != null) {
+      // One-time-per-launch purge of a plaintext PIN a device provisioned
+      // before this rule was enforced may still be carrying — an
+      // already-logged-in kiosk may never hit logout() otherwise. Cheap,
+      // safe to call every start (no-ops once the key is gone), and
+      // deliberately doesn't touch the harmless username cache below.
+      await LocalPrefs.purgeLegacyKioskPin();
+      final cachedToken = LocalPrefs.authToken;
+      if (cachedToken != null) {
         try {
-          await loginKiosk(api, devUsername, devPin);
+          final session =
+              await api.kioskMe(cachedToken).timeout(const Duration(seconds: 5));
+          token = cachedToken;
+          _applySession(session);
+          notifyListeners();
+        } on UnauthorizedException {
+          // Really rejected (revoked/invalidated), not just unreachable —
+          // drop it. The router sends the device to Routes.kioskLogin for a
+          // human to log in with the PIN; never auto-retried from a cached
+          // secret.
+          await LocalPrefs.clearAuthToken();
         } catch (_) {
-          // Stale/rejected PIN, or backend unreachable — stays logged out;
-          // the router sends the device to Routes.kioskLogin until a
-          // successful manual login replaces these cached credentials.
+          // Network/timeout — keep the token, optimistic it's still valid;
+          // same tradeoff Normal/Shopping below makes.
+          token = cachedToken;
+          notifyListeners();
         }
       }
       await resolveDefaultStore(api);
@@ -225,8 +259,6 @@ class AuthService extends ChangeNotifier {
     }
 
     final cachedToken = LocalPrefs.authToken;
-    final cachedUsername = LocalPrefs.authUsername;
-    final cachedPassword = LocalPrefs.authPassword;
 
     if (cachedToken != null) {
       try {
@@ -240,21 +272,16 @@ class AuthService extends ChangeNotifier {
         // the auth response). Without resolveDefaultStore, currency stays null
         // after every restart for logged-in users and the cart shows no symbol.
       } on UnauthorizedException {
-        // Falls through to re-authenticate with cached credentials.
+        // Really rejected (revoked/invalidated), not just unreachable —
+        // drop it. Never re-authenticated from a cached password (Waha
+        // Rules, Auth — no credentials stored locally, any login type):
+        // Shopping falls through to a fresh guest account below, Normal
+        // stays logged out until the person signs in again by hand.
+        await LocalPrefs.clearAuthToken();
       } catch (_) {
         // Network/timeout — keep token but still resolve currency if possible.
         token = cachedToken;
         notifyListeners();
-      }
-    }
-
-    if (token == null && cachedUsername != null && cachedPassword != null) {
-      try {
-        await login(api, cachedUsername, cachedPassword);
-        // Fall through to resolveDefaultStore — login() doesn't set currency.
-      } catch (_) {
-        await LocalPrefs.clearAuthToken();
-        await LocalPrefs.clearAuthCredentials();
       }
     }
 

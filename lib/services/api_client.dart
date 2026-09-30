@@ -298,6 +298,22 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
+  // GET /api/kiosk/auth/me — the Kiosk-mode equivalent of me() above, so a
+  // device session can be validated the same way instead of re-logging-in
+  // with a locally cached PIN on every start (see AuthService.resolveStartupAuth).
+  Future<AuthSession> kioskMe(String token) async {
+    final resp = await _send(
+      () => _http.get(_uri('/api/kiosk/auth/me'), headers: _headers(token: token)),
+    );
+    if (resp.statusCode == 200) {
+      return AuthSession.fromJson(
+          jsonDecode(resp.body) as Map<String, dynamic>);
+    }
+    final msg = _extractMessage(resp);
+    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
+    throw UnknownApiException(resp.statusCode, msg);
+  }
+
   // POST /api/auth/store
   Future<AuthSession> selectStore(String token, int storeId,
       {Map<String, String>? sessionProperties}) async {

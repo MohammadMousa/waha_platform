@@ -165,6 +165,7 @@ class MainActivity : FlutterActivity() {
         if (!loggingEnabled()) return
         Log.e(TAG, "TRACE: $label")
         try {
+            LogUploader.trimIfOversized(applicationContext)
             val dir = getExternalFilesDir(null) ?: filesDir
             File(dir, "waha_trace.log").appendText("${System.currentTimeMillis()} $label\n")
         } catch (e: Throwable) {
@@ -201,7 +202,11 @@ class MainActivity : FlutterActivity() {
                 val prefs = loggingPrefs()
                 val last = prefs.getLong("last_exit_ts", 0L)
                 val entries = ExitReasons.entries(applicationContext, 5)
-                entries.filter { it.timestamp > last }.sortedBy { it.timestamp }.forEach { logTrace(it.text) }
+                val fresh = entries.filter { it.timestamp > last }.sortedBy { it.timestamp }
+                fresh.forEach { logTrace(it.text) }
+                fresh.firstOrNull { it.reason in ExitReasons.CRASH_REASONS }?.let {
+                    AutoLogUploader.trigger(applicationContext, "crash:${ExitReasons.reasonName(it.reason)}") { s -> logTrace(s) }
+                }
                 entries.maxOfOrNull { it.timestamp }?.let { if (it > last) prefs.edit().putLong("last_exit_ts", it).apply() }
             } catch (_: Throwable) {
                 // Diagnostics must never be a crash source.
@@ -327,6 +332,9 @@ class MainActivity : FlutterActivity() {
                             if (!lastPaymentCalledBack) {
                                 logTrace("PAYMENT VERDICT (no SDK callback, $reason): " +
                                     TerminalDiagnostics.paymentVerdict(paymentStartEpoch, false, null, null, lastHandshakeOk))
+                                // A silent hang, not a disconnect: the SDK never called back at
+                                // all — neither USB trigger below would ever catch this case.
+                                AutoLogUploader.trigger(applicationContext, "payment:$reason:no-callback") { logTrace(it) }
                             }
                         }
                         sdkReport(reason, logToTrace = true)
@@ -358,6 +366,10 @@ class MainActivity : FlutterActivity() {
                     }.start()
                     "setApiBaseUrl" -> {
                         LogUploader.setBaseUrl(applicationContext, call.argument<String>("url") ?: "")
+                        result.success(true)
+                    }
+                    "setOrgId" -> {
+                        AutoLogUploader.setOrgId(applicationContext, call.argument<Number>("orgId")?.toLong())
                         result.success(true)
                     }
                     "uploadLog" -> Thread {
@@ -424,7 +436,11 @@ class MainActivity : FlutterActivity() {
         // the on-screen diagnostic tools depend on them; only writes to
         // waha_trace.log are gated (logTrace).
         SdkLogCapture.start { logTrace(it) }
-        UsbMilestones.register(this) { logTrace(it) }
+        UsbMilestones.register(this, trace = { logTrace(it) }, onEvent = { name ->
+            if (name in AutoLogUploader.USB_TRIGGER_NAMES) {
+                AutoLogUploader.trigger(applicationContext, "usb:$name") { logTrace(it) }
+            }
+        })
         // Read-only USB snapshot channel — separate from everything Geidea above.
         UsbDiagnosticsChannel.register(flutterEngine, this) { logTrace(it) }
         logTrace("configureFlutterEngine end")
@@ -632,6 +648,9 @@ class MainActivity : FlutterActivity() {
             val outcome = waitPortEvent(since, 6000)
             val ready = outcome.startsWith("PORT_OPEN_OK")
             logTrace("prepareTerminal($reason): ${if (ready) "READY" else "NOT READY"} — $outcome")
+            if (!ready) {
+                AutoLogUploader.trigger(applicationContext, "prepareTerminal:$reason:$outcome") { logTrace(it) }
+            }
             ready
         }
     }
@@ -814,6 +833,9 @@ class MainActivity : FlutterActivity() {
             if (!finished.compareAndSet(false, true)) return
             val status = map["status"] as? String ?: "?"
             marks.add(System.currentTimeMillis() to if (status == "timeout") "TIMEOUT — the SDK never called back" else "SDK CALLBACK status=$status")
+            if (status == "timeout") {
+                AutoLogUploader.trigger(applicationContext, "checkStatus:timeout") { logTrace(it) }
+            }
             val sdkIface = TerminalDiagnostics.sdkDevice(applicationContext)?.let { TerminalDiagnostics.firstDataInterface(it) }
             val timeline = TerminalDiagnostics.timeline(startEpoch, synchronized(marks) { ArrayList(marks) })
             val verdict = TerminalDiagnostics.statusVerdict(startEpoch, status, map["message"] as? String ?: "", null, sdkIface)

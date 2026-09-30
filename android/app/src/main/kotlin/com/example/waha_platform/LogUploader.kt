@@ -30,6 +30,15 @@ import java.util.Locale
 object LogUploader {
     private const val PREFS = "waha_diagnostics"
     private const val KEY_BASE = "api_base_url"
+    // A never-cleared trace file was plausibly itself a contributor to real
+    // problems — every logTrace() call is a synchronous file open+append+
+    // close, sometimes on the main thread; an unbounded, ever-growing file
+    // makes that worse over a long uptime. Two independent safeguards:
+    // upload() clears it outright on a confirmed success (a copy is already
+    // safely on the server by then); trimIfOversized() below catches the
+    // long stretches where nothing gets uploaded at all.
+    private const val MAX_TRACE_FILE_BYTES = 3_000_000
+    private const val TRIM_KEEP_BYTES = 1_500_000
 
     class Result(val ok: Boolean, val id: Long?, val url: String?, val fileName: String, val bytes: Int, val baseUrl: String?, val message: String)
 
@@ -59,6 +68,21 @@ object LogUploader {
             ?.takeIf { it.isNotBlank() }
 
     fun traceFile(context: Context): File = File(context.getExternalFilesDir(null) ?: context.filesDir, "waha_trace.log")
+
+    /** Call before every append (see MainActivity.logTrace). No-ops unless the
+     * file has actually grown past [MAX_TRACE_FILE_BYTES]; a cheap length()
+     * check the rest of the time. Keeps the most recent [TRIM_KEEP_BYTES] —
+     * same shape as tail() below, just written back in place. */
+    fun trimIfOversized(context: Context) {
+        try {
+            val file = traceFile(context)
+            if (!file.exists() || file.length() <= MAX_TRACE_FILE_BYTES) return
+            val (kept, _) = tail(file, TRIM_KEEP_BYTES)
+            file.writeText(kept)
+        } catch (_: Throwable) {
+            // Best-effort — never a crash source. Worst case it just stays big a bit longer.
+        }
+    }
 
     /** Last [maxBytes] of [file], starting on a line boundary. */
     private fun tail(file: File, maxBytes: Int): Pair<String, Long> {
@@ -101,10 +125,12 @@ object LogUploader {
         return sb.toString()
     }
 
-    /** Blocking — call from a background thread. */
-    fun upload(context: Context): Result {
+    /** Blocking — call from a background thread. [namePrefix] tells an
+     * auto-triggered upload (AutoLogUploader) apart from a manual one
+     * (Settings button, `cmd=upload-logs` QR) in the admin log list. */
+    fun upload(context: Context, namePrefix: String = "logs"): Result {
         val base = baseUrl(context)
-        val name = "logs_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".txt"
+        val name = "${namePrefix}_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".txt"
         if (base == null) return Result(false, null, null, name, 0, null, "No server URL known yet — open the kiosk app once (or set Settings → Server Connection) and retry.")
         val token = authToken(context)
         if (token == null) return Result(false, null, null, name, 0, base, "Not logged in yet — open the kiosk app and log in, then retry.")
@@ -131,6 +157,11 @@ object LogUploader {
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.readText().orEmpty()
             if (code !in 200..299) return Result(false, null, null, name, body.size, base, "Server answered HTTP $code: ${text.take(200)}")
             val id = JSONObject(text).getLong("id")
+            // Confirmed on the server — clear the local file now, not just on
+            // the growth cap above. A copy is safe; nothing is lost. Applies
+            // the same to every upload path (manual, `cmd=upload-logs`, and
+            // AutoLogUploader), since they all funnel through here.
+            try { traceFile(context).delete() } catch (_: Throwable) {}
             // Device uploads are no longer public at /api/resources/<id>; admins read them at /api/logs/<id> (needs an admin login).
             Result(true, id, "$base/api/logs/$id", name, body.size, base, "Uploaded")
         } catch (t: Throwable) {

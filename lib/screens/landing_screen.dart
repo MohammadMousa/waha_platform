@@ -427,19 +427,21 @@ class _WebViewLandingState extends State<_WebViewLanding> {
 
   bool _dismissing = false;
 
-  // Dismiss to cart as soon as the first item is added — scan or simulator.
-  // _dismissing guards against the navigator assertion that fires when this is
-  // called multiple times while the navigator is already mid-transition.
-  void _onFlowChanged() {
-    if (!mounted) return;
-    // Landing now survives resets (goHomeKeepingLanding), so re-arm the
-    // latch once the cart is empty again — otherwise the second customer's
-    // first item would never open the cart.
-    if (_flow!.cart.isEmpty) _dismissing = false;
-    if (_dismissing) return;
+  // Dismiss to cart as soon as an item is added — scan or simulator.
+  // _dismissing guards against a double-push while the transition to Cart is
+  // still in flight (the Navigator assertion that fires if this runs twice
+  // before the first push settles). It used to reset only once the cart went
+  // empty again — but tapping Back on Cart doesn't empty the cart, it just
+  // returns here with the same items, so that latch stayed stuck forever
+  // after the very first redirect and every later add silently did nothing.
+  // Instead: it's "busy" only for the actual duration of the push, and clears
+  // the moment we're back on Landing for any reason (Back, checkout, reset).
+  Future<void> _onFlowChanged() async {
+    if (!mounted || _dismissing) return;
     if (_flow!.cart.isNotEmpty) {
       _dismissing = true;
-      Navigator.of(context).pushNamed(Routes.cart);
+      await Navigator.of(context).pushNamed(Routes.cart);
+      if (mounted) _dismissing = false;
     }
   }
 

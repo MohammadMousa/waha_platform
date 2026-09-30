@@ -90,7 +90,12 @@ void main() {
     expect(r.failedStep, 'login');
     expect(AppConfig.apiBaseUrl, before);
     expect(authService.token, 'OLD-TOKEN');
-    expect(LocalPrefs.kioskPin, '000000'); // old cache untouched on failure
+    // Old leftover PIN cache untouched on failure — read via the raw prefs
+    // key since LocalPrefs no longer exposes a PIN getter (never cached
+    // going forward; this checks a pre-existing value survives, not that a
+    // new one gets read/used anywhere).
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('waha.kiosk_pin'), '000000');
   });
 
   test('success: switches, new token, no credentials stored, fields kept',
@@ -110,7 +115,8 @@ void main() {
     expect(AppConfig.apiBaseUrlLabel, endsWith('(custom)'));
     expect(authService.token, 'NEW-TOKEN');
     expect(LocalPrefs.authToken, 'NEW-TOKEN');
-    expect(LocalPrefs.kioskPin, isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('waha.kiosk_pin'), isNull);
     expect(LocalPrefs.kioskUsername, isNull);
 
     // Turning OFF returns to the default and keeps the saved custom fields.

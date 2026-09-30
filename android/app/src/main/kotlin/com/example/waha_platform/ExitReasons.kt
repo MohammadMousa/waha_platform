@@ -23,9 +23,14 @@ import java.util.Locale
 //  - Every read is wrapped in try/catch(Throwable) and returns text instead of
 //    throwing; callers also run it off the main thread.
 object ExitReasons {
-    class Entry(val timestamp: Long, val text: String)
+    class Entry(val timestamp: Long, val text: String, val reason: Int)
 
     const val UNAVAILABLE_BELOW_API = 30
+
+    // Reasons worth an automatic diagnostic upload (AutoLogUploader) — a real
+    // crash/ANR, not a normal exit (user-requested, low-memory eviction, OS
+    // package changes, ...). Values = ApplicationExitInfo.REASON_*.
+    val CRASH_REASONS = setOf(4, 5, 6) // CRASH, CRASH_NATIVE, ANR
 
     /** Pure and Android-free, so it is unit-tested. Values = ApplicationExitInfo.REASON_*. */
     fun reasonName(reason: Int): String = when (reason) {
@@ -86,6 +91,7 @@ internal object ExitReasonsApi30 {
                 "EXIT REASON at ${fmt.format(Date(e.timestamp))} reason=${ExitReasons.reasonName(e.reason)}(${e.reason}) " +
                     "status=${e.status} importance=${e.importance} pid=${e.pid} process=${e.processName} " +
                     "pss=${e.pss}KB rss=${e.rss}KB description='${e.description}'",
+                e.reason,
             )
         }
     }

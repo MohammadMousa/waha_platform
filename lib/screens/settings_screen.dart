@@ -47,6 +47,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // "Detect Payment Terminals" manual test button
   bool _detectingTerminal = false;
 
+  // "Reset Terminal Connection" manual fallback button
+  bool _resettingTerminal = false;
+
+  // "Reset Terminal before Payment" toggle
+  bool _resetTerminalBeforePayment = LocalPrefs.resetTerminalBeforePayment;
+
   // Dev tools unlock: tap the version line 10 times
   int _tapCount = 0;
   bool _devUnlocked = false;
@@ -204,6 +210,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // Manual fallback: the exact same disconnect+reconnect the app already
+  // does before every payment (prepareTerminal), just triggerable on demand
+  // — a cashier stuck on a slow/stale terminal doesn't have to wait for the
+  // next payment attempt to retry it.
+  Future<void> _resetTerminal() async {
+    setState(() => _resettingTerminal = true);
+    final ready = await GeideaTerminalBridge.instance
+        .prepareTerminal(reason: 'settings manual reset');
+    if (!mounted) return;
+    setState(() => _resettingTerminal = false);
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Icon(
+          ready ? Icons.check_circle_outline : Icons.error_outline,
+          color: ready ? Colors.green : Colors.red,
+          size: 40,
+        ),
+        title: Text(ready ? 'Terminal Ready' : 'Terminal Not Ready'),
+        content: Text(ready
+            ? 'The USB connection was reset and the terminal is ready.'
+            : 'The USB connection was reset but the port did not open. '
+                'Check the cable and that the terminal is powered on.'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveStoreId() async {
     final parsed = int.tryParse(_storeId.text.trim());
     if (parsed == null || parsed <= 0) {
@@ -283,72 +322,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // ── Kiosk Timers ─────────────────────────────────────────────────
           // Only take effect in Kiosk mode. Two contexts: before-invoice and
           // after-invoice, each with a warn delay and a countdown duration.
-          Text(l10n.settingsKioskTimers,
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Row(
+          // Same Card+ExpansionTile shape as every other collapsible group
+          // on this screen (Screen factor, POS Terminal Options, ...).
+          Card(
+            child: ExpansionTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: Text(l10n.settingsKioskTimers),
               children: [
-                const Text('Enable Idle Timers'),
-                IconButton(
-                  icon: const Icon(Icons.info_outline, size: 20),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      content: const Text(
-                        'Only affects inactivity redirects (before- and after-invoice, '
-                        'both below). On by default — trusted on real hardware. Turn '
-                        'off if you need the app to never redirect home for mere '
-                        'inactivity, on any screen. A paid order still shows a brief '
-                        'success popup and redirects home on its own regardless of '
-                        'this. Does NOT affect the separate "Wait for terminal" '
-                        'timeout further down — that one stays on always, as a safety '
-                        'cutoff so a stuck terminal call can\'t hang the app forever.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('OK'),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Row(
+                    children: [
+                      const Text('Enable Idle Timers'),
+                      IconButton(
+                        icon: const Icon(Icons.info_outline, size: 20),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            content: const Text(
+                              'Only affects inactivity redirects (before- and after-invoice, '
+                              'both below). On by default — trusted on real hardware. Turn '
+                              'off if you need the app to never redirect home for mere '
+                              'inactivity, on any screen. A paid order still shows a brief '
+                              'success popup and redirects home on its own regardless of '
+                              'this. Does NOT affect the separate "Wait for terminal" '
+                              'timeout further down — that one stays on always, as a safety '
+                              'cutoff so a stuck terminal call can\'t hang the app forever.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                  value: _timersEnabled,
+                  onChanged: (value) {
+                    setState(() => _timersEnabled = value);
+                    LocalPrefs.setKioskTimersEnabled(value);
+                  },
                 ),
+                const SizedBox(height: 14),
+                _SecondsField(
+                    label: 'Before invoice — warn after (s)',
+                    controller: _beforeWarn),
+                const SizedBox(height: 10),
+                _SecondsField(
+                    label: 'Before invoice — countdown (s)',
+                    controller: _beforeCountdown),
+                const SizedBox(height: 10),
+                _SecondsField(
+                    label: 'After invoice — warn after (s)',
+                    controller: _afterWarn),
+                const SizedBox(height: 10),
+                _SecondsField(
+                    label: 'After invoice — countdown (s)',
+                    controller: _afterCountdown),
+                if (_timerError != null) ...[
+                  const SizedBox(height: 6),
+                  Text(_timerError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13)),
+                ],
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                      onPressed: _saveTimers,
+                      child: Text(l10n.settingsSaveTimers)),
+                ),
+                const SizedBox(height: 10),
               ],
             ),
-            value: _timersEnabled,
-            onChanged: (value) {
-              setState(() => _timersEnabled = value);
-              LocalPrefs.setKioskTimersEnabled(value);
-            },
-          ),
-          const SizedBox(height: 14),
-          _SecondsField(
-              label: 'Before invoice — warn after (s)',
-              controller: _beforeWarn),
-          const SizedBox(height: 10),
-          _SecondsField(
-              label: 'Before invoice — countdown (s)',
-              controller: _beforeCountdown),
-          const SizedBox(height: 10),
-          _SecondsField(
-              label: 'After invoice — warn after (s)', controller: _afterWarn),
-          const SizedBox(height: 10),
-          _SecondsField(
-              label: 'After invoice — countdown (s)',
-              controller: _afterCountdown),
-          if (_timerError != null) ...[
-            const SizedBox(height: 6),
-            Text(_timerError!,
-                style: const TextStyle(color: Colors.red, fontSize: 13)),
-          ],
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-                onPressed: _saveTimers, child: Text(l10n.settingsSaveTimers)),
           ),
           const SizedBox(height: 8),
           SwitchListTile(
@@ -363,49 +412,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const Divider(height: 40),
 
-          // ── Terminal Payment (Geidea) ───────────────────────────────────
-          // How long the Kiosk waits on a card-present terminal transaction
-          // before giving up — see _saveTerminalTimeout for why it's capped.
-          Text('Terminal Payment',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 14),
-          _SecondsField(
-            label: 'Wait for terminal — timeout (s)',
-            controller: _terminalTimeout,
-          ),
-          if (_terminalTimeoutError != null) ...[
-            const SizedBox(height: 6),
-            Text(_terminalTimeoutError!,
-                style: const TextStyle(color: Colors.red, fontSize: 13)),
-          ],
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _saveTerminalTimeout,
-              child: const Text('Save'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Manual test hook: forces a fresh connection attempt right now
-          // (instead of waiting for the app's own slow background retry)
-          // and reports whether the terminal answered — useful for
-          // verifying cabling/power on real hardware without having to
-          // start a whole checkout flow.
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              icon: _detectingTerminal
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.contactless_outlined),
-              label: Text(_detectingTerminal
-                  ? 'Scanning…'
-                  : 'Detect Payment Terminals'),
-              onPressed: _detectingTerminal ? null : _detectTerminal,
+          // ── POS Terminal Options (Geidea) ────────────────────────────────
+          // Collapsed by default — everything terminal-related lives here
+          // together: the wait timeout, the reset-before-payment toggle, and
+          // the manual test/fallback buttons. Same Card+ExpansionTile shape
+          // as every other collapsible group on this screen.
+          Card(
+            child: ExpansionTile(
+              leading: const Icon(Icons.point_of_sale_outlined),
+              title: const Text('POS Terminal Options'),
+              children: [
+                // ExpansionTile's children render with no top gap of their
+                // own — without this the timeout field sits right under the
+                // header, its label clipped by it.
+                const SizedBox(height: 8),
+                // How long the Kiosk waits on a card-present terminal
+                // transaction before giving up — see _saveTerminalTimeout
+                // for why it's capped.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FilledButton(
+                      onPressed: _saveTerminalTimeout,
+                      child: const Text('Save'),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SecondsField(
+                        label: 'Wait for terminal — timeout (s)',
+                        controller: _terminalTimeout,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_terminalTimeoutError != null) ...[
+                  const SizedBox(height: 6),
+                  Text(_terminalTimeoutError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13)),
+                ],
+                const SizedBox(height: 10),
+                // Off by default — see LocalPrefs.resetTerminalBeforePayment
+                // for why: the reset fixed a real stale-connection bug, but
+                // is sometimes slow enough on real hardware that a cashier
+                // cancels out of it before the terminal comes back. On
+                // restores the always-reset behavior as a fallback.
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Reset Terminal before Payment'),
+                  subtitle: const Text(
+                      'On = always reconnect before charging (slower, safer against a stale connection). '
+                      'Off = go straight to payment.'),
+                  value: _resetTerminalBeforePayment,
+                  onChanged: (value) {
+                    setState(() => _resetTerminalBeforePayment = value);
+                    LocalPrefs.setResetTerminalBeforePayment(value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                // Forces a fresh connection attempt right now (instead of
+                // waiting for the app's own slow background retry) and
+                // reports whether the terminal answered — useful for
+                // verifying cabling/power on real hardware without having
+                // to start a whole checkout flow.
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    icon: _detectingTerminal
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.contactless_outlined),
+                    label: Text(_detectingTerminal
+                        ? 'Scanning…'
+                        : 'Detect Payment Terminals'),
+                    onPressed: _detectingTerminal ? null : _detectTerminal,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Same disconnect+reconnect the app runs before every
+                // payment when the toggle above is on — a manual fallback
+                // for a cashier stuck on a slow/stale terminal, without
+                // waiting for the next payment attempt to retry it. Works
+                // regardless of the toggle's position.
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    icon: _resettingTerminal
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.restart_alt),
+                    label: Text(_resettingTerminal
+                        ? 'Resetting…'
+                        : 'Reset Terminal Connection'),
+                    onPressed: _resettingTerminal ? null : _resetTerminal,
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
             ),
           ),
 
@@ -563,14 +671,7 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
 
   Future<String> _uploadLogText() async {
     final r = await GeideaTerminalBridge.instance.uploadLog();
-    if (r['ok'] == true) {
-      return 'Uploaded.\n\n'
-          'LOG ID: ${r['id']}\n'
-          '${r['url']}\n\n'
-          '${r['fileName']} (${r['bytes']} bytes)\n\n'
-          'Send the LOG ID to the developer.';
-    }
-    return 'Upload FAILED.\n\n${r['message'] ?? 'unknown error'}\n\nServer: ${r['baseUrl'] ?? 'unknown'}';
+    return GeideaTerminalBridge.describeUploadLogResult(r);
   }
 
   Future<void> _confirmClearLog() async {

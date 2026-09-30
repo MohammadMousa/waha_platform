@@ -255,6 +255,19 @@ class GeideaTerminalBridge {
     }
   }
 
+  /// Tells the native side (AutoLogUploader) which organization this kiosk
+  /// is logged in as, so it can read that org's auto-log-upload properties.
+  /// Native has no other way to know this — it isn't persisted to
+  /// SharedPreferences the way the auth token / server URL are. Pass null
+  /// on logout.
+  Future<void> setOrgId(int? orgId) async {
+    try {
+      await _methodChannel.invokeMethod('setOrgId', {'orgId': orgId});
+    } catch (_) {
+      // diagnostics only
+    }
+  }
+
   /// Uploads the trace log (last ~1 MB) plus SDK logs and the USB inventory
   /// to the Waha backend as `logs_<timestamp>.txt`. Result keys: ok, id, url,
   /// fileName, bytes, baseUrl, message.
@@ -265,6 +278,20 @@ class GeideaTerminalBridge {
     } catch (e) {
       return {'ok': false, 'message': '$e'};
     }
+  }
+
+  /// Human-readable summary of an [uploadLog] result — shared by Settings'
+  /// "Upload log" button and ScannerManager's `cmd-upload-logs` QR command,
+  /// so both show the customer/support person the exact same text.
+  static String describeUploadLogResult(Map<String, dynamic> r) {
+    if (r['ok'] == true) {
+      return 'Uploaded.\n\n'
+          'LOG ID: ${r['id']}\n'
+          '${r['url']}\n\n'
+          '${r['fileName']} (${r['bytes']} bytes)\n\n'
+          'Send the LOG ID to the developer.';
+    }
+    return 'Upload FAILED.\n\n${r['message'] ?? 'unknown error'}\n\nServer: ${r['baseUrl'] ?? 'unknown'}';
   }
 
   Future<bool> clearLog() async {

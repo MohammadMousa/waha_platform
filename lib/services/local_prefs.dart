@@ -74,23 +74,25 @@ class LocalPrefs {
   static Future<void> setKioskUsername(String value) =>
       _p.setString(_kKioskUsername, value);
 
-  static const _kKioskPin = 'waha.kiosk_pin';
-
-  /// Cached device username/PIN — the Kiosk-mode equivalent of
-  /// authUsername/authPassword above (same plaintext-storage tradeoff:
-  /// this is the device's own credential, re-used to re-authenticate on
-  /// every app start since there's no session-check endpoint for device
-  /// sessions, only login). Deliberately separate from setKioskUsername
+  /// Persists the device username only — NOT the PIN. "Waha Rules" (Auth)
+  /// forbids storing passwords/PINs locally for any login type; a device
+  /// session is now validated on startup via its token (GET
+  /// /api/kiosk/auth/me, see AuthService.resolveStartupAuth), never by
+  /// replaying a cached PIN. Deliberately separate from setKioskUsername
   /// above, which is unrelated leftover state from IdentityService.
-  static String? get kioskPin => _p.getString(_kKioskPin);
-  static Future<void> setKioskCredentials(String username, String pin) async {
-    await _p.setString(_kKioskUsername, username);
-    await _p.setString(_kKioskPin, pin);
-  }
+  static Future<void> setKioskUsernameCache(String username) =>
+      _p.setString(_kKioskUsername, username);
+
+  /// Purges the plaintext PIN a device upgrading from an older build may
+  /// still have on disk (no getter/setter remains for it — key kept here
+  /// as a literal only for this cleanup). Safe and cheap to call on every
+  /// kiosk launch, unlike clearKioskCredentials below — this leaves the
+  /// harmless username cache alone.
+  static Future<void> purgeLegacyKioskPin() => _p.remove('waha.kiosk_pin');
 
   static Future<void> clearKioskCredentials() async {
     await _p.remove(_kKioskUsername);
-    await _p.remove(_kKioskPin);
+    await purgeLegacyKioskPin();
   }
 
   static String? get locale => _p.getString(_kLocale);
@@ -104,23 +106,13 @@ class LocalPrefs {
       _p.setString(_kAuthToken, value);
   static Future<void> clearAuthToken() => _p.remove(_kAuthToken);
 
-  /// Cached username/password, per explicit MVP direction: no refresh-
-  /// token mechanism exists yet, so re-authenticating with the cached
-  /// credentials is the specified fallback when a cached token is
-  /// rejected or expired. Worth flagging plainly rather than burying it:
-  /// this means a plaintext password sits in SharedPreferences, which on
-  /// Android is not secure storage (readable if the device is rooted).
-  /// Accepted as an explicit MVP tradeoff, not an oversight — but worth
-  /// moving to flutter_secure_storage (Keychain/Keystore-backed) before
-  /// this goes anywhere near a real deployment.
-  static String? get authUsername => _p.getString(_kAuthUsername);
-  static String? get authPassword => _p.getString(_kAuthPassword);
-  static Future<void> setAuthCredentials(
-      String username, String password) async {
-    await _p.setString(_kAuthUsername, username);
-    await _p.setString(_kAuthPassword, password);
-  }
-
+  /// No password is cached anymore (Waha Rules, Auth — no credentials
+  /// stored locally, any login type): a rejected/expired token means
+  /// signing in again by hand, not a silent replay of a saved password.
+  /// setAuthCredentials/authUsername/authPassword are gone; this clear
+  /// stays, purely to purge the plaintext username/password an app
+  /// upgrading from an older build may still have sitting on disk from
+  /// before this rule was enforced.
   static Future<void> clearAuthCredentials() async {
     await _p.remove(_kAuthUsername);
     await _p.remove(_kAuthPassword);
@@ -201,6 +193,19 @@ class LocalPrefs {
       _p.getBool(_kShowCartMenuInKiosk) ?? false;
   static Future<void> setShowCartMenuInKiosk(bool value) =>
       _p.setBool(_kShowCartMenuInKiosk, value);
+
+  // Off by default: the disconnect+reconnect InvoiceScreen runs before every
+  // payment (see prepareTerminal) fixed a real stale-connection bug, but on
+  // real hardware it's sometimes slow (seconds, occasionally much longer)
+  // enough that the cashier cancels out of it before the terminal ever comes
+  // back — a lost sale caused by the safeguard itself. Off skips that reset
+  // and goes straight to payment; On restores the always-reset behavior as
+  // a fallback if skipping it brings back the original stale-connection bug.
+  static const _kResetTerminalBeforePayment = 'waha.reset_terminal_before_payment';
+  static bool get resetTerminalBeforePayment =>
+      _p.getBool(_kResetTerminalBeforePayment) ?? false;
+  static Future<void> setResetTerminalBeforePayment(bool value) =>
+      _p.setBool(_kResetTerminalBeforePayment, value);
 
   // On by default: KioskIdleGuard's inactivity-driven redirect-home was
   // suspected as an ongoing source of Navigator-corruption crashes on real

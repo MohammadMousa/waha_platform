@@ -78,8 +78,11 @@ object UsbMilestones {
         return if (ev.name == "PORT_OPEN_OK") "OPEN" else "CLOSED:${ev.name}"
     }
 
+    // [onEvent] fires with the resolved milestone name (e.g. "PORT_OPEN_FAILED_CDC"),
+    // separate from [trace]'s formatted line — AutoLogUploader uses it to catch a
+    // real USB failure/disconnect without parsing log text.
     @Suppress("DEPRECATION")
-    fun register(context: Context, trace: (String) -> Unit) {
+    fun register(context: Context, trace: (String) -> Unit, onEvent: (String) -> Unit = {}) {
         if (registered) return
         registered = true
         val filter = IntentFilter().also { f -> names.keys.forEach { f.addAction(it) } }
@@ -93,6 +96,7 @@ object UsbMilestones {
                     if (intent.extras?.containsKey("permission") == true) append(" permission=${intent.extras?.getBoolean("permission")}")
                 }
                 add(name, detail, trace)
+                onEvent(name)
             }
         }
         ContextCompat.registerReceiver(context.applicationContext, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
