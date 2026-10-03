@@ -460,6 +460,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get terminalSwipeCard => 'مرر أو قرّب البطاقة على جهاز الدفع';
 
   @override
+  String terminalPreviousPaymentPending(int seconds) {
+    return 'جارٍ تجهيز جهاز الدفع. يرجى الانتظار $seconds ثانية…';
+  }
+
+  @override
   String terminalSessionStartFailed(String error) {
     return 'فشل بدء الجلسة: $error';
   }

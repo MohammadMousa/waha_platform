@@ -199,6 +199,12 @@
   "terminalConnecting": "جارٍ الاتصال بجهاز الدفع…",
   "terminalNotConnected": "جهاز الدفع غير متصل — تحقق من كابل USB.",
   "terminalSwipeCard": "مرر أو قرّب البطاقة على جهاز الدفع",
+  "terminalPreviousPaymentPending": "جارٍ تجهيز جهاز الدفع. يرجى الانتظار {seconds} ثانية…",
+  "@terminalPreviousPaymentPending": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "terminalSessionStartFailed": "فشل بدء الجلسة: {error}",
   "@terminalSessionStartFailed": {
     "placeholders": {

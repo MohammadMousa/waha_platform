@@ -1970,6 +1970,24 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     // and goes straight to payment; ON is the fallback if that stale-
     // connection bug resurfaces without it.
     TraceLog.log('Terminal: payment run start, order ${widget.orderId}');
+
+    // An earlier attempt (e.g. one the cashier cancelled) may still be on the
+    // terminal — cancelling on screen cannot stop it. Wait out the terminal
+    // timeout from that attempt's start before sending another purchase, so
+    // two never overlap on the terminal. A final answer to the earlier
+    // attempt ends the wait early (see GeideaTerminalBridge.startPayment).
+    var held = GeideaTerminalBridge.pendingAttemptRemaining();
+    if (held > Duration.zero) {
+      TraceLog.log('Terminal: earlier attempt still pending — holding this one ${held.inSeconds}s');
+      while (held > Duration.zero) {
+        if (!mounted) return;
+        setState(() => _statusLabel = l10n.terminalPreviousPaymentPending((held.inMilliseconds / 1000).ceil()));
+        await Future.delayed(const Duration(seconds: 1));
+        held = GeideaTerminalBridge.pendingAttemptRemaining();
+      }
+      if (!mounted) return;
+      TraceLog.log('Terminal: hold over, continuing with the new attempt');
+    }
     final connected = !LocalPrefs.resetTerminalBeforePayment ||
         await bridge.prepareTerminal(reason: 'payment start');
     if (!mounted) return;

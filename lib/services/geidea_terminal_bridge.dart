@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import 'local_prefs.dart';
 import 'trace_log.dart';
 
 /// Push connection-state events from the native USBConnectionListener
@@ -130,6 +131,38 @@ class GeideaTerminalBridge {
         : alnum.substring(0, ecrReferenceMaxLength);
   }
 
+  /// How much longer a new terminal payment must wait because an earlier
+  /// attempt was handed to the terminal and has not had a final answer yet.
+  /// Cancelling on screen cannot stop a payment the terminal already has, so
+  /// a retry inside the terminal timeout could put a second purchase (same
+  /// reference) on a terminal still busy with the first. The wait ends when
+  /// the earlier attempt gets its answer (the record is cleared) or when the
+  /// terminal timeout has passed since it started. The record lives in
+  /// LocalPrefs, so a crash or restart mid-attempt does not lift the wait.
+  static Duration pendingAttemptRemaining() {
+    final raw = LocalPrefs.pendingTerminalAttempt;
+    if (raw == null) return Duration.zero;
+    final startedMs = int.tryParse(raw.split('|').first);
+    if (startedMs == null) return Duration.zero;
+    final capMs = LocalPrefs.terminalTimeoutSeconds * 1000;
+    final elapsedMs = DateTime.now().millisecondsSinceEpoch - startedMs;
+    // A wall clock that jumped backwards (e.g. after a reboot) must not
+    // hold the cashier longer than one full timeout.
+    final leftMs = (capMs - elapsedMs).clamp(0, capMs);
+    return Duration(milliseconds: leftMs);
+  }
+
+  /// Clears the pending-attempt record only if it is still THIS attempt's: a
+  /// late answer to an old, cancelled attempt must not lift the wait that a
+  /// newer attempt has since set.
+  static Future<void> _clearPendingAttempt(String marker) async {
+    if (LocalPrefs.pendingTerminalAttempt == marker) {
+      await LocalPrefs.setPendingTerminalAttempt(null);
+    } else {
+      TraceLog.log('Terminal: late answer for an older attempt ($marker) — newer attempt still pending, record kept');
+    }
+  }
+
   /// [amount] in major currency units (e.g. SAR), matching `order.total`
   /// directly — no minor-unit conversion. [reference] is the Waha order id
   /// (already globally unique). The SDK rejects a raw UUID locally with error
@@ -153,6 +186,11 @@ class GeideaTerminalBridge {
     }
     final clock = Stopwatch()..start();
     TraceLog.log('Terminal: → SDK startPayment amount=$amount timeout=${timeout?.inSeconds ?? 'none'}s');
+    // Marked before the command goes out; cleared only when the SDK gives a
+    // final answer (below). A timeout leaves it in place — it lapses on its
+    // own once the terminal timeout has passed.
+    final marker = '${DateTime.now().millisecondsSinceEpoch}|$ecrReference';
+    await LocalPrefs.setPendingTerminalAttempt(marker);
     try {
       final future = _methodChannel.invokeMethod<Map>('startPayment', {
         'amount': amount,
@@ -160,6 +198,12 @@ class GeideaTerminalBridge {
         'isPrinterEnabled': false, // kiosk has no printer
       });
       final result = timeout != null ? await future.timeout(timeout) : await future;
+      // Any answer from the native side (approved, declined, or an SDK error
+      // result) means the terminal is no longer busy with this attempt. This
+      // also runs for an answer that arrives after the cashier cancelled and
+      // the dialog is gone — that late result is only logged here, never
+      // shown against a newer attempt.
+      await _clearPendingAttempt(marker);
       if (result == null) {
         TraceLog.log('Terminal: ← SDK returned null after ${clock.elapsedMilliseconds}ms');
         return const GeideaPaymentResult(approved: false, errorMessage: 'No response from terminal');
@@ -184,6 +228,7 @@ class GeideaTerminalBridge {
       unawaited(sdkDump('payment:timeout'));
       return const GeideaPaymentResult(approved: false, errorMessage: 'Terminal timed out');
     } on PlatformException catch (e) {
+      await _clearPendingAttempt(marker);
       TraceLog.log('Terminal: SDK call failed after ${clock.elapsedMilliseconds}ms: ${e.code} ${e.message}');
       unawaited(sdkDump('payment:exception'));
       return GeideaPaymentResult(approved: false, errorMessage: e.message ?? 'Terminal error');

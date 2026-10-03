@@ -462,6 +462,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get terminalSwipeCard => 'Tap or swipe your card on the terminal';
 
   @override
+  String terminalPreviousPaymentPending(int seconds) {
+    return 'Getting the terminal ready. Please wait $seconds seconds…';
+  }
+
+  @override
   String terminalSessionStartFailed(String error) {
     return 'Failed to start session: $error';
   }

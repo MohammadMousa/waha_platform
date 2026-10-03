@@ -273,6 +273,20 @@ class LocalPrefs {
   static Future<void> setTerminalTimeoutSeconds(int value) =>
       _p.setInt(_kTerminalTimeout, value);
 
+  // The card-terminal payment attempt that has been handed to the terminal
+  // but has not yet received a final answer, stored as "<epoch ms>|<ref>".
+  // Cancelling on screen cannot stop a payment the terminal already has, so
+  // a retry started inside the terminal timeout above could put a second
+  // purchase on a terminal still busy with the first (see
+  // GeideaTerminalBridge.pendingAttemptRemaining). Kept on disk, not in
+  // memory, so an app restart or reboot mid-attempt does not wipe it.
+  static const _kPendingTerminalAttempt = 'waha.pending_terminal_attempt';
+  static String? get pendingTerminalAttempt =>
+      _p.getString(_kPendingTerminalAttempt);
+  static Future<void> setPendingTerminalAttempt(String? value) => value == null
+      ? _p.remove(_kPendingTerminalAttempt)
+      : _p.setString(_kPendingTerminalAttempt, value);
+
   // Auto-cache: when on, every code the simulator fires (tap, long-press
   // manual entry, camera-via-simulator) gets appended to simProductCodes
   // automatically, up to simCacheLimit. Off by default — opt-in, since it

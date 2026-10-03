@@ -199,6 +199,12 @@
   "terminalConnecting": "Connecting to terminal…",
   "terminalNotConnected": "Terminal not connected — check the USB cable.",
   "terminalSwipeCard": "Tap or swipe your card on the terminal",
+  "terminalPreviousPaymentPending": "Getting the terminal ready. Please wait {seconds} seconds…",
+  "@terminalPreviousPaymentPending": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "terminalSessionStartFailed": "Failed to start session: {error}",
   "@terminalSessionStartFailed": {
     "placeholders": {

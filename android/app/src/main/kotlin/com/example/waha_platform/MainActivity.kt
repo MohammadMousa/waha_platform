@@ -161,15 +161,34 @@ class MainActivity : FlutterActivity() {
      * to disk on every kiosk in the field forever. Remove once the startup
      * crash is root-caused and fixed.
      */
+    // Writes slower than this (measured on the background writer) are counted
+    // and summarised by the stall watchdog below; see uiStallWatchdog.
+    private val SLOW_LOG_WRITE_MS = 100L
+    @Volatile private var slowLogWrites = 0
+    @Volatile private var slowLogWriteMaxMs = 0L
+
+    // The disk work (trim check + open + append) happens on TraceLogWriter's
+    // own thread, in queued order — callers, often the UI thread, only queue
+    // the line. The timestamp is taken here so it is the moment of the event,
+    // not of the write.
     private fun logTrace(label: String) {
         if (!loggingEnabled()) return
         Log.e(TAG, "TRACE: $label")
-        try {
-            LogUploader.trimIfOversized(applicationContext)
-            val dir = getExternalFilesDir(null) ?: filesDir
-            File(dir, "waha_trace.log").appendText("${System.currentTimeMillis()} $label\n")
-        } catch (e: Throwable) {
-            // Best-effort only — never let logging itself be a new crash source.
+        val ts = System.currentTimeMillis()
+        val ctx = applicationContext
+        TraceLogWriter.writer.post {
+            val writeStart = SystemClock.elapsedRealtime()
+            LogUploader.trimIfOversized(ctx)
+            val dir = ctx.getExternalFilesDir(null) ?: ctx.filesDir
+            val file = File(dir, "waha_trace.log")
+            val dropped = TraceLogWriter.writer.takeDropped()
+            if (dropped > 0) file.appendText("$ts TRACE WRITER: $dropped lines were dropped (writer queue was full)\n")
+            file.appendText("$ts $label\n")
+            val took = SystemClock.elapsedRealtime() - writeStart
+            if (took >= SLOW_LOG_WRITE_MS) {
+                slowLogWrites++
+                if (took > slowLogWriteMaxMs) slowLogWriteMaxMs = took
+            }
         }
     }
 
@@ -183,7 +202,7 @@ class MainActivity : FlutterActivity() {
         } else {
             "n/a(api<24)"
         }
-        "pid=${Process.myPid()} processAge=$age api=${Build.VERSION.SDK_INT}"
+        "pid=${Process.myPid()} processAge=$age deviceUptime=${SystemClock.elapsedRealtime() / 1000}s api=${Build.VERSION.SDK_INT}"
     } catch (t: Throwable) {
         "pid=? (${t.javaClass.simpleName})"
     }
@@ -239,12 +258,16 @@ class MainActivity : FlutterActivity() {
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             logTrace("UNCAUGHT EXCEPTION on ${thread.name}: ${Log.getStackTraceString(throwable)}")
+            // The line is queued for the writer thread; the process is about
+            // to die, so give it a moment to reach the disk first.
+            TraceLogWriter.writer.flush(1500)
             previousHandler?.uncaughtException(thread, throwable)
         }
         logTrace("onCreate start ${processInfo()} restoredState=${savedInstanceState != null}")
         super.onCreate(savedInstanceState)
         logTrace("onCreate end")
         logPreviousExitReasons()
+        startUiStallWatchdog()
     }
 
     override fun onStart() {
@@ -589,7 +612,10 @@ class MainActivity : FlutterActivity() {
         }
         try {
             logTrace("tryConnect: connectUsbSerialConnection() | ${TerminalDiagnostics.sdkState(responder)}")
+            val callStart = SystemClock.elapsedRealtime()
             responder.connectUsbSerialConnection()
+            val callMs = SystemClock.elapsedRealtime() - callStart
+            if (callMs >= 250) logTrace("SLOW SDK CALL connectUsbSerialConnection: call took ${callMs}ms on ${Thread.currentThread().name}")
         } catch (e: USBSerialConnectionException) {
             Log.e(TAG, "connectUsbSerialConnection failed", e)
             logTrace("tryConnect: connectUsbSerialConnection threw ${e.message}")
@@ -614,6 +640,44 @@ class MainActivity : FlutterActivity() {
         diagHandler.postDelayed({ logTrace("detect($source)+1.5s ${TerminalDiagnostics.sdkState(terminalResponder)}") }, 1500)
     }
 
+    // Diagnostic-only: proves or disproves "the UI thread is being blocked
+    // (by an SDK call or by log writes)". Posts to the main looper once a
+    // second and compares when it actually ran; a late run means the UI
+    // thread was busy for that long. Logs only stalls of STALL_LOG_MS or
+    // more, plus a one-line summary of slow log writes seen since last time.
+    private val STALL_TICK_MS = 1000L
+    private val STALL_LOG_MS = 1500L
+    private var stallWatchdog: Runnable? = null
+
+    private fun startUiStallWatchdog() {
+        if (stallWatchdog != null) return
+        var expectedAt = SystemClock.elapsedRealtime() + STALL_TICK_MS
+        val tick = object : Runnable {
+            override fun run() {
+                val now = SystemClock.elapsedRealtime()
+                val late = now - expectedAt
+                if (late >= STALL_LOG_MS) {
+                    logTrace("UI STALL: main thread was blocked ~${late}ms | payment=${paymentInFlight} | ${TerminalDiagnostics.sdkState(terminalResponder)}")
+                }
+                val writes = slowLogWrites
+                if (writes > 0) {
+                    logTrace("SLOW LOG WRITES (background writer, not the UI thread): $writes writes took >=${SLOW_LOG_WRITE_MS}ms since last report, worst ${slowLogWriteMaxMs}ms")
+                    slowLogWrites = 0
+                    slowLogWriteMaxMs = 0
+                }
+                expectedAt = SystemClock.elapsedRealtime() + STALL_TICK_MS
+                diagHandler.postDelayed(this, STALL_TICK_MS)
+            }
+        }
+        stallWatchdog = tick
+        diagHandler.postDelayed(tick, STALL_TICK_MS)
+    }
+
+    private fun stopUiStallWatchdog() {
+        stallWatchdog?.let { diagHandler.removeCallbacks(it) }
+        stallWatchdog = null
+    }
+
     /**
      * Clean start for a payment: drop whatever USB connection the SDK still
      * holds (from app start, an earlier payment, a cancel or a timeout), open
@@ -632,13 +696,23 @@ class MainActivity : FlutterActivity() {
             logTrace("prepareTerminal($reason): disconnect + reconnect | ${TerminalDiagnostics.sdkState(terminalResponder)}")
             stopPaymentHeartbeat() // an abandoned payment must not keep the wait/refuse flags up
             val disconnected = CountDownLatch(1)
+            val postedAt = SystemClock.elapsedRealtime()
             runOnUiThread {
+                val ranAt = SystemClock.elapsedRealtime()
                 try {
                     terminalResponder?.disconnectUsbSerialConnection()
                 } catch (t: Throwable) {
                     logTrace("prepareTerminal: disconnect threw ${t.javaClass.simpleName}: ${t.message}")
                 }
                 isUsbConnected = false
+                val callMs = SystemClock.elapsedRealtime() - ranAt
+                // Timing for the "does the SDK disconnect block the UI thread"
+                // question: queue delay = how long the UI thread was busy
+                // before it could even start the call; call = how long the
+                // SDK call itself held it.
+                if (ranAt - postedAt >= 250 || callMs >= 250) {
+                    logTrace("SLOW SDK CALL disconnectUsbSerialConnection: waited ${ranAt - postedAt}ms for the UI thread, call took ${callMs}ms")
+                }
                 disconnected.countDown()
             }
             disconnected.await(2, TimeUnit.SECONDS)
@@ -1019,6 +1093,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        stopUiStallWatchdog()
         logTrace("onDestroy isFinishing=$isFinishing changingConfigurations=$isChangingConfigurations ${processInfo()}")
         startupRetryHandler.removeCallbacksAndMessages(null)
         stopPaymentHeartbeat()

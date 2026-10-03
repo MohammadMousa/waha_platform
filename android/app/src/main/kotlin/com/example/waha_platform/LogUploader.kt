@@ -77,8 +77,17 @@ object LogUploader {
         try {
             val file = traceFile(context)
             if (!file.exists() || file.length() <= MAX_TRACE_FILE_BYTES) return
+            val before = file.length()
             val (kept, _) = tail(file, TRIM_KEEP_BYTES)
             file.writeText(kept)
+            // Counters for the LOG FILE HEALTH block of the next report.
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putLong("trim_count", prefs.getLong("trim_count", 0L) + 1)
+                .putLong("last_trim_at", System.currentTimeMillis())
+                .putLong("last_trim_before", before)
+                .putLong("last_trim_after", file.length())
+                .apply()
         } catch (_: Throwable) {
             // Best-effort — never a crash source. Worst case it just stays big a bit longer.
         }
@@ -111,7 +120,26 @@ object LogUploader {
         sb.append("time=").append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(Date())).append('\n')
         sb.append("device=${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} android=${android.os.Build.VERSION.RELEASE} (api ${android.os.Build.VERSION.SDK_INT})\n")
         sb.append("app=${context.packageName} version=$version server=${baseUrl(context)}\n\n")
+        // Lines are written by a background thread — let it catch up so the
+        // report holds the latest events (bounded wait; never blocks long).
+        TraceLogWriter.writer.flush(1000)
         val (trace, total) = tail(traceFile(context), maxTraceBytes)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        sb.append(LogHealth.format(LogHealth.Snapshot(
+            fileBytesNow = total,
+            limitBytes = MAX_TRACE_FILE_BYTES.toLong(),
+            keepBytes = TRIM_KEEP_BYTES.toLong(),
+            traceBytesInReport = minOf(total, maxTraceBytes.toLong()),
+            trimCount = prefs.getLong("trim_count", 0L),
+            lastTrimAtMs = prefs.getLong("last_trim_at", 0L),
+            lastTrimBeforeBytes = prefs.getLong("last_trim_before", 0L),
+            lastTrimAfterBytes = prefs.getLong("last_trim_after", 0L),
+            lastClearAtMs = prefs.getLong("last_clear_at", 0L),
+            lastClearedBytes = prefs.getLong("last_clear_bytes", 0L),
+            lastUploadAtMs = prefs.getLong("last_upload_at", 0L),
+            lastUploadReportBytes = prefs.getLong("last_upload_bytes", 0L),
+            writerDroppedLines = TraceLogWriter.writer.droppedCount(),
+        )))
         sb.append("=== TRACE LOG (last ${minOf(total, maxTraceBytes.toLong())} of $total bytes) ===\n").append(trace).append("\n\n")
         sb.append("=== SDK LOG FILE ===\n").append(TerminalDiagnostics.sdkLogFileTail(context, 60000)).append("\n\n")
         sb.append("=== SDK LOG LINES CAPTURED THIS RUN ===\n").append(SdkLogCapture.recentLines()).append("\n\n")
@@ -161,7 +189,16 @@ object LogUploader {
             // the growth cap above. A copy is safe; nothing is lost. Applies
             // the same to every upload path (manual, `cmd=upload-logs`, and
             // AutoLogUploader), since they all funnel through here.
-            try { traceFile(context).delete() } catch (_: Throwable) {}
+            try {
+                val clearedBytes = traceFile(context).length()
+                traceFile(context).delete()
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .putLong("last_clear_at", System.currentTimeMillis())
+                    .putLong("last_clear_bytes", clearedBytes)
+                    .putLong("last_upload_at", System.currentTimeMillis())
+                    .putLong("last_upload_bytes", body.size.toLong())
+                    .apply()
+            } catch (_: Throwable) {}
             // Device uploads are no longer public at /api/resources/<id>; admins read them at /api/logs/<id> (needs an admin login).
             Result(true, id, "$base/api/logs/$id", name, body.size, base, "Uploaded")
         } catch (t: Throwable) {

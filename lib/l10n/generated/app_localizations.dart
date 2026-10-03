@@ -974,6 +974,12 @@ abstract class AppLocalizations {
   /// **'Tap or swipe your card on the terminal'**
   String get terminalSwipeCard;
 
+  /// No description provided for @terminalPreviousPaymentPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting the terminal ready. Please wait {seconds} seconds…'**
+  String terminalPreviousPaymentPending(int seconds);
+
   /// No description provided for @terminalSessionStartFailed.
   ///
   /// In en, this message translates to:
