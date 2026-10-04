@@ -57,6 +57,9 @@ class GeideaTerminalBridge {
   static final GeideaTerminalBridge instance = GeideaTerminalBridge._();
 
   static const _methodChannel = MethodChannel('com.waha/geidea');
+
+  // The payment attempt currently waiting for the SDK, if any.
+  _Attempt? _activeAttempt;
   static const _eventChannel = EventChannel('com.waha/geidea/events');
 
   /// Bypasses the native SDK/USB entirely and returns canned results, so the
@@ -131,25 +134,74 @@ class GeideaTerminalBridge {
         : alnum.substring(0, ecrReferenceMaxLength);
   }
 
+  /// Time since the tablet booted, plus its boot counter — from the native
+  /// side. Unlike the wall clock this never jumps when the time is corrected
+  /// or changed. Null if the native call fails.
+  static Future<({int elapsed, int boot})?> _monotonicNow() async {
+    try {
+      final m = await _methodChannel.invokeMethod<Map>('monotonicNow');
+      final elapsed = (m?['elapsed'] as num?)?.toInt();
+      if (elapsed == null) return null;
+      return (elapsed: elapsed, boot: (m?['boot'] as num?)?.toInt() ?? -1);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// How much longer a new terminal payment must wait because an earlier
   /// attempt was handed to the terminal and has not had a final answer yet.
   /// Cancelling on screen cannot stop a payment the terminal already has, so
   /// a retry inside the terminal timeout could put a second purchase (same
-  /// reference) on a terminal still busy with the first. The wait ends when
-  /// the earlier attempt gets its answer (the record is cleared) or when the
-  /// terminal timeout has passed since it started. The record lives in
-  /// LocalPrefs, so a crash or restart mid-attempt does not lift the wait.
-  static Duration pendingAttemptRemaining() {
+  /// reference) on a terminal still busy with the first.
+  ///
+  /// The record holds the time-since-boot and boot counter of the moment the
+  /// attempt was sent ("<elapsed>|<boot>|<ref>"). It never touches the wall
+  /// clock, so a corrected or changed time cannot extend or shorten the wait.
+  /// Same boot: the wait left is the terminal timeout minus the time since
+  /// boot that has passed. A different boot (the tablet restarted), an
+  /// unreadable or old-format record, or a failed native call all count as
+  /// expired — the worst case is skipping the wait, never an endless one. The
+  /// actual waiting is done by [waitOutHold] with a plain timer.
+  static Future<Duration> pendingAttemptRemaining() async {
     final raw = LocalPrefs.pendingTerminalAttempt;
     if (raw == null) return Duration.zero;
-    final startedMs = int.tryParse(raw.split('|').first);
-    if (startedMs == null) return Duration.zero;
+    final parts = raw.split('|');
+    if (parts.length < 3) return Duration.zero;
+    final start = int.tryParse(parts[0]);
+    final boot = int.tryParse(parts[1]);
+    if (start == null || boot == null || start < 0) return Duration.zero;
+    final now = await _monotonicNow();
+    if (now == null || now.boot != boot) return Duration.zero;
     final capMs = LocalPrefs.terminalTimeoutSeconds * 1000;
-    final elapsedMs = DateTime.now().millisecondsSinceEpoch - startedMs;
-    // A wall clock that jumped backwards (e.g. after a reboot) must not
-    // hold the cashier longer than one full timeout.
-    final leftMs = (capMs - elapsedMs).clamp(0, capMs);
-    return Duration(milliseconds: leftMs);
+    final elapsedMs = now.elapsed - start;
+    if (elapsedMs < 0 || elapsedMs >= capMs) return Duration.zero;
+    return Duration(milliseconds: capMs - elapsedMs);
+  }
+
+  /// True while an earlier attempt has no final answer recorded yet.
+  static bool get hasPendingAttempt => LocalPrefs.pendingTerminalAttempt != null;
+
+  /// Waits out [held] with a plain stopwatch — no wall clock, so it always
+  /// ends after [held] at the latest. Calls [onTick] with the whole seconds
+  /// left on every [tick]. Ends early, returning true, when [stillPending]
+  /// turns false (the earlier attempt got its answer). Returns false at once
+  /// if [shouldStop] says the screen is gone or the customer cancelled.
+  static Future<bool> waitOutHold(
+    Duration held, {
+    required void Function(int secondsLeft) onTick,
+    bool Function()? stillPending,
+    bool Function()? shouldStop,
+    Duration tick = const Duration(seconds: 1),
+  }) async {
+    final waited = Stopwatch()..start();
+    while (true) {
+      if (shouldStop != null && shouldStop()) return false;
+      final left = held - waited.elapsed;
+      if (left <= Duration.zero) return true;
+      if (stillPending != null && !stillPending()) return true;
+      onTick((left.inMilliseconds / 1000).ceil());
+      await Future<void>.delayed(tick);
+    }
   }
 
   /// Clears the pending-attempt record only if it is still THIS attempt's: a
@@ -189,50 +241,89 @@ class GeideaTerminalBridge {
     // Marked before the command goes out; cleared only when the SDK gives a
     // final answer (below). A timeout leaves it in place — it lapses on its
     // own once the terminal timeout has passed.
-    final marker = '${DateTime.now().millisecondsSinceEpoch}|$ecrReference';
+    final mono = await _monotonicNow();
+    final marker = '${mono?.elapsed ?? -1}|${mono?.boot ?? -1}|$ecrReference';
     await LocalPrefs.setPendingTerminalAttempt(marker);
-    try {
-      final future = _methodChannel.invokeMethod<Map>('startPayment', {
-        'amount': amount,
-        'reference': ecrReference,
-        'isPrinterEnabled': false, // kiosk has no printer
+
+    // The wait for the SDK's answer is OWNED by this attempt: its timer and
+    // its result live in [attempt], and cancelPayment() ends both. Before,
+    // the timer of a payment the customer had cancelled was never stopped, so
+    // it fired a minute later — in the middle of the NEXT payment — and
+    // stopped that payment's watch, flagged it as given up and triggered a
+    // false "no callback" log upload.
+    final attempt = _Attempt();
+    _activeAttempt = attempt;
+
+    if (timeout != null) {
+      attempt.timer = Timer(timeout, () {
+        if (attempt.result.isCompleted) return;
+        TraceLog.log('Terminal: NO reply from the SDK after ${clock.elapsedMilliseconds}ms (Dart-side timeout) — dumping SDK state');
+        unawaited(sdkDump('payment:timeout'));
+        attempt.result.complete(const GeideaPaymentResult(approved: false, errorMessage: 'Terminal timed out'));
       });
-      final result = timeout != null ? await future.timeout(timeout) : await future;
-      // Any answer from the native side (approved, declined, or an SDK error
-      // result) means the terminal is no longer busy with this attempt. This
-      // also runs for an answer that arrives after the cashier cancelled and
-      // the dialog is gone — that late result is only logged here, never
-      // shown against a newer attempt.
-      await _clearPendingAttempt(marker);
-      if (result == null) {
-        TraceLog.log('Terminal: ← SDK returned null after ${clock.elapsedMilliseconds}ms');
-        return const GeideaPaymentResult(approved: false, errorMessage: 'No response from terminal');
-      }
-      final map = Map<String, dynamic>.from(result);
-      final approved = map['status'] == 'approved';
-      TraceLog.log('Terminal: ← SDK replied after ${clock.elapsedMilliseconds}ms '
-          'status=${map['status']} receipt=${_clip(map['receipt'] as String? ?? '', 120)}');
-      if (!approved) unawaited(sdkDump('payment:not-approved'));
-      final details = (map['details'] is Map)
-          ? Map<String, dynamic>.from(map['details'] as Map)
-          : <String, dynamic>{};
-      return GeideaPaymentResult(
-        approved: approved,
-        approvalCode: details['approvalCode'] as String?,
-        rrn: details['rrn'] as String?,
-        details: details,
-        errorMessage: approved ? null : (map['receipt'] as String? ?? 'Declined'),
-      );
-    } on TimeoutException {
-      TraceLog.log('Terminal: NO reply from the SDK after ${clock.elapsedMilliseconds}ms (Dart-side timeout) — dumping SDK state');
-      unawaited(sdkDump('payment:timeout'));
-      return const GeideaPaymentResult(approved: false, errorMessage: 'Terminal timed out');
-    } on PlatformException catch (e) {
-      await _clearPendingAttempt(marker);
-      TraceLog.log('Terminal: SDK call failed after ${clock.elapsedMilliseconds}ms: ${e.code} ${e.message}');
-      unawaited(sdkDump('payment:exception'));
-      return GeideaPaymentResult(approved: false, errorMessage: e.message ?? 'Terminal error');
     }
+
+    _methodChannel.invokeMethod<Map>('startPayment', {
+      'amount': amount,
+      'reference': ecrReference,
+      'isPrinterEnabled': false, // kiosk has no printer
+    }).then((result) async {
+      attempt.timer?.cancel();
+      // Any answer from the native side (approved, declined, or an SDK error
+      // result) means the terminal is no longer busy with this attempt — also
+      // an answer that arrives after the cashier cancelled or the timeout
+      // passed.
+      await _clearPendingAttempt(marker);
+      final late = attempt.result.isCompleted;
+      final parsed = _parseResult(result, clock, late: late);
+      if (late) {
+        TraceLog.log('Terminal: LATE answer for an attempt already given up on '
+            '(cancelled or timed out): approved=${parsed.approved} — ${parsed.approved ? "the customer may have been charged; reconcile this order" : "nothing to do"}');
+        return;
+      }
+      attempt.result.complete(parsed);
+    }, onError: (Object e) async {
+      attempt.timer?.cancel();
+      await _clearPendingAttempt(marker);
+      if (attempt.result.isCompleted) return;
+      if (e is PlatformException) {
+        TraceLog.log('Terminal: SDK call failed after ${clock.elapsedMilliseconds}ms: ${e.code} ${e.message}');
+        unawaited(sdkDump('payment:exception'));
+        attempt.result.complete(GeideaPaymentResult(approved: false, errorMessage: e.message ?? 'Terminal error'));
+      } else {
+        attempt.result.completeError(e);
+      }
+    });
+
+    try {
+      return await attempt.result.future;
+    } finally {
+      if (identical(_activeAttempt, attempt)) _activeAttempt = null;
+    }
+  }
+
+  GeideaPaymentResult _parseResult(Map? result, Stopwatch clock, {required bool late}) {
+    if (result == null) {
+      TraceLog.log('Terminal: ← SDK returned null after ${clock.elapsedMilliseconds}ms');
+      return const GeideaPaymentResult(approved: false, errorMessage: 'No response from terminal');
+    }
+    final map = Map<String, dynamic>.from(result);
+    final approved = map['status'] == 'approved';
+    TraceLog.log('Terminal: ← SDK replied after ${clock.elapsedMilliseconds}ms '
+        'status=${map['status']} receipt=${_clip(map['receipt'] as String? ?? '', 120)}');
+    // A late decline must not run the SDK dump: it would stop the watch of a
+    // newer payment that is in flight by now.
+    if (!approved && !late) unawaited(sdkDump('payment:not-approved'));
+    final details = (map['details'] is Map)
+        ? Map<String, dynamic>.from(map['details'] as Map)
+        : <String, dynamic>{};
+    return GeideaPaymentResult(
+      approved: approved,
+      approvalCode: details['approvalCode'] as String?,
+      rrn: details['rrn'] as String?,
+      details: details,
+      errorMessage: approved ? null : (map['receipt'] as String? ?? 'Declined'),
+    );
   }
 
   static String _clip(String s, int max) {
@@ -440,19 +531,58 @@ class GeideaTerminalBridge {
     try {
       final ok = await _methodChannel
           .invokeMethod<bool>('prepareTerminal', {'reason': reason})
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 25));
       return ok ?? false;
     } catch (_) {
       return false;
     }
   }
 
+  /// Before a payment: makes sure the SDK's USB service is bound, re-opening
+  /// it if the SDK destroyed it (it does so about a minute after the app was
+  /// stopped, and nothing re-binds it — every payment then gets no answer).
+  /// `ready` is true when the terminal is ready. A healthy service returns at
+  /// once. If the native call itself fails this reports ready, so a fault in
+  /// the check can never stop a sale by itself.
+  ///
+  /// `reopened` is true when the service had been lost: an earlier attempt's
+  /// command then went to a dead service and never reached the terminal, so
+  /// there is nothing left to wait for.
+  Future<({bool ready, bool reopened})> ensureTerminalService() async {
+    if (_mock) return (ready: true, reopened: false);
+    try {
+      final m = await _methodChannel
+          .invokeMethod<Map>('ensureTerminalService')
+          .timeout(const Duration(seconds: 20));
+      if (m == null) return (ready: true, reopened: false);
+      return (ready: m['ready'] != false, reopened: m['reopened'] == true);
+    } catch (_) {
+      return (ready: true, reopened: false);
+    }
+  }
+
   Future<void> cancelPayment() async {
     if (_mock) return;
+    // End the wait for this attempt now, so its timer cannot fire later.
+    final attempt = _activeAttempt;
+    if (attempt != null) {
+      attempt.timer?.cancel();
+      if (!attempt.result.isCompleted) {
+        attempt.result.complete(const GeideaPaymentResult(approved: false, errorMessage: 'Cancelled'));
+      }
+    }
     try {
       await _methodChannel.invokeMethod('cancelPayment');
     } on PlatformException {
       // Best-effort — nothing more useful to do if this fails.
     }
   }
+}
+
+/// One payment attempt's wait for the SDK's answer: the result the caller
+/// awaits and the timeout timer. Both belong to the attempt, so ending the
+/// attempt (an answer, a cancel) ends its timer too.
+class _Attempt {
+  final Completer<GeideaPaymentResult> result = Completer<GeideaPaymentResult>();
+  Timer? timer;
 }

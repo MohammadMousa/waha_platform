@@ -980,6 +980,12 @@ abstract class AppLocalizations {
   /// **'Getting the terminal ready. Please wait {seconds} seconds…'**
   String terminalPreviousPaymentPending(int seconds);
 
+  /// No description provided for @terminalNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'The card terminal is not ready. Please try again in a moment or ask staff for help.'**
+  String get terminalNotReady;
+
   /// No description provided for @terminalSessionStartFailed.
   ///
   /// In en, this message translates to:

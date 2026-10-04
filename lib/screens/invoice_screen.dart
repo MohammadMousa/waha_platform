@@ -1971,26 +1971,50 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     // connection bug resurfaces without it.
     TraceLog.log('Terminal: payment run start, order ${widget.orderId}');
 
+    // First, is the SDK's background USB service still there? The SDK destroys
+    // it about a minute after the app was stopped and nothing re-binds it (see
+    // ensureTerminalService). If it cannot be brought back, say so now — not
+    // after a hold and not after a 60-second spinner.
+    final service = await bridge.ensureTerminalService();
+    if (!mounted || _cancelledByUser) return;
+    if (!service.ready) {
+      TraceLog.log('Terminal: the SDK USB service could not be re-opened, not starting the payment');
+      setState(() {
+        _failed = true;
+        _statusLabel = l10n.terminalNotReady;
+      });
+      _scheduleAutoClose();
+      return;
+    }
+    if (service.reopened && GeideaTerminalBridge.hasPendingAttempt) {
+      // The service was gone, so an earlier attempt's command went to a dead
+      // service and never reached the terminal: nothing is left to wait for.
+      TraceLog.log('Terminal: the SDK service had been lost and was re-opened — an earlier pending attempt cannot be on the terminal, skipping the hold');
+      await LocalPrefs.setPendingTerminalAttempt(null);
+    }
+
     // An earlier attempt (e.g. one the cashier cancelled) may still be on the
     // terminal — cancelling on screen cannot stop it. Wait out the terminal
     // timeout from that attempt's start before sending another purchase, so
     // two never overlap on the terminal. A final answer to the earlier
     // attempt ends the wait early (see GeideaTerminalBridge.startPayment).
-    var held = GeideaTerminalBridge.pendingAttemptRemaining();
+    final held = await GeideaTerminalBridge.pendingAttemptRemaining();
     if (held > Duration.zero) {
-      TraceLog.log('Terminal: earlier attempt still pending — holding this one ${held.inSeconds}s');
-      while (held > Duration.zero) {
-        if (!mounted) return;
-        setState(() => _statusLabel = l10n.terminalPreviousPaymentPending((held.inMilliseconds / 1000).ceil()));
-        await Future.delayed(const Duration(seconds: 1));
-        held = GeideaTerminalBridge.pendingAttemptRemaining();
-      }
-      if (!mounted) return;
+      TraceLog.log('Terminal: earlier attempt still pending — holding this one up to ${held.inSeconds}s');
+      final finished = await GeideaTerminalBridge.waitOutHold(
+        held,
+        onTick: (s) {
+          if (mounted) setState(() => _statusLabel = l10n.terminalPreviousPaymentPending(s));
+        },
+        stillPending: () => GeideaTerminalBridge.hasPendingAttempt,
+        shouldStop: () => !mounted || _cancelledByUser,
+      );
+      if (!finished || !mounted || _cancelledByUser) return;
       TraceLog.log('Terminal: hold over, continuing with the new attempt');
     }
     final connected = !LocalPrefs.resetTerminalBeforePayment ||
         await bridge.prepareTerminal(reason: 'payment start');
-    if (!mounted) return;
+    if (!mounted || _cancelledByUser) return;
     if (!connected) {
       TraceLog.log('Terminal: port did not open after a clean reconnect, aborting before charging');
       setState(() {
@@ -2015,7 +2039,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       }
       return;
     }
-    if (!mounted) return;
+    if (!mounted || _cancelledByUser) return;
     TraceLog.log('Terminal: session ${session.id} created, amount ${session.amount}, prompting card');
     setState(() {
       _session = session;
@@ -2027,7 +2051,9 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       reference: session.orderId,
       timeout: Duration(seconds: LocalPrefs.terminalTimeoutSeconds),
     );
-    if (!mounted) return;
+    // Cancel ends the bridge's wait at once (see cancelPayment), so the result
+    // can arrive while this dialog is still closing — it is not an answer.
+    if (!mounted || _cancelledByUser) return;
     TraceLog.log('Terminal: SDK result approved=${result.approved} '
         'approvalCode=${result.approvalCode} error=${result.errorMessage}');
 
@@ -2105,7 +2131,10 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
   // cancellable operation) — this closes the dialog and cancels the
   // backend session, but a transaction the terminal already approved will
   // still go through underneath.
+  bool _cancelledByUser = false;
+
   Future<void> _cancel() async {
+    _cancelledByUser = true;
     TraceLog.log('Terminal: payment cancelled by user');
     final id = _session?.id;
     if (id != null) {

@@ -952,7 +952,7 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                     onChanged: (value) {
                       setState(() => _loggingEnabled = value);
                       LocalPrefs.setLoggingEnabled(value);
-                      TraceLog.setEnabled(value);
+                      TraceLog.applyEffective();
                     },
                   ),
                   // Quick access to the trace log without leaving the kiosk app.

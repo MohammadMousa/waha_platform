@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'local_prefs.dart';
+
 /// Diagnostic-only, temporary: forwards Dart-side trace/error text into the
 /// SAME native waha_trace.log that MainActivity.logTrace() writes to (see
 /// MainActivity.kt and CrashLogActivity.kt) — one file, one "Waha Startup
@@ -32,6 +34,23 @@ class TraceLog {
   /// natively, so it carries over from the previous launch. Call this once
   /// at startup (see main.dart) and again whenever the Settings toggle
   /// changes.
+  /// Pushes the current effective state — the local Settings switch OR the
+  /// dashboard property — to the native side.
+  static Future<void> applyEffective() =>
+      setEnabled(LocalPrefs.effectiveLoggingEnabled);
+
+  /// Applies the organization's `enable_logging` property from a config the
+  /// server actually returned. An empty map means the request failed, so it
+  /// changes nothing — the last known dashboard value stays in force.
+  static Future<void> applyRemoteConfig(Map<String, String> config) async {
+    if (config.isEmpty) return;
+    final on = config['enable_logging']?.trim().toLowerCase() == 'true';
+    if (LocalPrefs.remoteLoggingEnabled != on) {
+      await LocalPrefs.setRemoteLoggingEnabled(on);
+    }
+    await applyEffective();
+  }
+
   static Future<void> setEnabled(bool enabled) async {
     try {
       await _channel.invokeMethod('setLoggingEnabled', {'enabled': enabled});

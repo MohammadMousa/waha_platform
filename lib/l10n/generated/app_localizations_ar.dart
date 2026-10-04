@@ -465,6 +465,10 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get terminalNotReady =>
+      'جهاز الدفع غير جاهز. يرجى المحاولة بعد قليل أو طلب المساعدة من الموظف.';
+
+  @override
   String terminalSessionStartFailed(String error) {
     return 'فشل بدء الجلسة: $error';
   }

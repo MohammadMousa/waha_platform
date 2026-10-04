@@ -232,6 +232,19 @@ class LocalPrefs {
   static Future<void> setLoggingEnabled(bool value) =>
       _p.setBool(_kLoggingEnabled, value);
 
+  // The dashboard's switch: organization property `enable_logging` ("true"
+  // turns it on). Only the last value the server actually returned is kept,
+  // so an unreachable server never flips it. Logging is on when EITHER this
+  // OR the local Settings switch above is on; with both off there are no
+  // logs at all (no trace file, no SDK lines, no uploads).
+  static const _kRemoteLoggingEnabled = 'waha.remote_logging_enabled';
+  static bool get remoteLoggingEnabled =>
+      _p.getBool(_kRemoteLoggingEnabled) ?? false;
+  static Future<void> setRemoteLoggingEnabled(bool value) =>
+      _p.setBool(_kRemoteLoggingEnabled, value);
+  static bool get effectiveLoggingEnabled =>
+      loggingEnabled || remoteLoggingEnabled;
+
   // Which shortcut buttons show in the simulator cluster — 'home', 'settings',
   // 'camera', 'productScan' (manual barcode entry/cached-code fire),
   // 'browse'. Null (never saved) means "use the default set" rather than
@@ -274,7 +287,8 @@ class LocalPrefs {
       _p.setInt(_kTerminalTimeout, value);
 
   // The card-terminal payment attempt that has been handed to the terminal
-  // but has not yet received a final answer, stored as "<epoch ms>|<ref>".
+  // but has not yet received a final answer, stored as
+  // "<time since boot ms>|<boot count>|<ref>" (never the wall clock).
   // Cancelling on screen cannot stop a payment the terminal already has, so
   // a retry started inside the terminal timeout above could put a second
   // purchase on a terminal still busy with the first (see

@@ -100,6 +100,9 @@ object AutoLogUploader {
      * — capped by [MAX_INCIDENT_LIFETIME_MS] so a port that never stops
      * flapping still closes and uploads instead of waiting forever. */
     fun trigger(context: Context, reason: String, trace: (String) -> Unit) {
+        // Logging off (local switch and dashboard property both off) = no logs
+        // at all, so there is nothing to upload — even if the upload property is on.
+        if (!LogUploader.loggingEnabled(context)) return
         val now = System.currentTimeMillis()
         if (pendingRunnable == null) incidentStartedAt = now
         pendingReasons.add(reason)

@@ -205,6 +205,7 @@
       "seconds": { "type": "int" }
     }
   },
+  "terminalNotReady": "The card terminal is not ready. Please try again in a moment or ask staff for help.",
   "terminalSessionStartFailed": "Failed to start session: {error}",
   "@terminalSessionStartFailed": {
     "placeholders": {

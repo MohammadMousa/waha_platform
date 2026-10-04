@@ -42,6 +42,14 @@ object LogUploader {
 
     class Result(val ok: Boolean, val id: Long?, val url: String?, val fileName: String, val bytes: Int, val baseUrl: String?, val message: String)
 
+    /** The effective logging state (the local Settings switch OR the
+     * dashboard property — Dart combines them and pushes the result here).
+     * With it off there are no logs at all, so nothing is uploaded either. */
+    fun loggingEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("logging_enabled", false)
+
+    const val LOGGING_OFF_MESSAGE = "Logging is off — turn it on in Settings or with the dashboard property enable_logging."
+
     fun setBaseUrl(context: Context, url: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE, url).apply()
     }
@@ -159,6 +167,7 @@ object LogUploader {
     fun upload(context: Context, namePrefix: String = "logs"): Result {
         val base = baseUrl(context)
         val name = "${namePrefix}_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".txt"
+        if (!loggingEnabled(context)) return Result(false, null, null, name, 0, base, LOGGING_OFF_MESSAGE)
         if (base == null) return Result(false, null, null, name, 0, null, "No server URL known yet — open the kiosk app once (or set Settings → Server Connection) and retry.")
         val token = authToken(context)
         if (token == null) return Result(false, null, null, name, 0, base, "Not logged in yet — open the kiosk app and log in, then retry.")

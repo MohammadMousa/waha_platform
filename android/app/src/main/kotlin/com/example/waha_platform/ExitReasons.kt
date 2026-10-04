@@ -23,7 +23,7 @@ import java.util.Locale
 //  - Every read is wrapped in try/catch(Throwable) and returns text instead of
 //    throwing; callers also run it off the main thread.
 object ExitReasons {
-    class Entry(val timestamp: Long, val text: String, val reason: Int)
+    class Entry(val timestamp: Long, val text: String, val reason: Int, val trace: String? = null)
 
     const val UNAVAILABLE_BELOW_API = 30
 
@@ -52,6 +52,21 @@ object ExitReasons {
         15 -> "PACKAGE_STATE_CHANGE"
         16 -> "PACKAGE_UPDATED"
         else -> "REASON_$reason"
+    }
+
+    /** The main thread's block from an ANR trace (Android's own dump of every
+     * thread when the app stopped responding). Pure, so it is unit-tested. */
+    fun mainThreadSection(trace: String, maxChars: Int = 6000): String {
+        val lines = trace.lines()
+        val start = lines.indexOfFirst { it.startsWith("\"main\" ") }
+        if (start < 0) return trace.take(maxChars)
+        val sb = StringBuilder()
+        for (i in start until lines.size) {
+            if (i > start && lines[i].isBlank()) break
+            sb.append(lines[i]).append('\n')
+            if (sb.length >= maxChars) break
+        }
+        return sb.toString().take(maxChars)
     }
 
     fun unavailableNote(): String =
@@ -92,7 +107,24 @@ internal object ExitReasonsApi30 {
                     "status=${e.status} importance=${e.importance} pid=${e.pid} process=${e.processName} " +
                     "pss=${e.pss}KB rss=${e.rss}KB description='${e.description}'",
                 e.reason,
+                traceOf(e),
             )
         }
+    }
+
+    // ANR: Android keeps a text dump of all threads. A native crash keeps a binary
+    // tombstone, which is only noted (size), not decoded. Never throws; the stream
+    // is null when the system kept no trace (or this vendor's build does not).
+    private fun traceOf(e: ApplicationExitInfo): String? = try {
+        when (e.reason) {
+            6 -> e.traceInputStream?.use { s ->
+                ExitReasons.mainThreadSection(String(s.readBytes().take(400_000).toByteArray(), Charsets.UTF_8))
+            }?.takeIf { it.isNotBlank() } ?: "(no ANR trace kept by the system)"
+            5 -> e.traceInputStream?.use { s -> "native crash tombstone kept by the system: ${s.readBytes().size} bytes (binary, not decoded here)" }
+                ?: "(no native crash trace kept by the system)"
+            else -> null
+        }
+    } catch (t: Throwable) {
+        "(trace could not be read: ${t.javaClass.simpleName}: ${t.message})"
     }
 }

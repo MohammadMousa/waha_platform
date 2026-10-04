@@ -205,6 +205,7 @@
       "seconds": { "type": "int" }
     }
   },
+  "terminalNotReady": "جهاز الدفع غير جاهز. يرجى المحاولة بعد قليل أو طلب المساعدة من الموظف.",
   "terminalSessionStartFailed": "فشل بدء الجلسة: {error}",
   "@terminalSessionStartFailed": {
     "placeholders": {

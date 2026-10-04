@@ -26,7 +26,7 @@ class UsbDiagnostics {
   /// Fire-and-forget snapshot for the trace log, taken only while trace
   /// logging is on — with it off, nothing runs at all.
   static void logSnapshot(String reason) {
-    if (!LocalPrefs.loggingEnabled) return;
+    if (!LocalPrefs.effectiveLoggingEnabled) return;
     unawaited(inventory(reason: reason));
   }
 }

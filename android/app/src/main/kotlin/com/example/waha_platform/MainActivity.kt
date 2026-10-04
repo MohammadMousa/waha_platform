@@ -23,6 +23,7 @@ import geidea.net.terminal_comm_api.TERMINAL_TRANSACTION_TYPES
 import geidea.net.terminal_comm_api.TerminalDevice
 import geidea.net.terminal_comm_api.TerminalResponder
 import geidea.net.terminal_comm_api.USBConnectionListener
+import geidea.net.terminal_comm_api.USBService
 import geidea.net.terminal_comm_api.USBSerialConnectionException
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -125,9 +126,21 @@ class MainActivity : FlutterActivity() {
             if (intent?.action != UsbManager.ACTION_USB_DEVICE_ATTACHED) return
             Log.d(TAG, "USB attach broadcast received")
             sendConnectionEvent("scanning", "USB device attached — connecting")
-            tryConnect()
+            // A new device node: whatever was pending belongs to the old one.
+            connectGate.outcome()
+            // The SDK also reacts to the attach by itself. Connecting at the same
+            // instant makes both claim the same interface, so give the SDK a moment
+            // and only connect ourselves if it did not manage to.
+            attachHandler.postDelayed({
+                if (!sdkServiceBound()) tryConnect() // re-opens the lost service
+                else if (!isUsbConnected) tryConnect()
+                else logTrace("attach: the SDK already connected by itself — no extra connect")
+            }, ATTACH_GRACE_MS)
         }
     }
+
+    private val attachHandler = Handler(Looper.getMainLooper())
+    private val ATTACH_GRACE_MS = 1200L
 
     // Layer 2: bounded startup retry — see class doc comment.
     private val startupRetryHandler = Handler(Looper.getMainLooper())
@@ -222,7 +235,12 @@ class MainActivity : FlutterActivity() {
                 val last = prefs.getLong("last_exit_ts", 0L)
                 val entries = ExitReasons.entries(applicationContext, 5)
                 val fresh = entries.filter { it.timestamp > last }.sortedBy { it.timestamp }
-                fresh.forEach { logTrace(it.text) }
+                fresh.forEach {
+                    logTrace(it.text)
+                    // The system's own record of what the app was doing when it was
+                    // killed (ANR: every thread's stack; we log the main thread's).
+                    it.trace?.let { tr -> logTrace("EXIT TRACE for the entry above:\n$tr") }
+                }
                 fresh.firstOrNull { it.reason in ExitReasons.CRASH_REASONS }?.let {
                     AutoLogUploader.trigger(applicationContext, "crash:${ExitReasons.reasonName(it.reason)}") { s -> logTrace(s) }
                 }
@@ -267,12 +285,22 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         logTrace("onCreate end")
         logPreviousExitReasons()
+        Thread {
+            try {
+                logTrace(SystemSnapshot.full(applicationContext))
+            } catch (_: Throwable) {
+            }
+        }.also { it.isDaemon = true; it.name = "SystemSnapshot" }.start()
         startUiStallWatchdog()
     }
 
     override fun onStart() {
         logTrace("onStart start")
         super.onStart()
+        activityStarted = true
+        // Back in the foreground: if the SDK destroyed its service while the app
+        // was stopped, open it again now.
+        if (terminalResponder != null && !sdkServiceBound()) reopenSdkService("app back in the foreground")
         if (!receiverRegistered) {
             ContextCompat.registerReceiver(
                 this,
@@ -286,6 +314,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onStop() {
+        activityStarted = false
         logTrace("onStop isFinishing=$isFinishing changingConfigurations=$isChangingConfigurations")
         if (receiverRegistered) {
             unregisterReceiver(usbAttachReceiver)
@@ -312,6 +341,20 @@ class MainActivity : FlutterActivity() {
                         val source = call.argument<String>("source") ?: "manual"
                         detectTerminal(source)
                         result.success(true)
+                    }
+                    "monotonicNow" -> {
+                        // Time since boot (never jumps when the clock is corrected)
+                        // plus the boot counter, so Dart can tell "same boot, this
+                        // much time has passed" from "the tablet restarted".
+                        result.success(mapOf("elapsed" to SystemClock.elapsedRealtime(), "boot" to bootCount()))
+                    }
+                    "ensureTerminalService" -> {
+                        // Before a payment: make sure the SDK's USB service is bound,
+                        // re-opening it if the SDK destroyed it. Waits off the main thread.
+                        Thread {
+                            val check = ensureTerminalServiceBlocking(15_000L)
+                            runOnUiThread { result.success(check) }
+                        }.start()
                     }
                     "prepareTerminal" -> {
                         val reason = call.argument<String>("reason") ?: "payment"
@@ -372,7 +415,7 @@ class MainActivity : FlutterActivity() {
                                     TerminalDiagnostics.probe(
                                         applicationContext,
                                         disconnectSdk = { terminalResponder?.disconnectUsbSerialConnection() },
-                                        reconnectSdk = { runOnUiThread { isUsbConnected = false; tryConnect() } },
+                                        reconnectSdk = { runOnUiThread { isUsbConnected = false; tryConnect(force = true) } },
                                         trace = { logTrace(it) },
                                     ).text
                                 } catch (t: Throwable) {
@@ -458,7 +501,10 @@ class MainActivity : FlutterActivity() {
         // Observers run from app start regardless of the trace-logging switch —
         // the on-screen diagnostic tools depend on them; only writes to
         // waha_trace.log are gated (logTrace).
-        SdkLogCapture.start { logTrace(it) }
+        SdkLogCapture.start { line ->
+            logTrace(line)
+            onSdkLogLine(line)
+        }
         UsbMilestones.register(this, trace = { logTrace(it) }, onEvent = { name ->
             if (name in AutoLogUploader.USB_TRIGGER_NAMES) {
                 AutoLogUploader.trigger(applicationContext, "usb:$name") { logTrace(it) }
@@ -544,6 +590,7 @@ class MainActivity : FlutterActivity() {
             override fun onUSBConnected() {
                 Log.d(TAG, "USB Device Connected")
                 logTrace("SDK callback: onUSBConnected (permission granted; serial port not proven open) | ${TerminalDiagnostics.sdkState(terminalResponder)}")
+                connectGate.outcome()
                 isUsbConnected = true
                 startupRetryHandler.removeCallbacksAndMessages(null)
                 sendConnectionEvent("usbConnected")
@@ -552,6 +599,7 @@ class MainActivity : FlutterActivity() {
             override fun onUSBDisconnected() {
                 Log.d(TAG, "USB Device Disconnected")
                 logTrace("SDK callback: onUSBDisconnected")
+                connectGate.outcome()
                 isUsbConnected = false
                 sendConnectionEvent("usbDisconnected")
                 // No retry scheduled here on purpose — a genuine replug
@@ -562,6 +610,7 @@ class MainActivity : FlutterActivity() {
             override fun onError(errorCode: Int, description: String) {
                 Log.e(TAG, "USB error $errorCode: $description")
                 logTrace("SDK callback: onError code=$errorCode desc=$description")
+                connectGate.outcome()
                 isUsbConnected = false
                 sendConnectionEvent("error", description)
                 when (errorCode) {
@@ -598,12 +647,92 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // ---- SDK USB service recovery (see ServiceRecovery) -------------------
+
+    @Volatile private var activityStarted = false
+    private val reopenLimiter = ReopenLimiter(clock = { SystemClock.elapsedRealtime() })
+
+    /** Whether the SDK's background USB service is bound right now. */
+    private fun sdkServiceBound(): Boolean = try {
+        USBService.SERVICE_CONNECTED
+    } catch (_: Throwable) {
+        true // cannot tell — behave as before rather than loop on re-opens
+    }
+
+    /**
+     * The SDK destroyed its USB service (it does so about a minute after the
+     * app was stopped) and nothing re-binds it. From then on commands go
+     * nowhere and a reconnect throws "USB Service not connected" — so the app's
+     * "connected" flag is stale. Called for every SDK log line, with logging on
+     * or off.
+     */
+    private fun onSdkLogLine(line: String) {
+        if (!ServiceRecovery.isServiceLostLine(line)) return
+        if (sdkServiceBound()) return // a stale line from our own re-open
+        isUsbConnected = false
+        connectGate.outcome()
+        if (activityStarted) runOnUiThread { reopenSdkService("SDK reported its service destroyed") }
+    }
+
+    /**
+     * Opens the SDK's USB service again, the way a fresh app start does
+     * (close what is left, then initialise and open). Main thread only. At most
+     * one every few seconds. Does nothing if the service is bound.
+     */
+    private fun reopenSdkService(reason: String) {
+        val responder = terminalResponder
+        if (responder == null) {
+            initializeTerminal()
+            return
+        }
+        if (sdkServiceBound()) return
+        if (!reopenLimiter.tryAcquire()) return
+        logTrace("SDK USB service is gone ($reason) — opening it again | ${TerminalDiagnostics.sdkState(responder)}")
+        isUsbConnected = false
+        connectGate.outcome()
+        try {
+            responder.closeUsbSerialConnection()
+        } catch (t: Throwable) {
+            logTrace("re-open: close threw ${t.javaClass.simpleName}: ${t.message}")
+        }
+        terminalResponder = null
+        initializeTerminal()
+        sendConnectionEvent("scanning", "Re-opening the terminal service")
+    }
+
+    /**
+     * For the payment path (worker thread): if the service is gone, open it
+     * again and wait up to [maxMs] for it to bind and the terminal to connect.
+     * Returns whether the terminal is ready. A healthy service returns at once.
+     */
+    private fun ensureTerminalServiceBlocking(maxMs: Long): Map<String, Boolean> {
+        if (terminalResponder != null && sdkServiceBound()) return mapOf("ready" to true, "reopened" to false)
+        runOnUiThread { reopenSdkService("before payment") }
+        val ready = ServiceRecovery.waitUntil(maxMs) { sdkServiceBound() && isUsbConnected }
+        logTrace("ensureTerminalService: ${if (ready) "ready" else "NOT ready"} (service had been lost) | ${TerminalDiagnostics.sdkState(terminalResponder)}")
+        return mapOf("ready" to ready, "reopened" to true)
+    }
+
     /**
      * Shared "attempt a connection right now" used by every trigger: the
      * initial startup attempt, the bounded startup retries, the attach
      * broadcast receiver, and the manual/on-demand detectTerminal() calls.
      */
-    private fun tryConnect() {
+    private fun tryConnect(force: Boolean = false) {
+        if (terminalResponder != null && !sdkServiceBound()) {
+            // A connect would only throw "USB Service not connected".
+            reopenSdkService("connect requested")
+            return
+        }
+        when (connectGate.request(force)) {
+            ConnectGate.Decision.SKIP -> {
+                logTrace("tryConnect: skipped — a connect requested ${connectGate.pendingForMs()}ms ago has not reported an outcome yet")
+                return
+            }
+            ConnectGate.Decision.GO_AFTER_EXPIRY ->
+                logTrace("tryConnect: the previous connect never reported an outcome — allowing a new one")
+            ConnectGate.Decision.GO -> {}
+        }
         val responder = terminalResponder
         if (responder == null) {
             logTrace("tryConnect: responder null -> initializeTerminal")
@@ -619,6 +748,7 @@ class MainActivity : FlutterActivity() {
         } catch (e: USBSerialConnectionException) {
             Log.e(TAG, "connectUsbSerialConnection failed", e)
             logTrace("tryConnect: connectUsbSerialConnection threw ${e.message}")
+            if (ServiceRecovery.isServiceNotConnectedMessage(e.message)) reopenSdkService("connect threw: service not connected")
         }
     }
 
@@ -635,7 +765,7 @@ class MainActivity : FlutterActivity() {
             "Manual detect triggered"
         }
         sendConnectionEvent("scanning", label)
-        tryConnect()
+        tryConnect(force = true)
         // What the SDK believes a moment after the reconnect attempt.
         diagHandler.postDelayed({ logTrace("detect($source)+1.5s ${TerminalDiagnostics.sdkState(terminalResponder)}") }, 1500)
     }
@@ -645,9 +775,13 @@ class MainActivity : FlutterActivity() {
     // second and compares when it actually ran; a late run means the UI
     // thread was busy for that long. Logs only stalls of STALL_LOG_MS or
     // more, plus a one-line summary of slow log writes seen since last time.
-    private val STALL_TICK_MS = 1000L
+    private val STALL_TICK_MS = 500L
     private val STALL_LOG_MS = 1500L
     private var stallWatchdog: Runnable? = null
+
+    // The main thread's heartbeat, read by the separate StallWatcher thread.
+    @Volatile private var mainBeat = SystemClock.elapsedRealtime()
+    private var stallWatcher: StallWatcher? = null
 
     private fun startUiStallWatchdog() {
         if (stallWatchdog != null) return
@@ -655,6 +789,7 @@ class MainActivity : FlutterActivity() {
         val tick = object : Runnable {
             override fun run() {
                 val now = SystemClock.elapsedRealtime()
+                mainBeat = now
                 val late = now - expectedAt
                 if (late >= STALL_LOG_MS) {
                     logTrace("UI STALL: main thread was blocked ~${late}ms | payment=${paymentInFlight} | ${TerminalDiagnostics.sdkState(terminalResponder)}")
@@ -671,9 +806,28 @@ class MainActivity : FlutterActivity() {
         }
         stallWatchdog = tick
         diagHandler.postDelayed(tick, STALL_TICK_MS)
+
+        // A second thread that, while the main thread is silent, logs the call
+        // it is stuck in (see StallWatcher).
+        mainBeat = SystemClock.elapsedRealtime()
+        val mainThread = Looper.getMainLooper().thread
+        stallWatcher = StallWatcher(
+            lastBeat = { mainBeat },
+            clock = { SystemClock.elapsedRealtime() },
+            enabled = { loggingEnabled() },
+            stack = { StallWatcher.stackOf(mainThread) },
+            log = { text ->
+                // A freeze report also gets the tablet's load and pressure at that moment.
+                logTrace(if (text.startsWith("MAIN THREAD BLOCKED")) text + "\n    " + SystemSnapshot.compact() else text)
+                // The app may be killed any moment now — get it onto disk.
+                TraceLogWriter.writer.flush(300)
+            },
+        ).also { it.start() }
     }
 
     private fun stopUiStallWatchdog() {
+        stallWatcher?.stop()
+        stallWatcher = null
         stallWatchdog?.let { diagHandler.removeCallbacks(it) }
         stallWatchdog = null
     }
@@ -718,8 +872,8 @@ class MainActivity : FlutterActivity() {
             disconnected.await(2, TimeUnit.SECONDS)
             Thread.sleep(400) // let Android release the interface
             val since = System.currentTimeMillis()
-            runOnUiThread { tryConnect() }
-            val outcome = waitPortEvent(since, 6000)
+            runOnUiThread { tryConnect(force = true) }
+            val outcome = waitPortEvent(since, PORT_OPEN_WAIT_MS)
             val ready = outcome.startsWith("PORT_OPEN_OK")
             logTrace("prepareTerminal($reason): ${if (ready) "READY" else "NOT READY"} — $outcome")
             if (!ready) {
@@ -730,6 +884,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private val prepareLock = Any()
+
+    private fun bootCount(): Int = try {
+        if (Build.VERSION.SDK_INT >= 24) {
+            android.provider.Settings.Global.getInt(contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1)
+        } else -1
+    } catch (_: Throwable) {
+        -1
+    }
+
+    // How long a reset waits for the serial port to open. The port has been seen
+    // opening 6-11 s after a slow disconnect, so a short limit turned a slow
+    // reconnect into a failed sale.
+    private val PORT_OPEN_WAIT_MS = 15_000L
+
+    // One automatic connect attempt at a time — see ConnectGate.
+    private val connectGate = ConnectGate(clock = { SystemClock.elapsedRealtime() })
 
     private fun checkCommunication(callback: (Map<String, Any?>) -> Unit) {
         // startCheckStatus is TCP-only (see class doc comment) — for USB,
@@ -972,8 +1142,8 @@ class MainActivity : FlutterActivity() {
 
     private fun reconnectSdkAndWait(): String {
         val since = System.currentTimeMillis()
-        runOnUiThread { isUsbConnected = false; tryConnect() }
-        return waitPortEvent(since, 6000)
+        runOnUiThread { isUsbConnected = false; tryConnect(force = true) }
+        return waitPortEvent(since, PORT_OPEN_WAIT_MS)
     }
 
     private fun checkStatusBlocking(timeoutMs: Long): Map<String, Any?> {
@@ -1037,7 +1207,7 @@ class MainActivity : FlutterActivity() {
                 val probe = TerminalDiagnostics.probe(
                     applicationContext,
                     disconnectSdk = { terminalResponder?.disconnectUsbSerialConnection() },
-                    reconnectSdk = { runOnUiThread { isUsbConnected = false; tryConnect() } },
+                    reconnectSdk = { runOnUiThread { isUsbConnected = false; tryConnect(force = true) } },
                     trace = { logTrace(it) },
                 )
                 probe.text.lines().forEach { line("  $it") }

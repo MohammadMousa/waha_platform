@@ -237,6 +237,7 @@ class _LandingScreenState extends State<LandingScreen> {
       // org's default changes later, while this device still has no local
       // language choice.
       applyLanguageSeed(config);
+      await TraceLog.applyRemoteConfig(config);
     } catch (_) {
       // Network hiccup — keep the previous interval, try again next tick.
     }

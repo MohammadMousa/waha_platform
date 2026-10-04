@@ -467,6 +467,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get terminalNotReady =>
+      'The card terminal is not ready. Please try again in a moment or ask staff for help.';
+
+  @override
   String terminalSessionStartFailed(String error) {
     return 'Failed to start session: $error';
   }

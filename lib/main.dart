@@ -74,7 +74,7 @@ void main() {
     if (loggingDefine && !LocalPrefs.loggingEnabled) {
       await LocalPrefs.setLoggingEnabled(true);
     }
-    unawaited(TraceLog.setEnabled(LocalPrefs.loggingEnabled));
+    unawaited(TraceLog.applyEffective());
     // One shared instance for the app's whole lifetime — not a fresh
     // ApiClient() per use. A separate instance would mean a separate
     // underlying http.Client with its own unwarmed connection pool, so the
