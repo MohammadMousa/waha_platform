@@ -86,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _storeId = TextEditingController(
         text: storeConfigService.storeId?.toString() ?? '');
     _terminalTimeout =
-        TextEditingController(text: '${LocalPrefs.terminalTimeoutSeconds}');
+        TextEditingController(text: '${LocalPrefs.localTerminalTimeoutSeconds}');
     _devUnlocked = LocalPrefs.devToolsUnlocked;
     _showCartMenuInKiosk = LocalPrefs.showCartMenuInKiosk;
     _timersEnabled = LocalPrefs.kioskTimersEnabled;
@@ -446,6 +446,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
+                if (LocalPrefs.remoteTerminalTimeoutSeconds != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                      'The server sets this to ${LocalPrefs.remoteTerminalTimeoutSeconds} s (terminal_timeout_seconds); the value above is ignored while it is set.',
+                      style: const TextStyle(fontSize: 13)),
+                ],
                 if (_terminalTimeoutError != null) ...[
                   const SizedBox(height: 6),
                   Text(_terminalTimeoutError!,

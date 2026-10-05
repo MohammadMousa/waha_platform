@@ -8,8 +8,7 @@ import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
 import '../services/geidea_terminal_bridge.dart';
 import '../services/local_prefs.dart';
-import '../services/auto_restart_service.dart';
-import '../services/trace_log.dart';
+import '../services/device_config.dart';
 import 'browsing_mode_service.dart';
 import 'locale_service.dart';
 import 'permission_service.dart';
@@ -314,8 +313,7 @@ class AuthService extends ChangeNotifier {
     try {
       final config = await api.getConfig(orgId: orgId);
       applyLanguageSeed(config);
-      await TraceLog.applyRemoteConfig(config);
-      await AutoRestartService.applyConfig(config);
+      await DeviceConfig.apply(config);
     } catch (_) {
       // Network hiccup — the periodic check on Landing will pick it up later.
     }

@@ -299,8 +299,24 @@ class LocalPrefs {
   // Settings screen clamps the value it accepts to enforce that margin.
   static const _kTerminalTimeout = 'waha.terminal_timeout_s';
   static const int defaultTerminalTimeoutSeconds = 60;
-  static int get terminalTimeoutSeconds =>
+  /// The value saved on this device in Settings (ignored while the server
+  /// property below is set).
+  static int get localTerminalTimeoutSeconds =>
       _p.getInt(_kTerminalTimeout) ?? defaultTerminalTimeoutSeconds;
+
+  // Organization property `terminal_timeout_seconds` — when the server
+  // has it, it decides the timeout for every kiosk of the organization and the
+  // local Settings value is ignored. Only the last value the server actually
+  // returned is kept; absent or unusable means "no override".
+  static const _kRemoteTerminalTimeout = 'waha.remote_terminal_timeout_s';
+  static int? get remoteTerminalTimeoutSeconds => _p.getInt(_kRemoteTerminalTimeout);
+  static Future<void> setRemoteTerminalTimeoutSeconds(int? value) => value == null
+      ? _p.remove(_kRemoteTerminalTimeout)
+      : _p.setInt(_kRemoteTerminalTimeout, value);
+
+  /// The timeout in force: the server's, if set, else this device's.
+  static int get terminalTimeoutSeconds =>
+      remoteTerminalTimeoutSeconds ?? localTerminalTimeoutSeconds;
   static Future<void> setTerminalTimeoutSeconds(int value) =>
       _p.setInt(_kTerminalTimeout, value);
 
