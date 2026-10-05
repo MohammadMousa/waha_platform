@@ -15,6 +15,7 @@ import 'services/geidea_terminal_bridge.dart';
 import 'services/geidea_usb_activity_logger.dart';
 import 'services/app_info.dart';
 import 'services/local_prefs.dart';
+import 'services/auto_restart_service.dart';
 import 'services/trace_log.dart';
 import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
@@ -75,6 +76,7 @@ void main() {
       await LocalPrefs.setLoggingEnabled(true);
     }
     unawaited(TraceLog.applyEffective());
+    AutoRestartService.instance.start();
     // One shared instance for the app's whole lifetime — not a fresh
     // ApiClient() per use. A separate instance would mean a separate
     // underlying http.Client with its own unwarmed connection pool, so the

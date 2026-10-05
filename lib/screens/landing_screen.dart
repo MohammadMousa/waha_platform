@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../services/auto_restart_service.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -238,6 +239,7 @@ class _LandingScreenState extends State<LandingScreen> {
       // language choice.
       applyLanguageSeed(config);
       await TraceLog.applyRemoteConfig(config);
+      await AutoRestartService.applyConfig(config);
     } catch (_) {
       // Network hiccup — keep the previous interval, try again next tick.
     }

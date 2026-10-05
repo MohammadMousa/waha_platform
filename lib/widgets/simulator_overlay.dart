@@ -218,15 +218,11 @@ class SimulatorOverlay extends StatelessWidget {
         messenger.showSnackBar(SnackBar(content: Text('Scanned: $name')));
       }
     } on ProductNotFoundException {
-      if (context.mounted) {
-        await showBlockingScanError(context, 'No product for code $code');
-      }
-    } on ProductNotSellableException catch (e) {
-      if (context.mounted) await showBlockingScanError(context, e.message);
+      if (context.mounted) await showScanNotFound(context, code);
+    } on ProductNotSellableException {
+      if (context.mounted) await showScanNotSellable(context);
     } catch (e) {
-      if (context.mounted) {
-        await showBlockingScanError(context, 'Scan failed: $e');
-      }
+      if (context.mounted) await showScanFailed(context, '$e');
     }
   }
 }

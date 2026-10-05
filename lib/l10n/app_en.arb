@@ -30,6 +30,21 @@
   "devicePinIncorrect": "Incorrect PIN",
   "devicePinUnlock": "Unlock",
 
+  "commonOk": "OK",
+  "scanFailedTitle": "Scan failed",
+  "scanNotFoundMessage": "No product found for barcode {barcode}",
+  "@scanNotFoundMessage": {
+    "placeholders": {
+      "barcode": { "type": "String" }
+    }
+  },
+  "scanNotSellableMessage": "This product is not available for sale right now.",
+  "scanFailedMessage": "Scan failed: {error}",
+  "@scanFailedMessage": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
   "scanBlockedUnpaidTitle": "Order not paid yet",
   "scanBlockedUnpaidMessage": "You haven't paid for this order yet. Please complete payment first.",
 
@@ -206,6 +221,20 @@
     }
   },
   "terminalNotReady": "The card terminal is not ready. Please try again in a moment or ask staff for help.",
+  "autoRestartMessage": "Restarting in {seconds} s",
+  "@autoRestartMessage": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "autoRestartNotNow": "Not now",
+  "autoRestartNow": "Restart now",
+  "terminalBusyTryLater": "The card terminal is not ready. Please try again in {seconds} seconds.",
+  "@terminalBusyTryLater": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "terminalSessionStartFailed": "Failed to start session: {error}",
   "@terminalSessionStartFailed": {
     "placeholders": {

@@ -245,6 +245,24 @@ class LocalPrefs {
   static bool get effectiveLoggingEnabled =>
       loggingEnabled || remoteLoggingEnabled;
 
+  // Scheduled restart of the kiosk app — organization properties
+  // `device_auto_restart_enabled`, `device_auto_restart_hours` (default 2) and
+  // `device_auto_restart_wait_minutes` (default 3). Only the last values the
+  // server actually returned are kept.
+  static const _kAutoRestartEnabled = 'waha.auto_restart_enabled';
+  static const _kAutoRestartPeriod = 'waha.auto_restart_period_hours';
+  static bool get autoRestartEnabled => _p.getBool(_kAutoRestartEnabled) ?? false;
+  static Future<void> setAutoRestartEnabled(bool value) =>
+      _p.setBool(_kAutoRestartEnabled, value);
+  static double get autoRestartPeriodHours =>
+      _p.getDouble(_kAutoRestartPeriod) ?? 2.0;
+  static Future<void> setAutoRestartPeriodHours(double value) =>
+      _p.setDouble(_kAutoRestartPeriod, value);
+  static const _kAutoRestartWait = 'waha.auto_restart_wait_minutes';
+  static int get autoRestartWaitMinutes => _p.getInt(_kAutoRestartWait) ?? 3;
+  static Future<void> setAutoRestartWaitMinutes(int value) =>
+      _p.setInt(_kAutoRestartWait, value);
+
   // Which shortcut buttons show in the simulator cluster — 'home', 'settings',
   // 'camera', 'productScan' (manual barcode entry/cached-code fire),
   // 'browse'. Null (never saved) means "use the default set" rather than

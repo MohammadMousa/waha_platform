@@ -1971,6 +1971,19 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     // connection bug resurfaces without it.
     TraceLog.log('Terminal: payment run start, order ${widget.orderId}');
 
+    // The terminal said "busy" a moment ago: another request would fail the
+    // same way, so refuse it here, with how long to wait.
+    final busyLeft = GeideaTerminalBridge.busyCooldownRemaining();
+    if (busyLeft > Duration.zero) {
+      TraceLog.log('Terminal: refusing a new payment — the terminal said busy ${GeideaTerminalBridge.busyCooldown.inSeconds - busyLeft.inSeconds}s ago');
+      setState(() {
+        _failed = true;
+        _statusLabel = l10n.terminalBusyTryLater((busyLeft.inMilliseconds / 1000).ceil());
+      });
+      _scheduleAutoClose();
+      return;
+    }
+
     // First, is the SDK's background USB service still there? The SDK destroys
     // it about a minute after the app was stopped and nothing re-binds it (see
     // ensureTerminalService). If it cannot be brought back, say so now — not
@@ -2119,7 +2132,9 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       if (mounted) {
         setState(() {
           _failed = true;
-          _statusLabel = result.errorMessage ?? l10n.paymentDeclined;
+          _statusLabel = GeideaTerminalBridge.isBusyMessage(result.errorMessage)
+              ? l10n.terminalBusyTryLater(GeideaTerminalBridge.busyCooldown.inSeconds)
+              : (result.errorMessage ?? l10n.paymentDeclined);
         });
         _scheduleAutoClose();
       }

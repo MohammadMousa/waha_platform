@@ -55,7 +55,12 @@ class KioskRouteObserver extends NavigatorObserver {
   static final ValueNotifier<String?> currentRouteName = ValueNotifier(null);
 
   void _update(Route<dynamic>? route) {
-    currentRouteName.value = route?.settings.name;
+    final name = route?.settings.name;
+    // A small notice dialog on top of a page does not change which page the
+    // customer is on, so the idle timer must keep running underneath it —
+    // otherwise a "Not found" dialog left on screen would stop it for good.
+    if (name != null && Routes.transientOverlays.contains(name)) return;
+    currentRouteName.value = name;
   }
 
   @override
@@ -90,6 +95,14 @@ void goHomeKeepingLanding(NavigatorState nav) {
 }
 
 class Routes {
+  /// Name given to the one-at-a-time scan error / blocked-scan dialog (see
+  /// utils/scan_actions.dart). It is listed in [transientOverlays].
+  static const scanError = '/scan-error';
+
+  /// Routes that are only notices on top of a page: KioskRouteObserver
+  /// ignores them, so the page underneath stays "the current route".
+  static const transientOverlays = <String>{scanError};
+
   static const landing = '/';
   static const scan = '/scan';
   static const cart = '/cart';

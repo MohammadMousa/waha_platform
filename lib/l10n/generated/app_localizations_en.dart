@@ -79,6 +79,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicePinUnlock => 'Unlock';
 
   @override
+  String get commonOk => 'OK';
+
+  @override
+  String get scanFailedTitle => 'Scan failed';
+
+  @override
+  String scanNotFoundMessage(String barcode) {
+    return 'No product found for barcode $barcode';
+  }
+
+  @override
+  String get scanNotSellableMessage =>
+      'This product is not available for sale right now.';
+
+  @override
+  String scanFailedMessage(String error) {
+    return 'Scan failed: $error';
+  }
+
+  @override
   String get scanBlockedUnpaidTitle => 'Order not paid yet';
 
   @override
@@ -469,6 +489,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get terminalNotReady =>
       'The card terminal is not ready. Please try again in a moment or ask staff for help.';
+
+  @override
+  String autoRestartMessage(int seconds) {
+    return 'Restarting in $seconds s';
+  }
+
+  @override
+  String get autoRestartNotNow => 'Not now';
+
+  @override
+  String get autoRestartNow => 'Restart now';
+
+  @override
+  String terminalBusyTryLater(int seconds) {
+    return 'The card terminal is not ready. Please try again in $seconds seconds.';
+  }
 
   @override
   String terminalSessionStartFailed(String error) {

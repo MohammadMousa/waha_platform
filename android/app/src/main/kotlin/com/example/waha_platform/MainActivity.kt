@@ -1,5 +1,7 @@
 package com.example.waha_platform
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -276,12 +278,33 @@ class MainActivity : FlutterActivity() {
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             logTrace("UNCAUGHT EXCEPTION on ${thread.name}: ${Log.getStackTraceString(throwable)}")
+            val isMain = thread == Looper.getMainLooper().thread
+            if (sdkCrashGuard.contain(isMain, throwable, SystemClock.elapsedRealtime())) {
+                // A thread inside the Geidea SDK died (seen on a USB re-attach). The
+                // thread is gone, but the app can carry on: log it, upload the log,
+                // and open the SDK's connection again from scratch. Anything that is
+                // not clearly the SDK's — or that repeats — still crashes as before.
+                logTrace("SDK THREAD CRASH CONTAINED (${sdkCrashGuard.recent(SystemClock.elapsedRealtime())} in the last minute) — the app keeps running; re-opening the SDK connection")
+                TraceLogWriter.writer.flush(500)
+                try {
+                    AutoLogUploader.trigger(applicationContext, "crash:sdk-thread") { logTrace(it) }
+                } catch (_: Throwable) {
+                }
+                isUsbConnected = false
+                connectGate.outcome()
+                runOnUiThread { reopenSdkService("an SDK thread crashed", force = true) }
+                return@setDefaultUncaughtExceptionHandler
+            }
             // The line is queued for the writer thread; the process is about
             // to die, so give it a moment to reach the disk first.
             TraceLogWriter.writer.flush(1500)
             previousHandler?.uncaughtException(thread, throwable)
         }
         logTrace("onCreate start ${processInfo()} restoredState=${savedInstanceState != null}")
+        loggingPrefs().getString("restart_reason", null)?.let { why ->
+            logTrace("STARTED AFTER A DELIBERATE RESTART: $why")
+            loggingPrefs().edit().remove("restart_reason").apply()
+        }
         super.onCreate(savedInstanceState)
         logTrace("onCreate end")
         logPreviousExitReasons()
@@ -340,6 +363,10 @@ class MainActivity : FlutterActivity() {
                     "detectTerminal" -> {
                         val source = call.argument<String>("source") ?: "manual"
                         detectTerminal(source)
+                        result.success(true)
+                    }
+                    "restartApp" -> {
+                        restartApp(call.argument<String>("reason") ?: "restart")
                         result.success(true)
                     }
                     "monotonicNow" -> {
@@ -651,6 +678,7 @@ class MainActivity : FlutterActivity() {
 
     @Volatile private var activityStarted = false
     private val reopenLimiter = ReopenLimiter(clock = { SystemClock.elapsedRealtime() })
+    private val sdkCrashGuard = SdkCrashGuard()
 
     /** Whether the SDK's background USB service is bound right now. */
     private fun sdkServiceBound(): Boolean = try {
@@ -679,13 +707,13 @@ class MainActivity : FlutterActivity() {
      * (close what is left, then initialise and open). Main thread only. At most
      * one every few seconds. Does nothing if the service is bound.
      */
-    private fun reopenSdkService(reason: String) {
+    private fun reopenSdkService(reason: String, force: Boolean = false) {
         val responder = terminalResponder
         if (responder == null) {
             initializeTerminal()
             return
         }
-        if (sdkServiceBound()) return
+        if (!force && sdkServiceBound()) return
         if (!reopenLimiter.tryAcquire()) return
         logTrace("SDK USB service is gone ($reason) — opening it again | ${TerminalDiagnostics.sdkState(responder)}")
         isUsbConnected = false
@@ -884,6 +912,40 @@ class MainActivity : FlutterActivity() {
     }
 
     private val prepareLock = Any()
+
+    /**
+     * Restarts the app: schedules a relaunch a couple of seconds ahead, then ends
+     * this process, so the next start has a fresh SDK, USB connection and
+     * memory. (If the device itself relaunches the kiosk app when it dies, the
+     * relaunch below only brings the already-running app to the front.)
+     * The reason is kept for the first log line of the next start.
+     */
+    private fun restartApp(reason: String) {
+        logTrace("RESTART: $reason")
+        TraceLogWriter.writer.flush(500)
+        loggingPrefs().edit().putString("restart_reason", reason).commit()
+        try {
+            val launch = packageManager.getLaunchIntentForPackage(packageName)
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val flags = PendingIntent.FLAG_CANCEL_CURRENT or
+                    (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
+                val pi = PendingIntent.getActivity(applicationContext, 7001, launch, flags)
+                val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val at = System.currentTimeMillis() + 2500
+                try {
+                    // A user-visible alarm clock needs no special permission and may start the app from the background.
+                    am.setAlarmClock(AlarmManager.AlarmClockInfo(at, pi), pi)
+                } catch (t: Throwable) {
+                    am.set(AlarmManager.RTC_WAKEUP, at, pi)
+                }
+            }
+        } catch (t: Throwable) {
+            logTrace("RESTART: could not schedule the relaunch: ${t.javaClass.simpleName}: ${t.message}")
+        }
+        finishAffinity()
+        Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 300)
+    }
 
     private fun bootCount(): Int = try {
         if (Build.VERSION.SDK_INT >= 24) {

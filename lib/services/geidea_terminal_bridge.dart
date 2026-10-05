@@ -204,6 +204,28 @@ class GeideaTerminalBridge {
     }
   }
 
+  // ---- "Terminal busy" cool-down -----------------------------------------
+  // When the terminal itself answers "Terminal busy", it has just told us it
+  // cannot take a purchase. Another request inside the next few seconds would
+  // fail the same way (and just add noise on a terminal that is already
+  // struggling), so a new payment is refused locally until the cool-down ends.
+  static Duration busyCooldown = const Duration(seconds: 10);
+  static Stopwatch? _busyClock;
+
+  static bool isBusyMessage(String? message) =>
+      message != null && message.toLowerCase().contains('busy');
+
+  static void _noteBusy() => _busyClock = (Stopwatch()..start());
+
+  /// How long a new payment must still wait because the terminal said "busy".
+  /// A plain stopwatch — not the wall clock.
+  static Duration busyCooldownRemaining() {
+    final c = _busyClock;
+    if (c == null) return Duration.zero;
+    final left = busyCooldown - c.elapsed;
+    return left > Duration.zero ? left : Duration.zero;
+  }
+
   /// Clears the pending-attempt record only if it is still THIS attempt's: a
   /// late answer to an old, cancelled attempt must not lift the wait that a
   /// newer attempt has since set.
@@ -314,6 +336,10 @@ class GeideaTerminalBridge {
     // A late decline must not run the SDK dump: it would stop the watch of a
     // newer payment that is in flight by now.
     if (!approved && !late) unawaited(sdkDump('payment:not-approved'));
+    if (!approved && !late && isBusyMessage(map['receipt'] as String?)) {
+      TraceLog.log('Terminal: the terminal said it is busy — new payments are refused for ${busyCooldown.inSeconds}s');
+      _noteBusy();
+    }
     final details = (map['details'] is Map)
         ? Map<String, dynamic>.from(map['details'] as Map)
         : <String, dynamic>{};
@@ -511,8 +537,10 @@ class GeideaTerminalBridge {
     // low as ~40ms in the field), so a fixed sleep makes every payment
     // attempt pay the full delay even when the terminal was fine the whole
     // time. Still caps at [wait] total for a genuinely bad connection.
-    final deadline = DateTime.now().add(wait);
-    while (DateTime.now().isBefore(deadline)) {
+    // A stopwatch, not the wall clock: a corrected or changed tablet time must
+    // not make this wait shorter or longer than [wait].
+    final waited = Stopwatch()..start();
+    while (waited.elapsed < wait) {
       if (await checkCommunication()) return true;
       await Future.delayed(const Duration(milliseconds: 250));
     }

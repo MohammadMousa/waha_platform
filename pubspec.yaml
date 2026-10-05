@@ -1,7 +1,7 @@
 name: waha_kiosk
 description: Waha self-service kiosk client (Phase 1 — scan, cart, checkout, pay, receipt)
 publish_to: 'none'
-version: 0.1.27+20261004
+version: 0.1.29+20261005
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

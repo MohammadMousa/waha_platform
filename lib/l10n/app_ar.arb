@@ -30,6 +30,21 @@
   "devicePinIncorrect": "رمز PIN غير صحيح",
   "devicePinUnlock": "فتح",
 
+  "commonOk": "حسنًا",
+  "scanFailedTitle": "فشل المسح",
+  "scanNotFoundMessage": "لم يتم العثور على منتج بهذا الباركود: {barcode}",
+  "@scanNotFoundMessage": {
+    "placeholders": {
+      "barcode": { "type": "String" }
+    }
+  },
+  "scanNotSellableMessage": "هذا المنتج غير متاح للبيع حاليًا.",
+  "scanFailedMessage": "فشل المسح: {error}",
+  "@scanFailedMessage": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
   "scanBlockedUnpaidTitle": "لم يتم الدفع بعد",
   "scanBlockedUnpaidMessage": "لم تدفع قيمة هذا الطلب بعد. يرجى إتمام الدفع أولاً.",
 
@@ -206,6 +221,20 @@
     }
   },
   "terminalNotReady": "جهاز الدفع غير جاهز. يرجى المحاولة بعد قليل أو طلب المساعدة من الموظف.",
+  "autoRestartMessage": "إعادة التشغيل خلال {seconds} ثانية",
+  "@autoRestartMessage": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "autoRestartNotNow": "ليس الآن",
+  "autoRestartNow": "أعد التشغيل الآن",
+  "terminalBusyTryLater": "جهاز الدفع غير جاهز. يرجى المحاولة مرة أخرى بعد {seconds} ثوانٍ.",
+  "@terminalBusyTryLater": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "terminalSessionStartFailed": "فشل بدء الجلسة: {error}",
   "@terminalSessionStartFailed": {
     "placeholders": {

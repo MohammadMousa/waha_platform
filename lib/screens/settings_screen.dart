@@ -7,6 +7,7 @@ import '../config/connection_settings.dart';
 import '../services/connection_switcher.dart';
 import '../services/app_info.dart';
 import '../services/geidea_terminal_bridge.dart';
+import '../services/auto_restart_service.dart';
 import '../services/local_prefs.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
@@ -953,6 +954,20 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       setState(() => _loggingEnabled = value);
                       LocalPrefs.setLoggingEnabled(value);
                       TraceLog.applyEffective();
+                    },
+                  ),
+                  // Scheduled-restart test: the real countdown and restart, right now.
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.restart_alt),
+                    title: const Text('Restart app now (test)'),
+                    subtitle: Text(
+                        'Scheduled restart: ${LocalPrefs.autoRestartEnabled ? "on" : "off"}, every ${LocalPrefs.autoRestartPeriodHours} h, busy kiosk waits ${LocalPrefs.autoRestartWaitMinutes} min (device_auto_restart_enabled / _hours / _wait_minutes)',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    onTap: () {
+                      AutoRestartService.instance.runTest();
                     },
                   ),
                   // Quick access to the trace log without leaving the kiosk app.

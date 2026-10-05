@@ -79,6 +79,25 @@ class AppLocalizationsAr extends AppLocalizations {
   String get devicePinUnlock => 'فتح';
 
   @override
+  String get commonOk => 'حسنًا';
+
+  @override
+  String get scanFailedTitle => 'فشل المسح';
+
+  @override
+  String scanNotFoundMessage(String barcode) {
+    return 'لم يتم العثور على منتج بهذا الباركود: $barcode';
+  }
+
+  @override
+  String get scanNotSellableMessage => 'هذا المنتج غير متاح للبيع حاليًا.';
+
+  @override
+  String scanFailedMessage(String error) {
+    return 'فشل المسح: $error';
+  }
+
+  @override
   String get scanBlockedUnpaidTitle => 'لم يتم الدفع بعد';
 
   @override
@@ -467,6 +486,22 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get terminalNotReady =>
       'جهاز الدفع غير جاهز. يرجى المحاولة بعد قليل أو طلب المساعدة من الموظف.';
+
+  @override
+  String autoRestartMessage(int seconds) {
+    return 'إعادة التشغيل خلال $seconds ثانية';
+  }
+
+  @override
+  String get autoRestartNotNow => 'ليس الآن';
+
+  @override
+  String get autoRestartNow => 'أعد التشغيل الآن';
+
+  @override
+  String terminalBusyTryLater(int seconds) {
+    return 'جهاز الدفع غير جاهز. يرجى المحاولة مرة أخرى بعد $seconds ثوانٍ.';
+  }
 
   @override
   String terminalSessionStartFailed(String error) {

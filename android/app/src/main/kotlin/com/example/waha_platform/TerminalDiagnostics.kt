@@ -437,8 +437,9 @@ object TerminalDiagnostics {
         if (ports != null) sb.append(" (last event ${ports.name} ${(System.currentTimeMillis() - ports.at) / 1000}s ago)")
         sb.append("; opens OK=${UsbMilestones.count("PORT_OPEN_OK")} failed=${UsbMilestones.count("PORT_OPEN_FAILED_CDC") + UsbMilestones.count("PORT_OPEN_FAILED_DEVICE") + UsbMilestones.count("SERIAL_CREATE_FAILED")}\n")
         val handed = SdkLogCapture.has("FINAL BUFFER", since)
-        sb.append("  4 Command written ............. ").append(if (handed) "YES — handed to the SDK's USB service for writing (SDK logs FINAL BUFFER). The SDK does not report the byte count; whether it reached the wire is inferred in the verdict." else "NO — the SDK produced no command in this window").append('\n')
+        sb.append("  4 Command handed to the SDK ... ").append(if (handed) "YES — the SDK produced the command (it logs FINAL BUFFER). That alone does not prove it reached the wire." else "NO — the SDK produced no command in this window").append('\n')
         val bytes = SdkLogCapture.has("DATA FROM USB", since)
+        sb.append("  4b USB write confirmed ........ ").append(if (bytes) "YES — inferred: the terminal replied, so the command reached it" else "UNKNOWN — the SDK does not report written bytes and no reply was seen").append('\n')
         sb.append("  5 Terminal response received .. ").append(if (bytes) "YES — bytes arrived from the terminal (SDK logs DATA FROM USB)" else "NO — no bytes from the terminal in this window").append('\n')
         sb.append("  6 SDK callback received ....... ").append(
             when (callbackReceived) {
@@ -475,7 +476,7 @@ object TerminalDiagnostics {
         val handed = SdkLogCapture.has("FINAL BUFFER", since)
         val bytes = SdkLogCapture.has("DATA FROM USB", since)
         return when (status) {
-            "ok" -> "OK — port open, command written, terminal answered and the SDK decoded the reply. If a payment still fails, it is E or F: see the PAYMENT VERDICT lines in the trace log."
+            "ok" -> "OK — port open, command handed to the SDK, terminal answered and the SDK decoded the reply. If a payment still fails, it is E or F: see the PAYMENT VERDICT lines in the trace log."
             "error" -> if (bytes) "D. TERMINAL RESPONDED but the SDK returned an error/could not use the reply: '$message'."
             else "SDK returned an error without any terminal bytes ('$message') — it rejected the request locally."
             else -> when {

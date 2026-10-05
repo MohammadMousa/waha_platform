@@ -236,6 +236,36 @@ abstract class AppLocalizations {
   /// **'Unlock'**
   String get devicePinUnlock;
 
+  /// No description provided for @commonOk.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get commonOk;
+
+  /// No description provided for @scanFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan failed'**
+  String get scanFailedTitle;
+
+  /// No description provided for @scanNotFoundMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No product found for barcode {barcode}'**
+  String scanNotFoundMessage(String barcode);
+
+  /// No description provided for @scanNotSellableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This product is not available for sale right now.'**
+  String get scanNotSellableMessage;
+
+  /// No description provided for @scanFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan failed: {error}'**
+  String scanFailedMessage(String error);
+
   /// No description provided for @scanBlockedUnpaidTitle.
   ///
   /// In en, this message translates to:
@@ -985,6 +1015,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The card terminal is not ready. Please try again in a moment or ask staff for help.'**
   String get terminalNotReady;
+
+  /// No description provided for @autoRestartMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Restarting in {seconds} s'**
+  String autoRestartMessage(int seconds);
+
+  /// No description provided for @autoRestartNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get autoRestartNotNow;
+
+  /// No description provided for @autoRestartNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart now'**
+  String get autoRestartNow;
+
+  /// No description provided for @terminalBusyTryLater.
+  ///
+  /// In en, this message translates to:
+  /// **'The card terminal is not ready. Please try again in {seconds} seconds.'**
+  String terminalBusyTryLater(int seconds);
 
   /// No description provided for @terminalSessionStartFailed.
   ///
