@@ -6,6 +6,7 @@ import '../router/app_router.dart';
 import '../screens/camera_scan_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/api_exceptions.dart';
+import '../services/app_info.dart';
 import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
@@ -349,7 +350,8 @@ class _SessionInfoFooterState extends State<_SessionInfoFooter> {
     final storeSlug = storeConfigService.storeSlug ?? '—';
     final host = AppConfig.apiBaseUrlLabel;
     final mode = browsingModeService.mode.name;
-    final text = 'user:$username  store:$storeSlug  host:$host  mode:$mode';
+    final text = 'user:$username  ver:${AppInfo.version}  store:$storeSlug  '
+        'host:$host  build:${AppInfo.buildNumber}  mode:$mode';
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

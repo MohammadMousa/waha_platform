@@ -34,7 +34,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         // Pinned below Flutter's own default (34+), NOT flutter.targetSdkVersion —
-        // Geidea's compiled POS SDK (net.geidea.sdk:pos-comm-sdk-ksa:1.3.0)
+        // Geidea's compiled POS SDK (net.geidea.sdk:pos-comm-sdk-ksa 1.3.0)
         // constructs a mutable PendingIntent from an implicit intent internally
         // (geidea.net.terminal_comm_api.USBService, requesting USB permission),
         // which Android 14 flatly disallows for apps targeting API 34+ — see
@@ -46,8 +46,9 @@ android {
         // by the device's own Android version, so targeting 33 here makes
         // Geidea's SDK behave exactly as it did on Android 13 and earlier —
         // this isn't source we can patch (no source, it's a closed binary).
-        // Remove once Geidea ships an SDK build that constructs this
-        // PendingIntent correctly (FLAG_IMMUTABLE or an explicit intent).
+        // Geidea's 1.3.1 (the version used now) builds this PendingIntent with
+        // an explicit intent, so the pin can be lifted — but only after a test
+        // with a real terminal on the Android 14 tablet.
         targetSdk = 33
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -104,7 +105,7 @@ dependencies {
     // root build.gradle.kts, same as here. com.jcraft:jsch (kept in
     // proguard-rules.pro) resolves transitively via this artifact's own
     // POM — no need to declare it separately.
-    implementation("net.geidea.sdk:pos-comm-sdk-ksa:1.3.0")
+    implementation("net.geidea.sdk:pos-comm-sdk-ksa:1.3.1")
 
     // JVM unit tests (PaymentCallbackClassifierTest) — pure Kotlin, no device.
     testImplementation("junit:junit:4.13.2")
