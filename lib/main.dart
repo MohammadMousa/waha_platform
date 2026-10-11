@@ -16,6 +16,8 @@ import 'services/geidea_usb_activity_logger.dart';
 import 'services/app_info.dart';
 import 'services/local_prefs.dart';
 import 'services/auto_restart_service.dart';
+import 'services/heartbeat_service.dart';
+import 'services/late_approval_service.dart';
 import 'services/trace_log.dart';
 import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
@@ -89,6 +91,16 @@ void main() {
       apiClient.getConfig().catchError((_) => <String, String>{}),
     ); // fire-and-forget warm-up — pays the DNS/TCP/TLS cost now, not at checkout
     await _resolveStartupConfig(apiClient);
+    GeideaTerminalBridge.onLateApproval = (orderId, amount, r) =>
+        unawaited(LateApprovalService.instance.report(
+          orderId: orderId,
+          amount: amount,
+          rrn: r.rrn,
+          approvalCode: r.approvalCode,
+          terminalId: r.details['terminalId'] as String?,
+        ));
+    LateApprovalService.instance.start(apiClient);
+    HeartbeatService.instance.start(apiClient);
     runApp(WahaApp(apiClient: apiClient));
   }, (error, stack) {
     TraceLog.log('Uncaught zone error: $error\n$stack');

@@ -15,6 +15,7 @@ import '../models/quote.dart';
 import '../models/store.dart';
 import '../models/terminal_session.dart';
 import 'api_exceptions.dart';
+import 'app_info.dart';
 
 class ApiClient {
   final http.Client _http;
@@ -222,7 +223,11 @@ class ApiClient {
       () => _http.post(
         _uri('/api/kiosk/auth/login'),
         headers: _headers(),
-        body: jsonEncode({'username': username, 'pinCode': pinCode}),
+        body: jsonEncode({
+          'username': username,
+          'pinCode': pinCode,
+          'appVersion': AppInfo.version,
+        }),
       ),
     );
     if (resp.statusCode == 200) {
@@ -303,7 +308,10 @@ class ApiClient {
   // with a locally cached PIN on every start (see AuthService.resolveStartupAuth).
   Future<AuthSession> kioskMe(String token) async {
     final resp = await _send(
-      () => _http.get(_uri('/api/kiosk/auth/me'), headers: _headers(token: token)),
+      () => _http.get(_uri('/api/kiosk/auth/me'), headers: {
+        ..._headers(token: token),
+        'X-App-Version': AppInfo.version,
+      }),
     );
     if (resp.statusCode == 200) {
       return AuthSession.fromJson(
@@ -731,6 +739,57 @@ class ApiClient {
     await _send(() => _http.post(
         _uri('/api/terminal-sessions/$sessionId/cancel'),
         headers: _headers(token: token)));
+  }
+
+  // POST /api/orders/{id}/late-approval — the terminal approved after the
+  // kiosk had given up. Answer is {"result": "PAID" | "IGNORED"}, both final
+  // (the server pays the order only if it is still CREATED, young enough and
+  // the amount matches). Throws [NetworkException] or [UnknownApiException]
+  // for anything that may be retried; a 4xx other than 401 is final too and
+  // is returned as the text "REJECTED".
+  Future<String> reportLateApproval(
+    String orderId, {
+    required double amount,
+    required String rrn,
+    String? approvalCode,
+    String? terminalId,
+    String? token,
+  }) async {
+    final resp = await _send(
+      () => _http.post(
+        _uri('/api/orders/$orderId/late-approval'),
+        headers: _headers(token: token),
+        body: jsonEncode({
+          'amount': amount,
+          'rrn': rrn,
+          if (approvalCode != null) 'approvalCode': approvalCode,
+          if (terminalId != null) 'terminalId': terminalId,
+        }),
+      ),
+    );
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      return (body['result'] as String?) ?? 'UNKNOWN';
+    }
+    if (resp.statusCode >= 400 && resp.statusCode < 500 && resp.statusCode != 401) {
+      return 'REJECTED';
+    }
+    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+  }
+
+  // POST /api/kiosk/heartbeat — sign of life while the device is otherwise
+  // idle. Only sent when the organization property heartbeat_minutes is above 0.
+  Future<void> kioskHeartbeat(String token) async {
+    final resp = await _send(
+      () => _http.post(
+        _uri('/api/kiosk/heartbeat'),
+        headers: _headers(token: token),
+        body: jsonEncode({'appVersion': AppInfo.version}),
+      ),
+    );
+    if (resp.statusCode != 200) {
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }
   }
 
   // GET /api/orders/{id}

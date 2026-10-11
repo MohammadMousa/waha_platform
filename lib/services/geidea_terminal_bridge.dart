@@ -60,6 +60,11 @@ class GeideaTerminalBridge {
 
   // The payment attempt currently waiting for the SDK, if any.
   _Attempt? _activeAttempt;
+
+  /// Called when the terminal approves a payment the kiosk had already given
+  /// up on (cancelled or timed out): the card was charged. Set once at
+  /// startup (see LateApprovalService), which tells the server.
+  static void Function(String orderId, double amount, GeideaPaymentResult result)? onLateApproval;
   static const _eventChannel = EventChannel('com.waha/geidea/events');
 
   /// Bypasses the native SDK/USB entirely and returns canned results, so the
@@ -301,6 +306,7 @@ class GeideaTerminalBridge {
       if (late) {
         TraceLog.log('Terminal: LATE answer for an attempt already given up on '
             '(cancelled or timed out): approved=${parsed.approved} — ${parsed.approved ? "the customer may have been charged; reconcile this order" : "nothing to do"}');
+        if (parsed.approved) onLateApproval?.call(reference, amount, parsed);
         return;
       }
       attempt.result.complete(parsed);

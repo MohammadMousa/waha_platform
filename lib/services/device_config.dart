@@ -1,4 +1,5 @@
 import 'auto_restart_service.dart';
+import 'heartbeat_service.dart';
 import 'local_prefs.dart';
 import 'trace_log.dart';
 
@@ -8,6 +9,7 @@ import 'trace_log.dart';
 ///  - `device_auto_restart_enabled` / `_hours` / `_wait_minutes`
 ///                                           (see AutoRestartService.applyConfig)
 ///  - `terminal_timeout_seconds`      (below)
+///  - `heartbeat_minutes`                    (see HeartbeatService.applyConfig)
 ///
 /// An empty config means the request failed: nothing changes, so the last
 /// known values stay in force.
@@ -40,5 +42,6 @@ class DeviceConfig {
     await TraceLog.applyRemoteConfig(config);
     await AutoRestartService.applyConfig(config);
     await applyTerminalTimeout(config);
+    await HeartbeatService.applyConfig(config);
   }
 }

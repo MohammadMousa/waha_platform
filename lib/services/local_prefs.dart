@@ -335,6 +335,24 @@ class LocalPrefs {
       ? _p.remove(_kPendingTerminalAttempt)
       : _p.setString(_kPendingTerminalAttempt, value);
 
+  // Organization property `heartbeat_minutes` (0 = off, the default; max 1440):
+  // how often an otherwise idle kiosk tells the server it is alive. Only the
+  // last value the server actually returned is kept.
+  static const _kHeartbeatMinutes = 'waha.heartbeat_minutes';
+  static int get heartbeatMinutes => _p.getInt(_kHeartbeatMinutes) ?? 0;
+  static Future<void> setHeartbeatMinutes(int value) =>
+      _p.setInt(_kHeartbeatMinutes, value);
+
+  // Late card approvals still to be reported to the server (a JSON list, one
+  // entry per payment). Kept on disk so a restart or a lost connection does
+  // not drop a charge the kiosk already knows about; see LateApprovalService.
+  static const _kLateApprovals = 'waha.late_approvals';
+  static List<String> get lateApprovals =>
+      _p.getStringList(_kLateApprovals) ?? const [];
+  static Future<void> setLateApprovals(List<String> value) => value.isEmpty
+      ? _p.remove(_kLateApprovals)
+      : _p.setStringList(_kLateApprovals, value);
+
   // Auto-cache: when on, every code the simulator fires (tap, long-press
   // manual entry, camera-via-simulator) gets appended to simProductCodes
   // automatically, up to simCacheLimit. Off by default — opt-in, since it
