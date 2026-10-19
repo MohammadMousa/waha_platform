@@ -289,22 +289,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileNoStoreSelected => 'No store selected';
 
   @override
-  String get navOrders => 'Orders';
-
-  @override
   String get navSearch => 'Search';
 
   @override
   String get navCategories => 'Categories';
-
-  @override
-  String get ordersTitle => 'My Orders';
-
-  @override
-  String get ordersEmpty => 'No orders yet.';
-
-  @override
-  String get ordersLoginPrompt => 'Log in to view your order history.';
 
   @override
   String get searchTitle => 'Search';

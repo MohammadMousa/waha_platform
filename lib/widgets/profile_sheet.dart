@@ -136,16 +136,6 @@ class _ProfileSheetState extends State<ProfileSheet> {
                   Navigator.of(context).pushNamed(Routes.storePicker);
                 },
               ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.receipt_long_outlined, color: scheme.primary),
-                title: Text(l10n.navOrders),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamed(Routes.orders);
-                },
-              ),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,

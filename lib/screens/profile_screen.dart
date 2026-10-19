@@ -65,13 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Text(l10n.profileChangeStore),
               ),
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.receipt_long_outlined),
-                label: Text(l10n.navOrders),
-                onPressed: () =>
-                    Navigator.of(context).pushNamed(Routes.orders),
-              ),
-              const SizedBox(height: 8),
               FilledButton(
                 onPressed: _loggingOut ? null : _logout,
                 child: _loggingOut

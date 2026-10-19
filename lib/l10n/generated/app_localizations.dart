@@ -638,12 +638,6 @@ abstract class AppLocalizations {
   /// **'No store selected'**
   String get profileNoStoreSelected;
 
-  /// No description provided for @navOrders.
-  ///
-  /// In en, this message translates to:
-  /// **'Orders'**
-  String get navOrders;
-
   /// No description provided for @navSearch.
   ///
   /// In en, this message translates to:
@@ -655,24 +649,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Categories'**
   String get navCategories;
-
-  /// No description provided for @ordersTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'My Orders'**
-  String get ordersTitle;
-
-  /// No description provided for @ordersEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No orders yet.'**
-  String get ordersEmpty;
-
-  /// No description provided for @ordersLoginPrompt.
-  ///
-  /// In en, this message translates to:
-  /// **'Log in to view your order history.'**
-  String get ordersLoginPrompt;
 
   /// No description provided for @searchTitle.
   ///

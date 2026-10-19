@@ -6,7 +6,7 @@ import '../router/app_router.dart';
 import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 
-enum BottomNavTab { home, orders, search, cart, categories }
+enum BottomNavTab { home, search, cart, categories }
 
 class WahaBottomNav extends StatelessWidget {
   final BottomNavTab current;
@@ -31,15 +31,6 @@ class WahaBottomNav extends StatelessWidget {
           label: l10n.navHome,
         ),
       ),
-      if (!isRestricted)
-        (
-          BottomNavTab.orders,
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.receipt_long_outlined),
-            activeIcon: const Icon(Icons.receipt_long),
-            label: l10n.navOrders,
-          ),
-        ),
       if (!isRestricted)
         (
           BottomNavTab.search,
@@ -86,7 +77,6 @@ class WahaBottomNav extends StatelessWidget {
         if (tab == current) return;
         final route = switch (tab) {
           BottomNavTab.home => Routes.landing,
-          BottomNavTab.orders => Routes.orders,
           BottomNavTab.search => Routes.search,
           BottomNavTab.cart => Routes.cart,
           BottomNavTab.categories => Routes.categories,

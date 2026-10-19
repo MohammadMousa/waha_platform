@@ -288,22 +288,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get profileNoStoreSelected => 'لم يتم اختيار متجر';
 
   @override
-  String get navOrders => 'طلباتي';
-
-  @override
   String get navSearch => 'بحث';
 
   @override
   String get navCategories => 'التصنيفات';
-
-  @override
-  String get ordersTitle => 'طلباتي';
-
-  @override
-  String get ordersEmpty => 'لا طلبات بعد.';
-
-  @override
-  String get ordersLoginPrompt => 'سجّل الدخول لعرض سجل طلباتك.';
 
   @override
   String get searchTitle => 'البحث';

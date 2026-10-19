@@ -505,8 +505,6 @@ class _WebViewLandingState extends State<_WebViewLanding> {
         );
       case 'cart_screen':
         Navigator.of(context).pushNamed(Routes.cart);
-      case 'orders_screen':
-        Navigator.of(context).pushNamed(Routes.orders);
       case 'settings_screen':
         Navigator.of(context).pushNamed(Routes.settings);
     }

@@ -613,28 +613,6 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-  // GET /api/orders?storeId=&page=&size= — paginated order history, newest first
-  Future<List<WahaOrder>> getOrderHistory(String token,
-      {int? storeId, int page = 0, int size = 10}) async {
-    final resp = await _send(
-      () => _http.get(
-        _uri('/api/orders').replace(queryParameters: {
-          if (storeId != null) 'storeId': '$storeId',
-          'page': '$page',
-          'size': '$size',
-        }),
-        headers: _headers(token: token),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      final list = jsonDecode(resp.body) as List<dynamic>;
-      return list
-          .map((e) => WahaOrder.fromJson(e as Map<String, dynamic>))
-          .toList();
-    }
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
-  }
-
   // DELETE /api/orders/{id} — user cancellation (CREATED only)
   Future<void> cancelOrder(String token, String orderId) async {
     final resp = await _send(

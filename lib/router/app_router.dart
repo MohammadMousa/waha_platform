@@ -15,7 +15,6 @@ import '../screens/invoice_screen.dart';
 import '../screens/kiosk_login_screen.dart';
 import '../screens/landing_screen.dart';
 import '../screens/login_screen.dart';
-import '../screens/orders_screen.dart';
 import '../screens/pay_screen.dart';
 import '../screens/product_detail_screen.dart';
 import '../screens/profile_screen.dart';
@@ -118,7 +117,6 @@ class Routes {
   static const kioskLogin = '/kiosk-login';
   static const storePicker = '/store-picker';
   static const invoice = '/invoice';
-  static const orders = '/orders';
   static const search = '/search';
   static const categories = '/categories';
   static const resourceExplorer = '/admin/resources';
@@ -311,9 +309,6 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.storePicker:
         page = const StorePickerScreen();
-        break;
-      case Routes.orders:
-        page = const OrdersScreen();
         break;
       case Routes.search:
         page = const SearchScreen();

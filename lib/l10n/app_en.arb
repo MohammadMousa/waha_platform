@@ -117,13 +117,8 @@
   "profileChangeStore": "Change Store",
   "profileNoStoreSelected": "No store selected",
 
-  "navOrders": "Orders",
   "navSearch": "Search",
   "navCategories": "Categories",
-
-  "ordersTitle": "My Orders",
-  "ordersEmpty": "No orders yet.",
-  "ordersLoginPrompt": "Log in to view your order history.",
 
   "searchTitle": "Search",
   "searchHint": "Search products…",

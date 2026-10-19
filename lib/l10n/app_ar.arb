@@ -117,13 +117,8 @@
   "profileChangeStore": "تغيير المتجر",
   "profileNoStoreSelected": "لم يتم اختيار متجر",
 
-  "navOrders": "طلباتي",
   "navSearch": "بحث",
   "navCategories": "التصنيفات",
-
-  "ordersTitle": "طلباتي",
-  "ordersEmpty": "لا طلبات بعد.",
-  "ordersLoginPrompt": "سجّل الدخول لعرض سجل طلباتك.",
 
   "searchTitle": "البحث",
   "searchHint": "ابحث عن منتجات...",
