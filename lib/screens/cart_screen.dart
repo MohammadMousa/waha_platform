@@ -252,6 +252,7 @@ class _CartScreenState extends State<CartScreen> {
             subtotal: quote?.subtotal ?? 0.0,
             tax: quote?.tax ?? 0.0,
             total: quote?.total ?? 0.0,
+            discount: quote?.discountAmount ?? 0.0,
             currency: currency,
             l10n: l10n,
             canCheckout: flow.cart.isNotEmpty && !flow.busy,
@@ -274,6 +275,7 @@ class _CartScreenState extends State<CartScreen> {
 
 class _CartSummaryCard extends StatefulWidget {
   final double subtotal;
+  final double discount;
   final double tax;
   final double total;
   final String? currency;
@@ -284,6 +286,7 @@ class _CartSummaryCard extends StatefulWidget {
 
   const _CartSummaryCard({
     required this.subtotal,
+    required this.discount,
     required this.tax,
     required this.total,
     required this.currency,
@@ -354,6 +357,14 @@ class _CartSummaryCardState extends State<_CartSummaryCard> {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                     child: Column(
                       children: [
+                        if (widget.discount > 0) ...[
+                          _SummaryRow(
+                            l10n.cartDiscount,
+                            -widget.discount,
+                            currency: widget.currency,
+                          ),
+                          const SizedBox(height: 4),
+                        ],
                         _SummaryRow(l10n.cartSubtotal, widget.subtotal, currency: widget.currency),
                         const SizedBox(height: 4),
                         _SummaryRow(l10n.cartTax, widget.tax, currency: widget.currency),

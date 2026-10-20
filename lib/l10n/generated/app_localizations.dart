@@ -194,6 +194,12 @@ abstract class AppLocalizations {
   /// **'Tax'**
   String get cartTax;
 
+  /// No description provided for @cartDiscount.
+  ///
+  /// In en, this message translates to:
+  /// **'Discount'**
+  String get cartDiscount;
+
   /// No description provided for @cartTotal.
   ///
   /// In en, this message translates to:
