@@ -37,10 +37,17 @@ class SuccessScreen extends StatelessWidget {
                             title: Text(localeName(
                                 line.name, localeService.locale.languageCode)),
                             subtitle: Text('x${line.quantity}'),
-                            trailing: Text(line.lineTotal.toStringAsFixed(2)),
+                            trailing: Text((line.lineTotal - line.discountAmount)
+                                .toStringAsFixed(2)),
                           ),
                         ),
                         const Divider(),
+                        if (order.discountAmount > 0)
+                          ListTile(
+                            title: Text(l10n.cartDiscount),
+                            trailing:
+                                Text('-${order.discountAmount.toStringAsFixed(2)}'),
+                          ),
                         ListTile(
                           title: Text(l10n.cartSubtotal),
                           trailing: Text(order.subtotal.toStringAsFixed(2)),

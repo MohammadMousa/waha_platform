@@ -21,6 +21,7 @@
   "cartEmptySubtitle": "Scan a product to add it here.",
   "cartSubtotal": "Subtotal",
   "cartTax": "Tax",
+  "cartDiscount": "Discount",
   "cartTotal": "Total",
   "checkoutButton": "Buy & Pay",
 

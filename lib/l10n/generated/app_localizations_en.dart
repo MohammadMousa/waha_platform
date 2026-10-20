@@ -58,6 +58,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cartTax => 'Tax';
 
   @override
+  String get cartDiscount => 'Discount';
+
+  @override
   String get cartTotal => 'Total';
 
   @override

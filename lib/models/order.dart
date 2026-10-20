@@ -20,6 +20,10 @@ class WahaOrder {
   final String? createdAt;
   final List<QuoteLine> items;
 
+  /// Total discount from all offers, and the invoice-level offer if any.
+  final double discountAmount;
+  final AppliedOffer? invoiceOffer;
+
   const WahaOrder({
     required this.orderId,
     this.wasCreated,
@@ -37,6 +41,8 @@ class WahaOrder {
     this.storeId,
     this.createdAt,
     required this.items,
+    this.discountAmount = 0.0,
+    this.invoiceOffer,
   });
 
   factory WahaOrder.fromJson(Map<String, dynamic> json) => WahaOrder(
@@ -58,5 +64,7 @@ class WahaOrder {
         items: (json['items'] as List<dynamic>? ?? [])
             .map((e) => QuoteLine.fromJson(e as Map<String, dynamic>))
             .toList(),
+        discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
+        invoiceOffer: AppliedOffer.fromJson(json['invoiceOffer']),
       );
 }

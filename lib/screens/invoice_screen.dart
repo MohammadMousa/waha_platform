@@ -1526,8 +1526,20 @@ class _CollapsibleItemsState extends State<_CollapsibleItems> {
                           color: scheme.outline, fontSize: 13),
                     ),
                     const SizedBox(width: 12),
+                    if (item.discountAmount > 0) ...[
+                      Text(
+                        _formatPrice(item.lineTotal, widget.currency),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.outline,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Text(
-                      _formatPrice(item.lineTotal, widget.currency),
+                      _formatPrice(
+                          item.lineTotal - item.discountAmount, widget.currency),
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w600),
                     ),
@@ -1539,6 +1551,15 @@ class _CollapsibleItemsState extends State<_CollapsibleItems> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(
                 children: [
+                  if (widget.order.discountAmount > 0) ...[
+                    _SummaryRow(
+                      label: l10n.cartDiscount,
+                      value: _formatPrice(
+                          -widget.order.discountAmount, widget.currency),
+                      scheme: scheme,
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   _SummaryRow(
                     label: l10n.cartSubtotal,
                     value: _formatPrice(widget.order.subtotal, widget.currency),
