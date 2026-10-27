@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo

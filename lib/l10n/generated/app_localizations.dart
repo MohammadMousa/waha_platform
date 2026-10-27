@@ -200,6 +200,18 @@ abstract class AppLocalizations {
   /// **'Discount'**
   String get cartDiscount;
 
+  /// No description provided for @cartBeforeDiscount.
+  ///
+  /// In en, this message translates to:
+  /// **'Before Discount'**
+  String get cartBeforeDiscount;
+
+  /// No description provided for @cartZeroDueHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add more items to benefit from the offer'**
+  String get cartZeroDueHint;
+
   /// No description provided for @cartTotal.
   ///
   /// In en, this message translates to:
@@ -1039,6 +1051,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Payment Failed'**
   String get terminalPaymentFailedTitle;
+
+  /// No description provided for @terminalResultUnknownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment result unknown'**
+  String get terminalResultUnknownTitle;
+
+  /// No description provided for @terminalResultUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'The card terminal did not answer in time. Do not pay again yet — please ask staff to check the terminal first.'**
+  String get terminalResultUnknown;
 
   /// No description provided for @terminalClose.
   ///

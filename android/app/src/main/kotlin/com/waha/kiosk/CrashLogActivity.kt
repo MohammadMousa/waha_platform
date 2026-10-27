@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import android.app.Activity
 import android.app.AlertDialog

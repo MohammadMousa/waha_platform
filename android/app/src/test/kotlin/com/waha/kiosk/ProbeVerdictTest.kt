@@ -1,6 +1,6 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
-import com.example.waha_platform.TerminalDiagnostics.ChannelResult
+import com.waha.kiosk.TerminalDiagnostics.ChannelResult
 import org.junit.Assert.assertTrue
 import org.junit.Test
 

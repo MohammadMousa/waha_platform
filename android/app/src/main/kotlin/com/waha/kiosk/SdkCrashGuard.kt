@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 /**
  * Decides whether an uncaught exception may be CONTAINED instead of killing the

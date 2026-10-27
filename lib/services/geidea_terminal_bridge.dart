@@ -83,13 +83,30 @@ class GeideaTerminalBridge {
       const bool.fromEnvironment('GEIDEA_MOCK') || fakeTerminalEnabled;
 
   Stream<GeideaConnectionEvent>? _connectionStream;
+  Stream<dynamic>? _rawEvents;
+
+  Stream<dynamic> get _events =>
+      _rawEvents ??= _eventChannel.receiveBroadcastStream().asBroadcastStream();
+
+  static bool _isPaymentAck(dynamic event) =>
+      event is Map && event['state'] == 'paymentAck';
+
+  /// Fires once per payment when the terminal itself first answers the
+  /// command (its acknowledgement). From then on the terminal owns the
+  /// attempt and the kiosk must not offer Cancel.
+  Stream<void> get paymentAcks =>
+      _events.where(_isPaymentAck).map((_) {}).asBroadcastStream();
+
+  /// The message of a payment whose wait ended without any answer.
+  static const timeoutMessage = 'Terminal timed out';
+  static bool isTimeoutMessage(String? message) => message == timeoutMessage;
 
   /// Live push stream of USB connection state — subscribe once (e.g. at
   /// app startup in Kiosk mode) rather than per-payment-attempt, so the
   /// Kiosk can show "terminal not connected" ambiently, not just at the
   /// moment of paying.
   Stream<GeideaConnectionEvent> get connectionEvents {
-    return _connectionStream ??= _eventChannel.receiveBroadcastStream().map((event) {
+    return _connectionStream ??= _events.where((e) => !_isPaymentAck(e)).map((event) {
       final map = Map<String, dynamic>.from(event as Map);
       final state = GeideaConnectionState.values.firstWhere(
         (s) => s.name == map['state'],
@@ -286,7 +303,7 @@ class GeideaTerminalBridge {
         if (attempt.result.isCompleted) return;
         TraceLog.log('Terminal: NO reply from the SDK after ${clock.elapsedMilliseconds}ms (Dart-side timeout) — dumping SDK state');
         unawaited(sdkDump('payment:timeout'));
-        attempt.result.complete(const GeideaPaymentResult(approved: false, errorMessage: 'Terminal timed out'));
+        attempt.result.complete(const GeideaPaymentResult(approved: false, errorMessage: timeoutMessage));
       });
     }
 
@@ -338,7 +355,7 @@ class GeideaTerminalBridge {
     final map = Map<String, dynamic>.from(result);
     final approved = map['status'] == 'approved';
     TraceLog.log('Terminal: ← SDK replied after ${clock.elapsedMilliseconds}ms '
-        'status=${map['status']} receipt=${_clip(map['receipt'] as String? ?? '', 120)}');
+        'status=${map['status']} receipt=${LocalPrefs.detailedLogging ? _clip(map['receipt'] as String? ?? '', 120) : '(hidden)'}');
     // A late decline must not run the SDK dump: it would stop the watch of a
     // newer payment that is in flight by now.
     if (!approved && !late) unawaited(sdkDump('payment:not-approved'));

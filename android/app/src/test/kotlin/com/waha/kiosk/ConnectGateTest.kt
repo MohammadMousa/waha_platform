@@ -1,6 +1,6 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
-import com.example.waha_platform.ConnectGate.Decision
+import com.waha.kiosk.ConnectGate.Decision
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

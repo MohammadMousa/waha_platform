@@ -1,6 +1,6 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
-import com.example.waha_platform.PaymentCallbackClassifier.Outcome
+import com.waha.kiosk.PaymentCallbackClassifier.Outcome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

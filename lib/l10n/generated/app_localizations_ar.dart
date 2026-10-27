@@ -61,6 +61,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get cartDiscount => 'الخصم';
 
   @override
+  String get cartBeforeDiscount => 'قبل الخصم';
+
+  @override
+  String get cartZeroDueHint => 'أضف المزيد من المنتجات للاستفادة من العرض';
+
+  @override
   String get cartTotal => 'الإجمالي';
 
   @override
@@ -506,6 +512,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get terminalPaymentFailedTitle => 'فشلت عملية الدفع';
+
+  @override
+  String get terminalResultUnknownTitle => 'نتيجة الدفع غير معروفة';
+
+  @override
+  String get terminalResultUnknown =>
+      'لم يرد جهاز البطاقة في الوقت المحدد. لا تدفع مرة أخرى الآن — يرجى الطلب من الموظف التحقق من الجهاز أولاً.';
 
   @override
   String get terminalClose => 'إغلاق';

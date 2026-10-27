@@ -5,6 +5,7 @@ import '../models/cart_item.dart';
 import '../models/quote.dart';
 import '../state/locale_service.dart';
 import '../utils/locale_name.dart';
+import '../utils/money.dart';
 import 'product_image.dart';
 import 'quantity_stepper.dart';
 
@@ -73,7 +74,7 @@ class CartLineTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     unitPrice != null
-                        ? '${unitPrice.toStringAsFixed(2)}${currency != null ? ' $currency' : ''} ${l10n.perUnit}'
+                        ? '${formatMoney(unitPrice, currency)} ${l10n.perUnit}'
                         : 'Calculating price…',
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline),
@@ -88,7 +89,7 @@ class CartLineTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        l10n.cartDiscount,
+                        l10n.cartBeforeDiscount,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: Colors.green.shade800,
                           fontWeight: FontWeight.w600,
@@ -119,31 +120,18 @@ class CartLineTile extends StatelessWidget {
                 const SizedBox(height: 14),
                 if (hasDiscount)
                   Text(
-                    lineTotal.toStringAsFixed(2),
+                    formatMoney(lineTotal, currency),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                       decoration: TextDecoration.lineThrough,
                     ),
                   ),
                 if (shownTotal != null)
-                  RichText(
+                  Text(
+                    formatMoney(shownTotal, currency),
                     textAlign: TextAlign.end,
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: shownTotal.toStringAsFixed(2),
-                          style: theme.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        if (currency != null)
-                          TextSpan(
-                            text: ' $currency',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                      ],
-                    ),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   )
                 else
                   Text('—', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),

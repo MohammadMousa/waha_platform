@@ -22,6 +22,8 @@
   "cartSubtotal": "المجموع الفرعي",
   "cartTax": "الضريبة",
   "cartDiscount": "الخصم",
+  "cartBeforeDiscount": "قبل الخصم",
+  "cartZeroDueHint": "أضف المزيد من المنتجات للاستفادة من العرض",
   "cartTotal": "الإجمالي",
   "checkoutButton": "الشراء والدفع",
 
@@ -244,6 +246,8 @@
     }
   },
   "terminalPaymentFailedTitle": "فشلت عملية الدفع",
+  "terminalResultUnknownTitle": "نتيجة الدفع غير معروفة",
+  "terminalResultUnknown": "لم يرد جهاز البطاقة في الوقت المحدد. لا تدفع مرة أخرى الآن — يرجى الطلب من الموظف التحقق من الجهاز أولاً.",
   "terminalClose": "إغلاق",
 
   "autoSelectingIn": "الاختيار التلقائي خلال {seconds} ث — اضغط للدفع الآن",

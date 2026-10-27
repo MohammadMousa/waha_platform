@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,7 +15,7 @@ class SdkCrashGuardTest {
 
     private fun appNpe() = NullPointerException("our own bug").apply {
         stackTrace = arrayOf(
-            StackTraceElement("com.example.waha_platform.MainActivity", "foo", "MainActivity.kt", 1),
+            StackTraceElement("com.waha.kiosk.MainActivity", "foo", "MainActivity.kt", 1),
             StackTraceElement("java.lang.Thread", "run", "Thread.java", 1),
         )
     }

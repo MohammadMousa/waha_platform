@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue

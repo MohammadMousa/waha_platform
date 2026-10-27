@@ -15,6 +15,7 @@ import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
+import '../utils/money.dart';
 import '../utils/scan_actions.dart';
 import '../widgets/cart_line_tile.dart';
 import '../widgets/waha_bottom_nav.dart';
@@ -255,7 +256,11 @@ class _CartScreenState extends State<CartScreen> {
             discount: quote?.discountAmount ?? 0.0,
             currency: currency,
             l10n: l10n,
-            canCheckout: flow.cart.isNotEmpty && !flow.busy,
+            // A cart the offers bring down to nothing due is not an order.
+            zeroDue: quote != null && flow.cart.isNotEmpty && quote.total <= 0,
+            canCheckout: flow.cart.isNotEmpty &&
+                !flow.busy &&
+                !(quote != null && quote.total <= 0),
             onCancel: () {
               context.read<OrderFlowController>().clearCart();
               goHomeKeepingLanding(Navigator.of(context));
@@ -281,6 +286,7 @@ class _CartSummaryCard extends StatefulWidget {
   final String? currency;
   final AppLocalizations l10n;
   final bool canCheckout;
+  final bool zeroDue;
   final VoidCallback onCancel;
   final VoidCallback onCheckout;
 
@@ -292,6 +298,7 @@ class _CartSummaryCard extends StatefulWidget {
     required this.currency,
     required this.l10n,
     required this.canCheckout,
+    required this.zeroDue,
     required this.onCancel,
     required this.onCheckout,
   });
@@ -372,6 +379,16 @@ class _CartSummaryCardState extends State<_CartSummaryCard> {
                     ),
                   ),
                 ],
+                if (widget.zeroDue)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: Text(
+                      l10n.cartZeroDueHint,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: scheme.error, fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 const Divider(height: 1),
                 Row(
                   children: [
@@ -439,15 +456,7 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
-String _fmt(double amount, String? currency) {
-  final s = amount.toStringAsFixed(2);
-  if (currency == null) return s;
-  final u = currency.toUpperCase();
-  if (u == 'SAR') return '$s ﷼';
-  if (u == 'USD') return '\$$s';
-  if (u == 'EUR') return '€$s';
-  return '$s $currency';
-}
+String _fmt(double amount, String? currency) => formatMoney(amount, currency);
 
 // ── Device PIN gate — the way into Settings from Kiosk mode ─────────────────
 // Checked by the backend (POST /api/kiosk/auth/pin/verify, with the device's

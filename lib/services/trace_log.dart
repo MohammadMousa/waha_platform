@@ -49,6 +49,24 @@ class TraceLog {
       await LocalPrefs.setRemoteLoggingEnabled(on);
     }
     await applyEffective();
+    String? raw;
+    config.forEach((k, v) {
+      if (k.toLowerCase() == 'log_level') raw = v;
+    });
+    final level = (raw ?? '').trim().toLowerCase();
+    final clean = (level == 'info' || level == 'warn' || level == 'error') ? level : 'warn';
+    if (LocalPrefs.remoteLogLevel != clean) {
+      await LocalPrefs.setRemoteLogLevel(clean);
+    }
+    await setLevel(clean);
+  }
+
+  static Future<void> setLevel(String level) async {
+    try {
+      await _channel.invokeMethod('setLogLevel', {'level': level});
+    } catch (_) {
+      // Best-effort only.
+    }
   }
 
   static Future<void> setEnabled(bool enabled) async {

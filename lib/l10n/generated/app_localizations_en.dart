@@ -61,6 +61,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cartDiscount => 'Discount';
 
   @override
+  String get cartBeforeDiscount => 'Before Discount';
+
+  @override
+  String get cartZeroDueHint => 'Add more items to benefit from the offer';
+
+  @override
   String get cartTotal => 'Total';
 
   @override
@@ -509,6 +515,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get terminalPaymentFailedTitle => 'Payment Failed';
+
+  @override
+  String get terminalResultUnknownTitle => 'Payment result unknown';
+
+  @override
+  String get terminalResultUnknown =>
+      'The card terminal did not answer in time. Do not pay again yet — please ask staff to check the terminal first.';
 
   @override
   String get terminalClose => 'Close';

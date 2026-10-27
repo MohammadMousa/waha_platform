@@ -1927,6 +1927,14 @@ class _TerminalPaymentScreen extends StatefulWidget {
 class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
   String? _statusLabel;
   bool _failed = false;
+  // The terminal gave no answer in time: the card may still be charged, so
+  // this is "result unknown", not a plain failure. The order itself keeps its
+  // server status; only what this dialog says changes.
+  bool _unknown = false;
+  // Set when the terminal acknowledges the command: it owns the attempt from
+  // then on, so Cancel is not offered any more.
+  bool _terminalAcked = false;
+  StreamSubscription<void>? _ackSub;
   TerminalSession? _session;
   bool _started = false;
 
@@ -1948,7 +1956,16 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _ackSub = GeideaTerminalBridge.instance.paymentAcks.listen((_) {
+      if (mounted && !_failed) setState(() => _terminalAcked = true);
+    });
+  }
+
+  @override
   void dispose() {
+    _ackSub?.cancel();
     _autoCloseTimer?.cancel();
     super.dispose();
   }
@@ -2153,9 +2170,12 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
       if (mounted) {
         setState(() {
           _failed = true;
-          _statusLabel = GeideaTerminalBridge.isBusyMessage(result.errorMessage)
-              ? l10n.terminalBusyTryLater(GeideaTerminalBridge.busyCooldown.inSeconds)
-              : (result.errorMessage ?? l10n.paymentDeclined);
+          _unknown = GeideaTerminalBridge.isTimeoutMessage(result.errorMessage);
+          _statusLabel = _unknown
+              ? l10n.terminalResultUnknown
+              : GeideaTerminalBridge.isBusyMessage(result.errorMessage)
+                  ? l10n.terminalBusyTryLater(GeideaTerminalBridge.busyCooldown.inSeconds)
+                  : (result.errorMessage ?? l10n.paymentDeclined);
         });
         _scheduleAutoClose();
       }
@@ -2195,7 +2215,11 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
               : _TerminalIcon(color: scheme.primary),
           const SizedBox(height: 24),
           Text(
-            done ? l10n.terminalPaymentFailedTitle : l10n.terminalTitle,
+            _unknown
+                ? l10n.terminalResultUnknownTitle
+                : done
+                    ? l10n.terminalPaymentFailedTitle
+                    : l10n.terminalTitle,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
@@ -2213,7 +2237,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
             FilledButton(
                 onPressed: () => Navigator.pop(context, null),
                 child: Text(l10n.terminalClose))
-          else
+          else if (!_terminalAcked)
             OutlinedButton.icon(
               icon: const Icon(Icons.cancel_outlined),
               label: Text(l10n.commonCancel),

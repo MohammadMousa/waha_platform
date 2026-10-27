@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -120,6 +120,9 @@ class MainActivity : FlutterActivity() {
     // "payment:timeout"): a result that still arrives afterwards means the
     // customer paid but the order was not recorded — see startPayment.
     @Volatile private var dartGaveUp = false
+    // elapsedRealtime of the payment now in flight; a late callback of an older
+    // payment must never count as an acknowledgement for the current one.
+    @Volatile private var currentPaymentStartedAt = 0L
 
     // Layer 1: event-driven attach detection — see class doc comment.
     private var receiverRegistered = false
@@ -164,6 +167,29 @@ class MainActivity : FlutterActivity() {
         loggingPrefs().edit().putBoolean("logging_enabled", enabled).apply()
     }
 
+    // Server property Log_Level: "info" keeps everything; "warn" (the default)
+    // and "error" drop the per-byte SDK lines, receipt/transaction text and
+    // card details, and keep what an issue needs (USB drops, outcomes, late
+    // approvals, timeouts, errors, restarts). The SDK capture used by the
+    // verdicts is separate and is not affected.
+    @Volatile private var cachedLogLevel: String? = null
+    private fun logLevel(): String = cachedLogLevel
+        ?: (loggingPrefs().getString("log_level", "warn") ?: "warn").also { cachedLogLevel = it }
+    private fun setLogLevel(level: String) {
+        val clean = level.trim().lowercase().takeIf { it == "info" || it == "warn" || it == "error" } ?: "warn"
+        cachedLogLevel = clean
+        loggingPrefs().edit().putString("log_level", clean).apply()
+    }
+    private fun detailed() = logLevel() == "info"
+
+    private val noisyLinePrefixes = listOf(
+        "SDK[LAST BYTE]", "SDK[CDCSerialDevice]", "SDK[RESPONSE BUFFER]", "SDK[DATA FROM USB]",
+        "SDK[EVENT MESSAGES", "SDK[System.out]", "SDK[Bind Result]", "SDK[TRANSACTION STATUS]", "Hex Value",
+    )
+    private val sensitiveFragments = listOf("<tr", "</tr>", "<html", "<td", "\"cardNumber\"", "\"pan\"")
+    private fun isDetailLine(label: String): Boolean =
+        noisyLinePrefixes.any { label.startsWith(it) } || sensitiveFragments.any { label.contains(it) }
+
     /**
      * Diagnostic-only, temporary: writes a timestamped line to a plain text
      * file on external storage (readable via any file manager app without
@@ -188,6 +214,7 @@ class MainActivity : FlutterActivity() {
     // not of the write.
     private fun logTrace(label: String) {
         if (!loggingEnabled()) return
+        if (!detailed() && isDetailLine(label)) return
         Log.e(TAG, "TRACE: $label")
         val ts = System.currentTimeMillis()
         val ctx = applicationContext
@@ -310,6 +337,13 @@ class MainActivity : FlutterActivity() {
         logPreviousExitReasons()
         Thread {
             try {
+                logTrace(SdkLogCleanup.run(applicationContext))
+            } catch (t: Throwable) {
+                logTrace("SDK log cleanup failed: ${t.javaClass.simpleName}")
+            }
+        }.start()
+        Thread {
+            try {
                 logTrace(SystemSnapshot.full(applicationContext))
             } catch (_: Throwable) {
             }
@@ -400,6 +434,10 @@ class MainActivity : FlutterActivity() {
                         // adb log as native USB/lifecycle events.
                         val label = call.argument<String>("label") ?: ""
                         logTrace("DART: $label")
+                        result.success(true)
+                    }
+                    "setLogLevel" -> {
+                        setLogLevel(call.argument<String>("level") ?: "warn")
                         result.success(true)
                     }
                     "setLoggingEnabled" -> {
@@ -984,6 +1022,7 @@ class MainActivity : FlutterActivity() {
         }
         val startedAt = SystemClock.elapsedRealtime()
         paymentInFlight = true
+        currentPaymentStartedAt = startedAt
         paymentStartEpoch = System.currentTimeMillis()
         lastPaymentCalledBack = false
         dartGaveUp = false
@@ -1006,6 +1045,7 @@ class MainActivity : FlutterActivity() {
         // cannot record it, that is our reconciliation problem — hence the
         // PAYMENT LATE APPROVAL breadcrumb below.
         val answered = AtomicBoolean(false)
+        val ackSent = AtomicBoolean(false)
         val responseCallback = object : Callback<Any?>() {
             override fun call(): Any? {
                 @Suppress("UNCHECKED_CAST")
@@ -1014,11 +1054,22 @@ class MainActivity : FlutterActivity() {
                 logTrace(
                     "startPayment: SDK CALLBACK after ${SystemClock.elapsedRealtime() - startedAt}ms " +
                         "outcome=${result.outcome} fields=${response.size} status='${response.getOrNull(0)}' " +
-                        "code/receipt='${response.getOrNull(1)?.take(120)}' " +
-                        "detailsLen=${response.getOrNull(2)?.length} buffer='${response.getOrNull(3)?.take(300)}'"
+                        "code/receipt='${if (detailed()) response.getOrNull(1)?.take(120) else response.getOrNull(1)?.take(40)?.takeIf { !it.contains("<") }}' " +
+                        "detailsLen=${response.getOrNull(2)?.length} buffer='${if (detailed()) response.getOrNull(3)?.take(300) else response.getOrNull(3)?.take(30)}'"
                 )
                 if (result.outcome == PaymentCallbackClassifier.Outcome.PROGRESS) {
                     logTrace("startPayment: progress only (ack / step codes) — still waiting for the final result")
+                    // The terminal's first word back for THIS payment (status "1"
+                    // with a non-empty code buffer; a stale callback of an older
+                    // payment has an empty buffer or an older start time). Tell the
+                    // screen once, so it can stop offering Cancel.
+                    if (startedAt == currentPaymentStartedAt && paymentInFlight && !dartGaveUp &&
+                        response.getOrNull(0) == "1" && !response.getOrNull(3).isNullOrBlank() &&
+                        ackSent.compareAndSet(false, true)
+                    ) {
+                        logTrace("startPayment: terminal acknowledged the command — Cancel is no longer offered")
+                        sendConnectionEvent("paymentAck")
+                    }
                     return null
                 }
                 if (!answered.compareAndSet(false, true)) {
@@ -1032,6 +1083,8 @@ class MainActivity : FlutterActivity() {
                     paymentStartEpoch, true,
                     if (approved) "approved" else "declined",
                     result.message, lastHandshakeOk,
+                    terminalAnswered = response.getOrNull(0) == "1" &&
+                        (!response.getOrNull(1).isNullOrBlank() || !response.getOrNull(3).isNullOrBlank()),
                 ))
                 logTrace("PAYMENT LADDER\n" + TerminalDiagnostics.ladder(applicationContext, paymentStartEpoch, true))
                 logTrace("PAYMENT TIMELINE\n" + TerminalDiagnostics.timeline(paymentStartEpoch))

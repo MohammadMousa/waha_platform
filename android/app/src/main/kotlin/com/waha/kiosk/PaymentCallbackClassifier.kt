@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 // Decides what ONE callback of the Geidea SDK means for a purchase. The SDK
 // (TerminalResponder.readAndSendCallbcak) calls back several times for a

@@ -242,6 +242,13 @@ class LocalPrefs {
       _p.getBool(_kRemoteLoggingEnabled) ?? false;
   static Future<void> setRemoteLoggingEnabled(bool value) =>
       _p.setBool(_kRemoteLoggingEnabled, value);
+  // Organization property `Log_Level` (Info / Warn / Error, any case): how
+  // much detail goes into the trace log. Default and fallback: warn.
+  static const _kRemoteLogLevel = 'waha.remote_log_level';
+  static String get remoteLogLevel => _p.getString(_kRemoteLogLevel) ?? 'warn';
+  static Future<void> setRemoteLogLevel(String value) =>
+      _p.setString(_kRemoteLogLevel, value);
+  static bool get detailedLogging => remoteLogLevel == 'info';
   static bool get effectiveLoggingEnabled =>
       loggingEnabled || remoteLoggingEnabled;
 

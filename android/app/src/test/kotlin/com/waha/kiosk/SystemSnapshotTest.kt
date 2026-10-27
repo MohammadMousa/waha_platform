@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 /**
  * Lets only one automatic USB connect attempt be outstanding at a time.

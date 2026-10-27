@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 /**
  * Helpers for re-opening the Geidea SDK's background USB service when the SDK

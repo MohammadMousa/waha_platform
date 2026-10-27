@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 /**
  * Names what the main (UI) thread is stuck on while it is stuck.

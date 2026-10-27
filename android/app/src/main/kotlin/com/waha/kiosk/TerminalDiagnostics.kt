@@ -1,4 +1,4 @@
-package com.example.waha_platform
+package com.waha.kiosk
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -228,7 +228,7 @@ object TerminalDiagnostics {
     // ---- the SDK's own log file --------------------------------------------
 
     // Path taken from the SDK's logger (a.d): <filesDir>/<f>, files end in .log.
-    private const val SDK_LOG_SUBDIR = "za52BZx1qweDbat/az2wsxA5xZavet"
+    const val SDK_LOG_SUBDIR = "za52BZx1qweDbat/az2wsxA5xZavet"
 
     /** Directory listing plus the tail of the newest SDK log file. */
     fun sdkLogFileTail(context: Context, maxBytes: Int = 5000): String {
@@ -526,9 +526,14 @@ object TerminalDiagnostics {
     }
 
     /** Classifies one real purchase attempt (E/F, or where it stopped). */
-    fun paymentVerdict(since: Long, callbackReceived: Boolean, status: String?, code: String?, statusHandshakeOk: Boolean?): String {
-        val handed = SdkLogCapture.has("FINAL BUFFER", since)
-        val bytes = SdkLogCapture.has("DATA FROM USB", since)
+    // [terminalAnswered]: the callback itself carries the terminal's own answer
+    // (status "1" with a receipt or a code buffer). The captured SDK log lines
+    // arrive asynchronously and may not be in yet when this runs, so a callback
+    // that proves the terminal answered overrides a missing log line — otherwise
+    // a real terminal decline was reported as "rejected locally".
+    fun paymentVerdict(since: Long, callbackReceived: Boolean, status: String?, code: String?, statusHandshakeOk: Boolean?, terminalAnswered: Boolean = false): String {
+        val handed = terminalAnswered || SdkLogCapture.has("FINAL BUFFER", since)
+        val bytes = terminalAnswered || SdkLogCapture.has("DATA FROM USB", since)
         val port = UsbMilestones.portState()
         return when {
             !handed && callbackReceived -> "Rejected locally by the SDK before any USB write (code=$code) — nothing reached the terminal."

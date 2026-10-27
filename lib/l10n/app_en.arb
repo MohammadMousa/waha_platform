@@ -22,6 +22,8 @@
   "cartSubtotal": "Subtotal",
   "cartTax": "Tax",
   "cartDiscount": "Discount",
+  "cartBeforeDiscount": "Before Discount",
+  "cartZeroDueHint": "Add more items to benefit from the offer",
   "cartTotal": "Total",
   "checkoutButton": "Buy & Pay",
 
@@ -244,6 +246,8 @@
     }
   },
   "terminalPaymentFailedTitle": "Payment Failed",
+  "terminalResultUnknownTitle": "Payment result unknown",
+  "terminalResultUnknown": "The card terminal did not answer in time. Do not pay again yet — please ask staff to check the terminal first.",
   "terminalClose": "Close",
 
   "autoSelectingIn": "Auto-selecting in {seconds}s — tap to pay now",
