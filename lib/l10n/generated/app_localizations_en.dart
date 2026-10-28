@@ -15,19 +15,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navHome => 'Home';
 
   @override
-  String get navScan => 'Scan';
-
-  @override
   String get navCart => 'Cart';
 
   @override
-  String get navProfile => 'Profile';
-
-  @override
   String get navSettings => 'Settings';
-
-  @override
-  String get navStores => 'Stores';
 
   @override
   String get landingHeadline => 'Scan your products to begin';
@@ -79,9 +70,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicePinLabel => 'Enter device PIN';
 
   @override
-  String get devicePinIncorrect => 'Incorrect PIN';
-
-  @override
   String get devicePinUnlock => 'Unlock';
 
   @override
@@ -115,23 +103,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsShowCartMenuKiosk => 'Show cart menu in Kiosk mode';
 
   @override
-  String get payButton => 'Pay';
-
-  @override
-  String get payRetry => 'Retry Payment';
-
-  @override
   String get paymentDeclined => 'Payment declined';
 
   @override
   String get payNoMethods => 'No payment methods available';
-
-  @override
-  String get payNoMethodsSubtitle =>
-      'Please contact support or try again later.';
-
-  @override
-  String get payAlreadyPaid => 'Order Already Paid';
 
   @override
   String get successPaid => 'Paid';
@@ -188,9 +163,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authLoginCta => 'Log In';
 
   @override
-  String get authSwitchToRegister => 'New here? Create an account';
-
-  @override
   String get authRequiredError => 'Username and password are required';
 
   @override
@@ -207,22 +179,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stores => 'Stores';
 
   @override
-  String get storePickerTitle => 'Choose a Store';
-
-  @override
-  String get storePickerSetDefault => 'Set as Default Store';
-
-  @override
-  String get storePickerCurrentStore => 'Current';
-
-  @override
   String get profileLogout => 'Log Out';
 
   @override
   String get profileLogin => 'Log In';
-
-  @override
-  String get profileRegister => 'Register';
 
   @override
   String get profileNoStoreSelected => 'No store selected';
@@ -234,28 +194,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchHint => 'Search products…';
 
   @override
-  String get searchComingSoon => 'Search is coming soon.';
-
-  @override
   String get categoriesTitle => 'Categories';
-
-  @override
-  String get categoriesComingSoon => 'Categories are coming soon.';
 
   @override
   String get viewCart => 'View Cart';
 
   @override
-  String get homeProducts => 'Products';
-
-  @override
   String get checkoutCreating => 'Creating your order…';
-
-  @override
-  String get checkoutSelectPayment => 'Select Payment Method';
-
-  @override
-  String get checkoutOrderSummary => 'Order Summary';
 
   @override
   String get invoiceTitle => 'Invoice';
@@ -281,19 +226,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get invoiceSelectPayment => 'Select Payment Method';
 
   @override
-  String get invoiceDetails => 'Invoice Details';
-
-  @override
   String get invoiceItems => 'Items';
-
-  @override
-  String get invoiceRef => 'Reference';
-
-  @override
-  String get invoiceDate => 'Date';
-
-  @override
-  String get invoiceStatusLabel => 'Status';
 
   @override
   String get invoiceOrderNum => 'Order';
@@ -302,16 +235,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get invoiceNewOrder => 'New Order';
 
   @override
-  String get invoiceQrHint => 'Scan to open invoice on your phone';
-
-  @override
-  String get invoiceClosingSoon => 'Screen closing in';
-
-  @override
   String get payConfirm => 'Confirm Payment';
-
-  @override
-  String get payProcessing => 'Processing payment…';
 
   @override
   String get payWaiting => 'Waiting for payment confirmation…';
@@ -436,16 +360,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get invoiceDueLabel => 'Due';
-
-  @override
-  String get adminPaymentMethods => 'Payment Methods';
-
-  @override
-  String get adminPaymentMethodsHint =>
-      'Enable or disable payment methods for this store.';
-
-  @override
-  String get adminPaymentMethodsSaving => 'Saving…';
 
   @override
   String get mobilePaymentScanHint => 'Scan to pay from your phone';

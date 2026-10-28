@@ -11,8 +11,7 @@ import 'local_prefs.dart';
 /// Files live at: <appSupportDir>/landing/{pageKey}.html
 /// Content hashes live in LocalPrefs under waha.landing_hash.{pageKey}.
 ///
-/// One entry per page key: KIOSK_LANDING, SHOPPING_LANDING,
-/// CLIENT_LANDING, ADMIN_LANDING.
+/// One entry per page key (the kiosk uses KIOSK_LANDING).
 class LandingCache {
   LandingCache._();
 

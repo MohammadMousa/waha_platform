@@ -4,12 +4,8 @@
   "appTitle": "Waha",
 
   "navHome": "الرئيسية",
-  "navScan": "مسح",
   "navCart": "السلة",
-  "navProfile": "الملف الشخصي",
   "navSettings": "الإعدادات",
-  "navStores": "المتاجر",
-
   "landingHeadline": "امسح منتجاتك للبدء",
   "landingSubtitle": "بدون حساب، بدون انتظار — التقط المنتجات من الرف وامسحها.",
 
@@ -29,7 +25,6 @@
   "devicePinDialogTitle": "إعدادات الجهاز",
   "devicePinSignedInAs": "تم الدخول باسم",
   "devicePinLabel": "أدخل رمز PIN الخاص بالجهاز",
-  "devicePinIncorrect": "رمز PIN غير صحيح",
   "devicePinUnlock": "فتح",
 
   "commonOk": "حسنًا",
@@ -52,13 +47,8 @@
 
   "settingsShowCartMenuKiosk": "إظهار قائمة السلة في وضع الكشك",
 
-  "payButton": "ادفع",
-  "payRetry": "إعادة محاولة الدفع",
   "paymentDeclined": "تم رفض الدفع",
   "payNoMethods": "لا توجد وسائل دفع متاحة",
-  "payNoMethodsSubtitle": "يرجى التواصل مع الدعم أو المحاولة لاحقًا.",
-  "payAlreadyPaid": "تم الدفع مسبقًا",
-
   "successPaid": "تم الدفع",
   "successNewOrder": "طلب جديد",
   "successInvoiceQrLabel": "امسح لعرض فاتورتك الإلكترونية",
@@ -80,36 +70,22 @@
   "authUsername": "اسم المستخدم",
   "authPassword": "كلمة المرور",
   "authLoginCta": "تسجيل الدخول",
-  "authSwitchToRegister": "جديد هنا؟ أنشئ حسابًا",
   "authRequiredError": "اسم المستخدم وكلمة المرور مطلوبان",
   "authDeviceLogin": "دخول الجهاز",
   "authPinCode": "الرمز السري",
   "authDeviceLoginSubtitle": "سجّل الدخول بحساب الكشك الخاص بهذا الجهاز",
 
   "stores": "المتاجر",
-  "storePickerTitle": "اختر متجرًا",
-  "storePickerSetDefault": "تعيين كمتجر افتراضي",
-  "storePickerCurrentStore": "الحالي",
   "profileLogout": "تسجيل الخروج",
   "profileLogin": "تسجيل الدخول",
-  "profileRegister": "إنشاء حساب",
   "profileNoStoreSelected": "لم يتم اختيار متجر",
 
   "searchTitle": "البحث",
   "searchHint": "ابحث عن منتجات...",
-  "searchComingSoon": "البحث قادم قريبًا.",
-
   "categoriesTitle": "التصنيفات",
-  "categoriesComingSoon": "التصنيفات قادمة قريبًا.",
-
   "viewCart": "عرض السلة",
 
-  "homeProducts": "المنتجات",
-
   "checkoutCreating": "جاري إنشاء طلبك...",
-  "checkoutSelectPayment": "اختر وسيلة الدفع",
-  "checkoutOrderSummary": "ملخص الطلب",
-
   "invoiceTitle": "الفاتورة",
   "invoicePaid": "مدفوع",
   "invoiceUnpaid": "غير مدفوع",
@@ -122,18 +98,10 @@
     }
   },
   "invoiceSelectPayment": "اختر وسيلة الدفع",
-  "invoiceDetails": "تفاصيل الفاتورة",
   "invoiceItems": "المنتجات",
-  "invoiceRef": "المرجع",
-  "invoiceDate": "التاريخ",
-  "invoiceStatusLabel": "الحالة",
   "invoiceOrderNum": "الطلب",
   "invoiceNewOrder": "طلب جديد",
-  "invoiceQrHint": "امسح للفتح في هاتفك",
-  "invoiceClosingSoon": "الشاشة تغلق خلال",
-
   "payConfirm": "تأكيد الدفع",
-  "payProcessing": "جاري معالجة الدفع...",
   "payWaiting": "في انتظار تأكيد الدفع...",
   "payCheckNow": "دفعت — تحقق الآن",
   "payOpenedBrowser": "أكمل الدفع في التبويب الذي فُتح.",
@@ -221,9 +189,6 @@
   },
 
   "invoiceDueLabel": "المستحق",
-  "adminPaymentMethods": "وسائل الدفع",
-  "adminPaymentMethodsHint": "تفعيل أو تعطيل وسائل الدفع لهذا المتجر.",
-  "adminPaymentMethodsSaving": "جارٍ الحفظ…",
   "mobilePaymentScanHint": "امسح للدفع عبر هاتفك",
   "mobilePaymentPolling": "في انتظار الدفع…",
 

@@ -1,27 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../models/account_user.dart';
 import '../screens/browse_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/categories_screen.dart';
 import '../screens/checkout_screen.dart';
-import '../screens/account_edit_screen.dart';
-import '../screens/accounts_screen.dart';
-import '../screens/landing_editor_screen.dart';
-import '../screens/odoo_admin_screen.dart';
 import '../screens/invoice_screen.dart';
 import '../screens/kiosk_login_screen.dart';
 import '../screens/landing_screen.dart';
-import '../screens/pay_screen.dart';
-import '../screens/product_detail_screen.dart';
 import '../screens/scan_screen.dart';
 import '../screens/search_screen.dart';
-import '../screens/payment_methods_screen.dart';
-import '../screens/receipt_info_edit_screen.dart';
-import '../screens/resource_explorer_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/success_screen.dart';
-import '../models/product.dart';
 import '../state/auth_service.dart';
 import '../widgets/hardware_scan_listener.dart';
 import '../widgets/simulator_overlay.dart';
@@ -94,38 +83,29 @@ class Routes {
   static const scan = '/scan';
   static const cart = '/cart';
   static const checkout = '/checkout';
-  static const pay = '/pay';
   static const success = '/success';
   static const settings = '/settings';
   static const browse = '/browse';
-  static const productDetail = '/browse/product';
   static const kioskLogin = '/kiosk-login';
   static const invoice = '/invoice';
   static const search = '/search';
   static const categories = '/categories';
-  static const resourceExplorer = '/admin/resources';
-  static const receiptInfoEdit = '/admin/receipt-info/edit';
-  static const paymentMethods = '/admin/payment-methods';
 
-  static const odooAdmin = '/admin/odoo';
-  static const landingEditor = '/admin/landing-editor';
-  static const accounts = '/admin/accounts';
-  static const accountEdit = '/admin/accounts/edit';
 
   /// Screens reachable while navigation is restricted — "customer already
   /// has the item in hand" is what's restricted, on a locked terminal.
   /// Account and admin screens are deliberately excluded: restricted
   /// navigation shouldn't offer a way to reach account/config screens
   /// mid-session.
-  // browse/categories/search/productDetail are intentionally included so that
+  // browse/categories/search are intentionally included so that
   // HTML landing-page banners (href="/screen?name=browse_screen&tag=X") can
   // navigate to catalog screens without being blocked
   // by the nav guard. Profile and admin/auth routes remain locked. Settings
   // is reachable only via the deliberate 10-tap + device-PIN gesture on the
   // Cart screen — nothing else links to it from kiosk mode, so adding it
   // here doesn't open any other door.
-  static const kioskAllowlist = {landing, scan, cart, checkout, invoice, pay, success,
-      browse, categories, search, productDetail, settings};
+  static const kioskAllowlist = {landing, scan, cart, checkout, invoice, success,
+      browse, categories, search, settings};
 
   /// Reused (see onGenerateRoute) to decide where the ambient hardware-
   /// scanner listener mounts: the same product/cart screens are exactly
@@ -133,8 +113,8 @@ class Routes {
   /// same set as
   /// kioskAllowlist above — settings has no business accepting a barcode
   /// scan into the cart in the background.
-  static const scanEnabledRoutes = {landing, scan, cart, checkout, invoice, pay, success,
-      browse, categories, search, productDetail};
+  static const scanEnabledRoutes = {landing, scan, cart, checkout, invoice, success,
+      browse, categories, search};
 
   /// Which non-Landing routes count as "after invoice" for idle-timer
   /// purposes (shorter, display-oriented countdown vs. the general
@@ -193,35 +173,8 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
             ? InvoiceScreen(orderId: orderId)
             : const LandingScreen();
         break;
-      case Routes.pay:
-        page = const PayScreen();
-        break;
       case Routes.success:
         page = const SuccessScreen();
-        break;
-      case Routes.odooAdmin:
-        page = const OdooAdminScreen();
-        break;
-      case Routes.landingEditor:
-        page = const LandingEditorScreen();
-        break;
-      case Routes.resourceExplorer:
-        page = const ResourceExplorerScreen();
-        break;
-      case Routes.accounts:
-        page = const AccountsScreen();
-        break;
-      case Routes.accountEdit:
-        final accountArg = settings.arguments;
-        page = accountArg is AccountUser || accountArg == null
-            ? AccountEditScreen(account: accountArg is AccountUser ? accountArg : null)
-            : const LandingScreen();
-        break;
-      case Routes.paymentMethods:
-        page = const PaymentMethodsScreen();
-        break;
-      case Routes.receiptInfoEdit:
-        page = const ReceiptInfoEditScreen();
         break;
       case Routes.settings:
         page = const SettingsScreen();
@@ -241,12 +194,6 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.categories:
         page = const CategoriesScreen();
-        break;
-      case Routes.productDetail:
-        final product = settings.arguments;
-        page = product is Product
-            ? ProductDetailScreen(product: product)
-            : const LandingScreen(); // no product passed — bad nav, bail safely
         break;
       default:
         page = const LandingScreen();

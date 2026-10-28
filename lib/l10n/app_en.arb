@@ -4,12 +4,8 @@
   "appTitle": "Waha",
 
   "navHome": "Home",
-  "navScan": "Scan",
   "navCart": "Cart",
-  "navProfile": "Profile",
   "navSettings": "Settings",
-  "navStores": "Stores",
-
   "landingHeadline": "Scan your products to begin",
   "landingSubtitle": "No account, no waiting — pick items off the shelf and scan.",
 
@@ -29,7 +25,6 @@
   "devicePinDialogTitle": "Device Settings",
   "devicePinSignedInAs": "Signed in as",
   "devicePinLabel": "Enter device PIN",
-  "devicePinIncorrect": "Incorrect PIN",
   "devicePinUnlock": "Unlock",
 
   "commonOk": "OK",
@@ -52,13 +47,8 @@
 
   "settingsShowCartMenuKiosk": "Show cart menu in Kiosk mode",
 
-  "payButton": "Pay",
-  "payRetry": "Retry Payment",
   "paymentDeclined": "Payment declined",
   "payNoMethods": "No payment methods available",
-  "payNoMethodsSubtitle": "Please contact support or try again later.",
-  "payAlreadyPaid": "Order Already Paid",
-
   "successPaid": "Paid",
   "successNewOrder": "New Order",
   "successInvoiceQrLabel": "Scan to view your e-invoice",
@@ -80,36 +70,22 @@
   "authUsername": "Username",
   "authPassword": "Password",
   "authLoginCta": "Log In",
-  "authSwitchToRegister": "New here? Create an account",
   "authRequiredError": "Username and password are required",
   "authDeviceLogin": "Device Login",
   "authPinCode": "PIN",
   "authDeviceLoginSubtitle": "Sign in with this device's kiosk account",
 
   "stores": "Stores",
-  "storePickerTitle": "Choose a Store",
-  "storePickerSetDefault": "Set as Default Store",
-  "storePickerCurrentStore": "Current",
   "profileLogout": "Log Out",
   "profileLogin": "Log In",
-  "profileRegister": "Register",
   "profileNoStoreSelected": "No store selected",
 
   "searchTitle": "Search",
   "searchHint": "Search products…",
-  "searchComingSoon": "Search is coming soon.",
-
   "categoriesTitle": "Categories",
-  "categoriesComingSoon": "Categories are coming soon.",
-
   "viewCart": "View Cart",
 
-  "homeProducts": "Products",
-
   "checkoutCreating": "Creating your order…",
-  "checkoutSelectPayment": "Select Payment Method",
-  "checkoutOrderSummary": "Order Summary",
-
   "invoiceTitle": "Invoice",
   "invoicePaid": "PAID",
   "invoiceUnpaid": "Unpaid",
@@ -122,18 +98,10 @@
     }
   },
   "invoiceSelectPayment": "Select Payment Method",
-  "invoiceDetails": "Invoice Details",
   "invoiceItems": "Items",
-  "invoiceRef": "Reference",
-  "invoiceDate": "Date",
-  "invoiceStatusLabel": "Status",
   "invoiceOrderNum": "Order",
   "invoiceNewOrder": "New Order",
-  "invoiceQrHint": "Scan to open invoice on your phone",
-  "invoiceClosingSoon": "Screen closing in",
-
   "payConfirm": "Confirm Payment",
-  "payProcessing": "Processing payment…",
   "payWaiting": "Waiting for payment confirmation…",
   "payCheckNow": "I've paid — Check Now",
   "payOpenedBrowser": "Complete payment in the browser tab that just opened.",
@@ -221,9 +189,6 @@
   },
 
   "invoiceDueLabel": "Due",
-  "adminPaymentMethods": "Payment Methods",
-  "adminPaymentMethodsHint": "Enable or disable payment methods for this store.",
-  "adminPaymentMethodsSaving": "Saving…",
   "mobilePaymentScanHint": "Scan to pay from your phone",
   "mobilePaymentPolling": "Waiting for payment…",
 

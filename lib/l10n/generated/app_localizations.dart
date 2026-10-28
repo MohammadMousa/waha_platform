@@ -110,35 +110,17 @@ abstract class AppLocalizations {
   /// **'Home'**
   String get navHome;
 
-  /// No description provided for @navScan.
-  ///
-  /// In en, this message translates to:
-  /// **'Scan'**
-  String get navScan;
-
   /// No description provided for @navCart.
   ///
   /// In en, this message translates to:
   /// **'Cart'**
   String get navCart;
 
-  /// No description provided for @navProfile.
-  ///
-  /// In en, this message translates to:
-  /// **'Profile'**
-  String get navProfile;
-
   /// No description provided for @navSettings.
   ///
   /// In en, this message translates to:
   /// **'Settings'**
   String get navSettings;
-
-  /// No description provided for @navStores.
-  ///
-  /// In en, this message translates to:
-  /// **'Stores'**
-  String get navStores;
 
   /// No description provided for @landingHeadline.
   ///
@@ -236,12 +218,6 @@ abstract class AppLocalizations {
   /// **'Enter device PIN'**
   String get devicePinLabel;
 
-  /// No description provided for @devicePinIncorrect.
-  ///
-  /// In en, this message translates to:
-  /// **'Incorrect PIN'**
-  String get devicePinIncorrect;
-
   /// No description provided for @devicePinUnlock.
   ///
   /// In en, this message translates to:
@@ -296,18 +272,6 @@ abstract class AppLocalizations {
   /// **'Show cart menu in Kiosk mode'**
   String get settingsShowCartMenuKiosk;
 
-  /// No description provided for @payButton.
-  ///
-  /// In en, this message translates to:
-  /// **'Pay'**
-  String get payButton;
-
-  /// No description provided for @payRetry.
-  ///
-  /// In en, this message translates to:
-  /// **'Retry Payment'**
-  String get payRetry;
-
   /// No description provided for @paymentDeclined.
   ///
   /// In en, this message translates to:
@@ -319,18 +283,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No payment methods available'**
   String get payNoMethods;
-
-  /// No description provided for @payNoMethodsSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Please contact support or try again later.'**
-  String get payNoMethodsSubtitle;
-
-  /// No description provided for @payAlreadyPaid.
-  ///
-  /// In en, this message translates to:
-  /// **'Order Already Paid'**
-  String get payAlreadyPaid;
 
   /// No description provided for @successPaid.
   ///
@@ -440,12 +392,6 @@ abstract class AppLocalizations {
   /// **'Log In'**
   String get authLoginCta;
 
-  /// No description provided for @authSwitchToRegister.
-  ///
-  /// In en, this message translates to:
-  /// **'New here? Create an account'**
-  String get authSwitchToRegister;
-
   /// No description provided for @authRequiredError.
   ///
   /// In en, this message translates to:
@@ -476,24 +422,6 @@ abstract class AppLocalizations {
   /// **'Stores'**
   String get stores;
 
-  /// No description provided for @storePickerTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose a Store'**
-  String get storePickerTitle;
-
-  /// No description provided for @storePickerSetDefault.
-  ///
-  /// In en, this message translates to:
-  /// **'Set as Default Store'**
-  String get storePickerSetDefault;
-
-  /// No description provided for @storePickerCurrentStore.
-  ///
-  /// In en, this message translates to:
-  /// **'Current'**
-  String get storePickerCurrentStore;
-
   /// No description provided for @profileLogout.
   ///
   /// In en, this message translates to:
@@ -505,12 +433,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Log In'**
   String get profileLogin;
-
-  /// No description provided for @profileRegister.
-  ///
-  /// In en, this message translates to:
-  /// **'Register'**
-  String get profileRegister;
 
   /// No description provided for @profileNoStoreSelected.
   ///
@@ -530,23 +452,11 @@ abstract class AppLocalizations {
   /// **'Search products…'**
   String get searchHint;
 
-  /// No description provided for @searchComingSoon.
-  ///
-  /// In en, this message translates to:
-  /// **'Search is coming soon.'**
-  String get searchComingSoon;
-
   /// No description provided for @categoriesTitle.
   ///
   /// In en, this message translates to:
   /// **'Categories'**
   String get categoriesTitle;
-
-  /// No description provided for @categoriesComingSoon.
-  ///
-  /// In en, this message translates to:
-  /// **'Categories are coming soon.'**
-  String get categoriesComingSoon;
 
   /// No description provided for @viewCart.
   ///
@@ -554,29 +464,11 @@ abstract class AppLocalizations {
   /// **'View Cart'**
   String get viewCart;
 
-  /// No description provided for @homeProducts.
-  ///
-  /// In en, this message translates to:
-  /// **'Products'**
-  String get homeProducts;
-
   /// No description provided for @checkoutCreating.
   ///
   /// In en, this message translates to:
   /// **'Creating your order…'**
   String get checkoutCreating;
-
-  /// No description provided for @checkoutSelectPayment.
-  ///
-  /// In en, this message translates to:
-  /// **'Select Payment Method'**
-  String get checkoutSelectPayment;
-
-  /// No description provided for @checkoutOrderSummary.
-  ///
-  /// In en, this message translates to:
-  /// **'Order Summary'**
-  String get checkoutOrderSummary;
 
   /// No description provided for @invoiceTitle.
   ///
@@ -620,35 +512,11 @@ abstract class AppLocalizations {
   /// **'Select Payment Method'**
   String get invoiceSelectPayment;
 
-  /// No description provided for @invoiceDetails.
-  ///
-  /// In en, this message translates to:
-  /// **'Invoice Details'**
-  String get invoiceDetails;
-
   /// No description provided for @invoiceItems.
   ///
   /// In en, this message translates to:
   /// **'Items'**
   String get invoiceItems;
-
-  /// No description provided for @invoiceRef.
-  ///
-  /// In en, this message translates to:
-  /// **'Reference'**
-  String get invoiceRef;
-
-  /// No description provided for @invoiceDate.
-  ///
-  /// In en, this message translates to:
-  /// **'Date'**
-  String get invoiceDate;
-
-  /// No description provided for @invoiceStatusLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Status'**
-  String get invoiceStatusLabel;
 
   /// No description provided for @invoiceOrderNum.
   ///
@@ -662,29 +530,11 @@ abstract class AppLocalizations {
   /// **'New Order'**
   String get invoiceNewOrder;
 
-  /// No description provided for @invoiceQrHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Scan to open invoice on your phone'**
-  String get invoiceQrHint;
-
-  /// No description provided for @invoiceClosingSoon.
-  ///
-  /// In en, this message translates to:
-  /// **'Screen closing in'**
-  String get invoiceClosingSoon;
-
   /// No description provided for @payConfirm.
   ///
   /// In en, this message translates to:
   /// **'Confirm Payment'**
   String get payConfirm;
-
-  /// No description provided for @payProcessing.
-  ///
-  /// In en, this message translates to:
-  /// **'Processing payment…'**
-  String get payProcessing;
 
   /// No description provided for @payWaiting.
   ///
@@ -889,24 +739,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Due'**
   String get invoiceDueLabel;
-
-  /// No description provided for @adminPaymentMethods.
-  ///
-  /// In en, this message translates to:
-  /// **'Payment Methods'**
-  String get adminPaymentMethods;
-
-  /// No description provided for @adminPaymentMethodsHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Enable or disable payment methods for this store.'**
-  String get adminPaymentMethodsHint;
-
-  /// No description provided for @adminPaymentMethodsSaving.
-  ///
-  /// In en, this message translates to:
-  /// **'Saving…'**
-  String get adminPaymentMethodsSaving;
 
   /// No description provided for @mobilePaymentScanHint.
   ///

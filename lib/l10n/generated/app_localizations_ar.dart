@@ -15,19 +15,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get navHome => 'الرئيسية';
 
   @override
-  String get navScan => 'مسح';
-
-  @override
   String get navCart => 'السلة';
 
   @override
-  String get navProfile => 'الملف الشخصي';
-
-  @override
   String get navSettings => 'الإعدادات';
-
-  @override
-  String get navStores => 'المتاجر';
 
   @override
   String get landingHeadline => 'امسح منتجاتك للبدء';
@@ -79,9 +70,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get devicePinLabel => 'أدخل رمز PIN الخاص بالجهاز';
 
   @override
-  String get devicePinIncorrect => 'رمز PIN غير صحيح';
-
-  @override
   String get devicePinUnlock => 'فتح';
 
   @override
@@ -114,23 +102,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get settingsShowCartMenuKiosk => 'إظهار قائمة السلة في وضع الكشك';
 
   @override
-  String get payButton => 'ادفع';
-
-  @override
-  String get payRetry => 'إعادة محاولة الدفع';
-
-  @override
   String get paymentDeclined => 'تم رفض الدفع';
 
   @override
   String get payNoMethods => 'لا توجد وسائل دفع متاحة';
-
-  @override
-  String get payNoMethodsSubtitle =>
-      'يرجى التواصل مع الدعم أو المحاولة لاحقًا.';
-
-  @override
-  String get payAlreadyPaid => 'تم الدفع مسبقًا';
 
   @override
   String get successPaid => 'تم الدفع';
@@ -187,9 +162,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authLoginCta => 'تسجيل الدخول';
 
   @override
-  String get authSwitchToRegister => 'جديد هنا؟ أنشئ حسابًا';
-
-  @override
   String get authRequiredError => 'اسم المستخدم وكلمة المرور مطلوبان';
 
   @override
@@ -206,22 +178,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get stores => 'المتاجر';
 
   @override
-  String get storePickerTitle => 'اختر متجرًا';
-
-  @override
-  String get storePickerSetDefault => 'تعيين كمتجر افتراضي';
-
-  @override
-  String get storePickerCurrentStore => 'الحالي';
-
-  @override
   String get profileLogout => 'تسجيل الخروج';
 
   @override
   String get profileLogin => 'تسجيل الدخول';
-
-  @override
-  String get profileRegister => 'إنشاء حساب';
 
   @override
   String get profileNoStoreSelected => 'لم يتم اختيار متجر';
@@ -233,28 +193,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get searchHint => 'ابحث عن منتجات...';
 
   @override
-  String get searchComingSoon => 'البحث قادم قريبًا.';
-
-  @override
   String get categoriesTitle => 'التصنيفات';
-
-  @override
-  String get categoriesComingSoon => 'التصنيفات قادمة قريبًا.';
 
   @override
   String get viewCart => 'عرض السلة';
 
   @override
-  String get homeProducts => 'المنتجات';
-
-  @override
   String get checkoutCreating => 'جاري إنشاء طلبك...';
-
-  @override
-  String get checkoutSelectPayment => 'اختر وسيلة الدفع';
-
-  @override
-  String get checkoutOrderSummary => 'ملخص الطلب';
 
   @override
   String get invoiceTitle => 'الفاتورة';
@@ -280,19 +225,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get invoiceSelectPayment => 'اختر وسيلة الدفع';
 
   @override
-  String get invoiceDetails => 'تفاصيل الفاتورة';
-
-  @override
   String get invoiceItems => 'المنتجات';
-
-  @override
-  String get invoiceRef => 'المرجع';
-
-  @override
-  String get invoiceDate => 'التاريخ';
-
-  @override
-  String get invoiceStatusLabel => 'الحالة';
 
   @override
   String get invoiceOrderNum => 'الطلب';
@@ -301,16 +234,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get invoiceNewOrder => 'طلب جديد';
 
   @override
-  String get invoiceQrHint => 'امسح للفتح في هاتفك';
-
-  @override
-  String get invoiceClosingSoon => 'الشاشة تغلق خلال';
-
-  @override
   String get payConfirm => 'تأكيد الدفع';
-
-  @override
-  String get payProcessing => 'جاري معالجة الدفع...';
 
   @override
   String get payWaiting => 'في انتظار تأكيد الدفع...';
@@ -433,16 +357,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get invoiceDueLabel => 'المستحق';
-
-  @override
-  String get adminPaymentMethods => 'وسائل الدفع';
-
-  @override
-  String get adminPaymentMethodsHint =>
-      'تفعيل أو تعطيل وسائل الدفع لهذا المتجر.';
-
-  @override
-  String get adminPaymentMethodsSaving => 'جارٍ الحفظ…';
 
   @override
   String get mobilePaymentScanHint => 'امسح للدفع عبر هاتفك';

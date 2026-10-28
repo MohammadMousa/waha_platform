@@ -41,13 +41,12 @@ class OrderFlowController extends ChangeNotifier {
   /// Effective storeId to send explicitly on quote/checkout, or null to
   /// let the backend resolve it from the session instead. Logged in with
   /// a store selected means omit it — session wins. Not logged in
-  /// (anonymous Normal-mode browsing before checkout gates it, or a
-  /// transient failure state) sends the device-configured
+  /// (a transient failure state) sends the device-configured
   /// StoreConfigService value explicitly. Scan/sync are NOT included in
   /// this — those always require storeId explicitly, no session
   /// fallback, per the backend doc.
   // null → let backend resolve from session (logged in + store selected)
-  // storeConfigService.storeId → explicit (guest/anonymous, or no session store)
+  // storeConfigService.storeId → explicit (no session store)
   // Both null → backend returns 400; that surfaces honestly as an error.
   int? get _sessionAwareStoreId =>
       (authService.isLoggedIn && authService.hasSelectedStore)

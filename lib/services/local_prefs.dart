@@ -416,7 +416,7 @@ class LocalPrefs {
   static Future<void> clearLegacyApiBaseUrl() => _p.remove(_kLegacyApiBaseUrl);
 
   // Landing page cache — hash only; HTML bytes live in LandingCache files.
-  // Separate key per page (KIOSK_LANDING, SHOPPING_LANDING, CLIENT_LANDING, ADMIN_LANDING).
+  // Separate key per page (the kiosk uses KIOSK_LANDING).
   static String? landingHash(String pageKey) =>
       _p.getString('waha.landing_hash.$pageKey');
   static Future<void> setLandingHash(String pageKey, String hash) =>

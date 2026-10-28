@@ -24,7 +24,6 @@ class AuthService extends ChangeNotifier {
   int? sessionStoreId;
   int? organizationId;
   int? defaultStoreId;
-  String? mode;
 
   bool get isLoggedIn => token != null;
   bool get hasSelectedStore => sessionStoreId != null;
@@ -53,7 +52,6 @@ class AuthService extends ChangeNotifier {
       GeideaTerminalBridge.instance.setOrgId(organizationId);
     }
     defaultStoreId = session.defaultStoreId;
-    mode = session.mode;
 
     // Read defaultStoreId from properties map (takes precedence over top-level field,
     // since the backend is moving toward the properties map as the canonical source).
@@ -131,7 +129,6 @@ class AuthService extends ChangeNotifier {
     username = null;
     sessionStoreId = null;
     defaultStoreId = null;
-    mode = null;
     permissionService.clear();
   }
 

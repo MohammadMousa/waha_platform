@@ -1,5 +1,5 @@
 class AuthSession {
-  final String? token; // present on register/login/guest, not on /me
+  final String? token; // present on login, not on /me
   final int? userId; // absent on a Kiosk device session (see deviceId)
   final int? deviceId; // present only on a Kiosk device session
   final String? username; // absent on device/employee login responses —
@@ -7,7 +7,6 @@ class AuthSession {
   final int? storeId;
   final int? organizationId;
   final int? defaultStoreId; // system-configured fallback store
-  final String? mode; // NORMAL | KIOSK | SHOPPING
   final Map<String, String>? properties; // system properties map
   final Set<String> permissions; // resolved permission names for current store
 
@@ -19,7 +18,6 @@ class AuthSession {
     this.storeId,
     this.organizationId,
     this.defaultStoreId,
-    this.mode,
     this.properties,
     this.permissions = const {},
   });
@@ -46,7 +44,6 @@ class AuthSession {
       storeId: json['storeId'] as int?,
       organizationId: json['organizationId'] as int?,
       defaultStoreId: json['defaultStoreId'] as int?,
-      mode: json['mode'] as String?,
       properties: properties,
       permissions: permissions,
     );

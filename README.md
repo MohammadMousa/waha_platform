@@ -1,17 +1,19 @@
-# Waha Platform — Flutter Frontend
+# Waha Kiosk — Flutter app
 
-Flutter frontend for Waha, a multi-store retail and self-service kiosk system. Consumes the [Waha backend](github.com/MohammadMousa/waha) REST API.
+Self-service kiosk app for Waha. A customer scans or browses products, reviews the cart, and pays by card terminal or QR code. It talks to the [Waha backend](github.com/MohammadMousa/waha) REST API.
+
+This repository is **kiosk-only**. The web and phone app (normal and shopping flows, admin screens) lives in `waha_client`, and the dashboard in `waha_admin`.
 
 ---
 
 ## Stack
 
-- **Flutter / Dart** — Android, iOS, Linux desktop (kiosk), Web
+- **Flutter / Dart** — Android kiosk (package `com.waha.kiosk`); Linux desktop builds exist for development
 - **Provider** — state management
 - `flutter_localizations` + ARB — full Arabic / English localisation, RTL-aware
-- `shared_preferences` — token, store, and mode persistence across restarts
-- `webview_flutter` — HTML landing pages, in-app WebView
-- `printing` / `pdf` — client-side PDF generation fallback
+- `shared_preferences` — device token, store and settings across restarts
+- `webview_flutter` — HTML landing pages
+- Kotlin (Android) — Geidea card terminal SDK over USB, log capture and upload, crash and USB diagnostics
 
 ## Running locally
 
@@ -19,86 +21,51 @@ Flutter frontend for Waha, a multi-store retail and self-service kiosk system. C
 # Android emulator
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
 
-# iOS simulator or desktop
-flutter run --dart-define=API_BASE_URL=http://localhost:8080
-
-# Physical device or kiosk on LAN
+# Physical device or kiosk on the LAN
 flutter run --dart-define=API_BASE_URL=http://192.168.1.x:8080
 
-# Web
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8080
+# Or use a settings file
+flutter run --dart-define-from-file=config/dev.json
 ```
 
 ## Building for an environment
 
-The server address is not in the code — it is baked in at build time from a
-per-environment settings file in `config/` (git-ignored; only the
-`*.example.json` templates are committed).
+The server address is baked in at build time from a per-environment settings file in `config/` (git-ignored; only the `*.example.json` templates are committed).
 
 ```bash
 cp config/prod.example.json config/prod.json   # then fill in the real values
-scripts/build_release.sh prod                  # bumps version, builds the APK
-flutter run --dart-define-from-file=config/dev.json   # same file works for runs
+scripts/build_release.sh prod                  # bumps the version, builds the APK
 ```
 
-`API_BASE_URL` is the app's default server. On the device, Settings → Server
-Connection → **Custom Connection** overrides it (ON) and returning to it (OFF)
-never loses the saved custom fields. A plain `flutter run` with no settings
-file falls back to the emulator/localhost address, never to production.
+`API_BASE_URL` is the app's default server. A build without it falls back to the emulator address (`http://10.0.2.2:8081`), which a real device cannot reach — always build releases with the settings file or `--dart-define=API_BASE_URL=...`.
+
+On the device, Settings → Developer Tools → Server Connection → **Custom Connection** overrides the default (ON), and returning to it (OFF) never loses the saved custom fields.
+
+The app id is `com.waha.kiosk`. It installs as a new app next to any older install (`com.example.waha_platform`); saved login and settings are not carried over.
 
 ---
 
-## Modes
+## How it works
 
-The app runs in one of three browsing modes, set at login via `sessionProperties` and persisted locally.
+**One mode.** The app is always a kiosk. Every screen sits behind the **device login** (device username + PIN, validated by the backend). A route outside the allowlist (landing, scan, cart, checkout, invoice, success, browse, categories, search, settings) bounces back to the landing page.
 
-| Mode | Who uses it | Behaviour |
-|------|-------------|-----------|
-| **Normal** | Store staff, admin | Full app — browse, search, cart, orders, profile, admin panel |
-| **Shopping** | Customer's own phone | Guest-friendly — no login required, guest session auto-created |
-| **Kiosk** | Self-service terminal | Locked navigation, idle guard, scan-only entry point |
+**Customer flow.** Landing page (HTML from the store's resource library) → scan products with the hardware scanner or camera, or browse → cart (server-computed quote, offers shown as struck-through prices and a Discount row) → checkout → invoice → pay → paid screen with the invoice QR, then back to the landing page.
 
-Mode is stored in `BrowsingModeService` and drives: which nav items appear, whether the idle guard is active, and which screens are reachable from kiosk links (allowlist: browse, categories, search, product detail).
+**Payment.**
+- **Card terminal** — Geidea terminal over USB. The kiosk hides Cancel once the terminal acknowledges the payment, shows "result unknown" when no answer arrives in time, and reports a late approval (after a cancel or timeout) to the server so the order can be settled.
+- **QR payment** — the kiosk shows a QR, the customer pays on their phone, and the kiosk waits for the confirmation.
 
----
+**Idle guard and restarts.** Configurable inactivity timers reset the kiosk to the landing page. A scheduled auto-restart runs only when the kiosk is idle on the landing page with an empty cart and no payment pending.
 
-## Key features
+**Settings.** Reached by 10 taps on the cart screen followed by the device PIN. Developer Tools (10 taps on the version label) hold the server connection, screen scale, terminal tools and the simulator.
 
-### Catalog & shopping
-- **Browse** — paginated product grid, category filter, infinite scroll
-- **Search** — full-text across product names and tags
-- **Product detail sheet** — avatar, scrollable gallery strip, description, tags, add-to-cart
-- **Cart** — quantity stepper per product, live server-computed quote
-- **Barcode / QR scan** — camera scan or manual entry, kiosk hardware scan via keyboard input intercept
+**Scan commands.** A QR or barcode with the `cmd=` prefix is a kiosk command, not a product:
+- `cmd=upload-logs` — uploads the device log and shows the result.
+- `cmd=profile` — asks for the device PIN, then opens the profile sheet where an admin can sign out or change the account.
 
-### Checkout & payment
-- **Simulated payment** — instant success/failure, useful for demos and testing
-- **QR payment** — kiosk shows QR, customer scans on their phone; SSE stream auto-closes when confirmed
-- **Redirect payment** — Stripe Checkout / MyFatoorah hosted page (opens in browser)
-- **Terminal payment** — card-present EMV flow via backend terminal session API
-- **Invoice screen** — live payment status, bilingual HTML rendered in WebView, PDF download
+**Logs.** The native log level comes from the server property `Log_Level` (Info, Warn or Error; default Warn). Warn and Error drop the per-byte SDK lines, receipts and card details and keep what an issue needs. `enable_logging` is the on/off switch. Old SDK log files are removed at app start.
 
-### Admin panel (Normal mode, ADMIN / OPERATOR)
-- **Edit mode toggle** — overlay edit buttons appear on products and categories in-place; toggled via app bar button
-- **Product edit** — avatar, gallery images, bilingual name/description, tags (chip input)
-- **Category edit** — bilingual name, avatar image
-- **Store edit** — display name, currency, avatar image, payment method toggles
-- **Store management** — list all stores in admin subtree, create new store, switch active store
-- **Resource file manager** — directory tree, upload single file or batch, rename, move, delete; HTML preview via WebView (native) or new tab (web); image preview with layout toggle
-- **Receipt info edit** — store receipt header, bilingual invoice titles
-- **Payment methods** — enable/disable per store (Simulated, QR, Stripe, MyFatoorah, Terminal)
-- **Odoo integration panel** — configure URL/key/database, pull categories + products, push orders
-
-### Landing pages
-- HTML pages served from the store's resource library (`pages/` directory) rendered in-app via WebView
-- Absolute paths resolved at load time; language toggled without reload
-- Banner links (`href="/screen?name=browse_screen&tag=TAG"`) intercepted — navigate to browse/search inside the app; works in kiosk mode
-
-### Kiosk-specific
-- **Idle guard** — configurable inactivity timer, full-screen overlay with countdown; tap to extend, auto-reset to home
-- **Locked navigation** — back gestures and drawer hidden; only allowlisted routes reachable
-- **Language toggle** — visible in kiosk and shopping modes
-- **Dev tools toggle** — hidden tap target in kiosk mode for quick access to settings
+**Server properties the kiosk reads:** `Log_Level`, `enable_logging`, `heartbeat_minutes`, `terminal_timeout_seconds`, and the auto-restart settings (`device_auto_restart_enabled`, `device_auto_restart_hours`, `device_auto_restart_wait_minutes`).
 
 ---
 
@@ -106,109 +73,24 @@ Mode is stored in `BrowsingModeService` and drives: which nav items appear, whet
 
 ```
 lib/
-├── config/
-│   └── app_config.dart          API base URL (dart-define override)
-├── l10n/
-│   ├── app_en.arb               English strings
-│   ├── app_ar.arb               Arabic strings
-│   └── generated/               flutter gen-l10n output — do not edit
-├── models/
-│   ├── auth_session.dart        Token, user info, permissions, store
-│   ├── cart_item.dart
-│   ├── category.dart
-│   ├── order.dart
-│   ├── payment_method.dart
-│   ├── pay_result.dart
-│   ├── product.dart             name/description bilingual JSON, gallery IDs, tags
-│   ├── product_page.dart        Paginated product list response
-│   ├── quote.dart
-│   └── store.dart
-├── router/
-│   └── app_router.dart          Named routes + argument types
-├── screens/
-│   ├── browse_screen.dart       Product grid — category filter, search query, infinite scroll
-│   ├── camera_scan_screen.dart  Camera barcode scan
-│   ├── cart_screen.dart
-│   ├── categories_screen.dart
-│   ├── category_edit_screen.dart
-│   ├── checkout_screen.dart
-│   ├── invoice_screen.dart      HTML invoice in WebView + PDF
-│   ├── landing_screen.dart      HTML landing page in WebView with banner interception
-│   ├── login_screen.dart
-│   ├── odoo_admin_screen.dart
-│   ├── orders_screen.dart
-│   ├── payment_methods_screen.dart
-│   ├── pay_screen.dart
-│   ├── product_detail_screen.dart
-│   ├── product_edit_screen.dart  Avatar, gallery, name, description, tags
-│   ├── profile_screen.dart
-│   ├── qr_payment_screen.dart    QR dialog with SSE countdown
-│   ├── receipt_info_edit_screen.dart
-│   ├── register_screen.dart
-│   ├── resource_explorer_screen.dart  File manager
-│   ├── resource_picker_modal.dart     Resource picker for image selection
-│   ├── scan_screen.dart
-│   ├── search_screen.dart
-│   ├── settings_screen.dart
-│   ├── store_edit_screen.dart
-│   ├── store_picker_screen.dart
-│   └── success_screen.dart
-├── services/
-│   ├── api_client.dart          All HTTP calls — single source of truth
-│   ├── api_exceptions.dart      Typed exceptions (ApiException, NetworkException, …)
-│   ├── landing_cache.dart       Landing page HTML cache + absolute path resolver
-│   ├── local_prefs.dart         SharedPreferences wrapper
-│   ├── scan_sound_service.dart  Beep on barcode scan
-│   └── server_discovery.dart    LAN server discovery
-├── state/
-│   ├── auth_service.dart        Token, login/logout, store selection
-│   ├── browsing_mode_service.dart  Normal / Shopping / Kiosk
-│   ├── edit_mode_service.dart   Edit overlay toggle (admin only)
-│   ├── locale_service.dart      AR / EN toggle
-│   ├── order_flow_controller.dart  Cart, quote, active order
-│   ├── permission_service.dart  can('PERMISSION_NAME') gating
-│   ├── simulator_service.dart   Dev simulator controls
-│   └── store_config_service.dart   Active store — id, slug, currency, display name
-└── widgets/
-    ├── admin_drawer.dart         Admin navigation drawer
-    ├── batch_upload_dialog.dart  Multi-file upload progress
-    ├── cart_line_tile.dart
-    ├── checkout_bar.dart
-    ├── edit_mode_toggle.dart     App bar toggle button
-    ├── kiosk_idle_guard.dart     Inactivity overlay
-    ├── product_detail_sheet.dart  Bottom sheet — loads full detail async (gallery, tags)
-    ├── product_image.dart        Image with loading spinner + placeholder
-    ├── quantity_stepper.dart     Animated +/qty/− pill
-    ├── resource_picker_sheet.dart  Camera / Gallery / Resource Manager chooser
-    ├── save_resource_dialog.dart  Upload + name a new resource
-    ├── scan_capture_field.dart   Hardware scanner keyboard intercept
-    ├── waha_app_bar.dart
-    └── waha_bottom_nav.dart
+├── config/        API base URL, connection settings, screen scale
+├── l10n/          app_en.arb, app_ar.arb, generated/ (flutter gen-l10n output — do not edit)
+├── models/        auth_session, cart_item, category, order, payment_method, pay_result,
+│                  product, product_page, quote, store, terminal_session
+├── router/        app_router.dart — named routes, device-login gate, allowlist
+├── screens/       landing, scan, camera_scan, browse, categories, search, cart, checkout,
+│                  invoice, qr_payment, success, settings, simulator_settings,
+│                  kiosk_login, server_connection
+├── services/      api_client, geidea_terminal_bridge, late_approval_service,
+│                  auto_restart_service, heartbeat_service, landing_cache, local_prefs,
+│                  connection_switcher, hardware_scanner_service, trace_log, usb_diagnostics, ...
+├── state/         auth_service, order_flow_controller, store_config_service, locale_service,
+│                  kiosk_timer_config, permission_service, simulator_service, startup_connection
+├── utils/         scanner_manager (cmd= commands), scan_actions, money, locale_name
+└── widgets/       kiosk_idle_guard, device_pin_dialog, profile_sheet, product_detail_sheet,
+                   waha_app_bar, waha_bottom_nav, simulator_overlay, ...
+android/app/src/main/kotlin/com/waha/kiosk/   terminal SDK glue, log upload, diagnostics
 ```
-
----
-
-## Roles & permissions
-
-Permissions are resolved server-side per user + store and returned in every auth response. `PermissionService` caches them locally and exposes `can('PERMISSION_NAME')` for UI gating. The backend always re-enforces — a bypassed UI check results in a 403.
-
-| Role | Default capabilities |
-|------|---------------------|
-| `SUPER_ADMIN` | Everything |
-| `ADMIN` | Catalog, resources, store management, users |
-| `OPERATOR` | Catalog editing, resource management |
-| `CASHIER` | Order viewing and processing |
-| `REGISTERED` | Browse, own orders |
-| `ANONYMOUS` | Browse (guest session) |
-
-Key permissions used for UI gating:
-
-| Permission | Gates |
-|------------|-------|
-| `EDIT_PRODUCTS` | Edit mode toggle, product edit button |
-| `MANAGE_CATEGORIES` | Category edit button |
-| `EDIT_RESOURCES` | File manager upload/rename/delete |
-| `MANAGE_STORES` | Store management, store creation, edit store |
 
 ---
 
@@ -220,32 +102,27 @@ ARB files live in `lib/l10n/`. After editing, regenerate:
 flutter gen-l10n
 ```
 
-Generated files go to `lib/l10n/generated/` — do not edit by hand. The active locale is managed by `LocaleService` and can be toggled at runtime (kiosk and shopping modes show a language button in the app bar).
+Generated files go to `lib/l10n/generated/` — do not edit by hand. The active locale is managed by `LocaleService` and toggled with the language button in the app bar.
 
 ---
 
-## Product images
+## Tests
 
-`ProductImage` widget handles all product, category, and store avatar display:
-- Shows a two-ring loading spinner while the image loads
-- Falls back to a tinted placeholder on error or when `imageResourceId` is null
-- URL is `{API_BASE_URL}/api/resources/{imageResourceId}` — served directly from the backend
+```bash
+flutter analyze
+flutter test
+```
 
-Gallery images in the product detail sheet are loaded as a horizontal strip via the same widget.
+---
+
+## Landing pages
+
+See `docs/landing-page-rendering.md`. Pages are HTML from the store's resource library, shown in a WebView; root-relative paths are resolved at load time. Banner links such as `href="/screen?name=browse_screen&tag=TAG"` are intercepted and open the matching screen inside the app.
 
 ---
 
 ## Screenshots
 
-### Browse & Cart
-
 | Browse with quantity stepper | Invoice (unpaid) | Invoice (paid) |
 |---|---|---|
 | ![Browse](docs/screenshots/ui/browse-stepper.png) | ![Unpaid](docs/screenshots/ui/invoice-unpaid.png) | ![Paid](docs/screenshots/ui/invoice-paid.png) |
-
-### Odoo Integration
-
-| Admin Dashboard | Order Push (Odoo) | e-Invoice |
-|---|---|---|
-| ![Dashboard](docs/screenshots/odoo/admin-dashboard.png) | ![Orders](docs/screenshots/odoo/order-push.png) | ![Invoice](docs/screenshots/odoo/e-invoice.png) |
-
