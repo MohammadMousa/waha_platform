@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/account_user.dart';
-import '../models/store.dart';
 import '../screens/browse_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/categories_screen.dart';
@@ -14,28 +13,19 @@ import '../screens/odoo_admin_screen.dart';
 import '../screens/invoice_screen.dart';
 import '../screens/kiosk_login_screen.dart';
 import '../screens/landing_screen.dart';
-import '../screens/login_screen.dart';
 import '../screens/pay_screen.dart';
 import '../screens/product_detail_screen.dart';
-import '../screens/profile_screen.dart';
-import '../screens/register_screen.dart';
 import '../screens/scan_screen.dart';
 import '../screens/search_screen.dart';
-import '../screens/category_edit_screen.dart';
-import '../screens/product_edit_screen.dart';
 import '../screens/payment_methods_screen.dart';
 import '../screens/receipt_info_edit_screen.dart';
 import '../screens/resource_explorer_screen.dart';
 import '../screens/settings_screen.dart';
-import '../screens/store_edit_screen.dart';
-import '../screens/store_picker_screen.dart';
 import '../screens/success_screen.dart';
-import '../models/category.dart';
 import '../models/product.dart';
 import '../state/auth_service.dart';
 import '../state/browsing_mode_service.dart';
 import '../widgets/hardware_scan_listener.dart';
-import '../widgets/mode_badge.dart';
 import '../widgets/simulator_overlay.dart';
 
 /// Lets code outside the routed page tree (KioskIdleGuard, mounted once
@@ -109,20 +99,13 @@ class Routes {
   static const pay = '/pay';
   static const success = '/success';
   static const settings = '/settings';
-  static const profile = '/profile';
   static const browse = '/browse';
   static const productDetail = '/browse/product';
-  static const register = '/register';
-  static const login = '/login';
   static const kioskLogin = '/kiosk-login';
-  static const storePicker = '/store-picker';
   static const invoice = '/invoice';
   static const search = '/search';
   static const categories = '/categories';
   static const resourceExplorer = '/admin/resources';
-  static const productEdit = '/admin/product/edit';
-  static const categoryEdit = '/admin/category/edit';
-  static const storeEdit = '/admin/store/edit';
   static const receiptInfoEdit = '/admin/receipt-info/edit';
   static const paymentMethods = '/admin/payment-methods';
 
@@ -251,25 +234,6 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
       case Routes.resourceExplorer:
         page = const ResourceExplorerScreen();
         break;
-      case Routes.productEdit:
-        final productId = settings.arguments;
-        page = productId is int
-            ? ProductEditScreen(productId: productId)
-            : const LandingScreen();
-        break;
-      case Routes.categoryEdit:
-        final catArg = settings.arguments;
-        page = catArg is Category
-            ? CategoryEditScreen(category: catArg)
-            : const LandingScreen();
-        break;
-      case Routes.storeEdit:
-        final storeArg = settings.arguments;
-        // null argument = create mode; Store argument = edit mode
-        page = (storeArg is Store || storeArg == null)
-            ? StoreEditScreen(store: storeArg is Store ? storeArg : null)
-            : const LandingScreen();
-        break;
       case Routes.accounts:
         page = const AccountsScreen();
         break;
@@ -288,9 +252,6 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
       case Routes.settings:
         page = const SettingsScreen();
         break;
-      case Routes.profile:
-        page = const ProfileScreen();
-        break;
       case Routes.browse:
         final browseArgs = settings.arguments;
         final categoryId = browseArgs is Map ? browseArgs['categoryId'] as int? : null;
@@ -298,17 +259,8 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         final searchQuery = browseArgs is Map ? browseArgs['searchQuery'] as String? : null;
         page = BrowseScreen(categoryId: categoryId, browseTitle: browseTitle, searchQuery: searchQuery);
         break;
-      case Routes.register:
-        page = const RegisterScreen();
-        break;
-      case Routes.login:
-        page = const LoginScreen();
-        break;
       case Routes.kioskLogin:
         page = const KioskLoginScreen();
-        break;
-      case Routes.storePicker:
-        page = const StorePickerScreen();
         break;
       case Routes.search:
         page = const SearchScreen();
@@ -359,7 +311,6 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         // holding focus, so it survives navigation away from Landing.
         if (Routes.scanEnabledRoutes.contains(name)) const HardwareScanListener(),
         const SimulatorOverlay(),
-        const ModeBadge(),
       ],
     ),
   );

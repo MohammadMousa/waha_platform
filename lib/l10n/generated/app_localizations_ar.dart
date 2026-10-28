@@ -37,9 +37,6 @@ class AppLocalizationsAr extends AppLocalizations {
       'بدون حساب، بدون انتظار — التقط المنتجات من الرف وامسحها.';
 
   @override
-  String get ctaStartScanning => 'ابدأ المسح';
-
-  @override
   String get ctaContinueShopping => 'متابعة التسوق';
 
   @override
@@ -148,18 +145,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get receiptTitle => 'الإيصال';
 
   @override
-  String get settingsAppMode => 'وضع التطبيق';
-
-  @override
-  String get modeNormal => 'عادي';
-
-  @override
-  String get modeKiosk => 'كشك';
-
-  @override
-  String get modeShopping => 'تسوق';
-
-  @override
   String get settingsKioskTimers => 'مؤقتات استرداد الكشك عند الخمول';
 
   @override
@@ -167,9 +152,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get settingsLanguage => 'اللغة';
-
-  @override
-  String get profileTitle => 'الملف الشخصي';
 
   @override
   String get navBrowse => 'تصفح';
@@ -202,34 +184,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authPassword => 'كلمة المرور';
 
   @override
-  String get authRegisterTitle => 'إنشاء حساب';
-
-  @override
-  String get authLoginTitle => 'تسجيل الدخول';
-
-  @override
-  String get authRegisterCta => 'إنشاء حساب';
-
-  @override
   String get authLoginCta => 'تسجيل الدخول';
-
-  @override
-  String get authSwitchToLogin => 'لديك حساب بالفعل؟ سجّل الدخول';
 
   @override
   String get authSwitchToRegister => 'جديد هنا؟ أنشئ حسابًا';
 
   @override
   String get authRequiredError => 'اسم المستخدم وكلمة المرور مطلوبان';
-
-  @override
-  String get authPhoneLabel => 'رقم الهاتف';
-
-  @override
-  String get authSendOtp => 'إرسال الرمز';
-
-  @override
-  String get authAdminLogin => 'دخول المشرف';
 
   @override
   String get authDeviceLogin => 'دخول الجهاز';
@@ -248,38 +209,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get storePickerTitle => 'اختر متجرًا';
 
   @override
-  String get storePickerEmpty => 'لا توجد متاجر متاحة';
-
-  @override
   String get storePickerSetDefault => 'تعيين كمتجر افتراضي';
 
   @override
-  String get storePickerDefaultSetSuffix => 'تم تعيينه كمتجر افتراضي';
-
-  @override
-  String get storePickerGoToStore => 'الذهاب للمتجر';
-
-  @override
-  String get storePickerMakeDefault => 'تعيين افتراضي';
-
-  @override
-  String get storePickerIsDefault => 'افتراضي';
-
-  @override
   String get storePickerCurrentStore => 'الحالي';
-
-  @override
-  String get storePickerRefreshStore => 'تحديث المتجر';
-
-  @override
-  String get storePickerRefreshed => 'تم تحديث المتجر';
-
-  @override
-  String get profileLoggedInPrefix => 'مسجّل الدخول باسم';
-
-  @override
-  String get profileGuestMessage =>
-      'غير مسجّل الدخول — الشراء كضيف لا يزال يعمل.';
 
   @override
   String get profileLogout => 'تسجيل الخروج';
@@ -291,16 +224,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get profileRegister => 'إنشاء حساب';
 
   @override
-  String get profileChangeStore => 'تغيير المتجر';
-
-  @override
   String get profileNoStoreSelected => 'لم يتم اختيار متجر';
-
-  @override
-  String get navSearch => 'بحث';
-
-  @override
-  String get navCategories => 'التصنيفات';
 
   @override
   String get searchTitle => 'البحث';
@@ -321,9 +245,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get viewCart => 'عرض السلة';
 
   @override
-  String get homeSearchHint => 'ماذا تبحث عن؟';
-
-  @override
   String get homeProducts => 'المنتجات';
 
   @override
@@ -334,12 +255,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get checkoutOrderSummary => 'ملخص الطلب';
-
-  @override
-  String get seeAll => 'عرض الكل';
-
-  @override
-  String get recentlyAdded => 'أحدث المنتجات';
 
   @override
   String get invoiceTitle => 'الفاتورة';
@@ -363,9 +278,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get invoiceSelectPayment => 'اختر وسيلة الدفع';
-
-  @override
-  String get invoiceDownloadPdf => 'تحميل الفاتورة';
 
   @override
   String get invoiceDetails => 'تفاصيل الفاتورة';
@@ -411,15 +323,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get language => 'اللغة';
-
-  @override
-  String get shareInvoice => 'مشاركة الفاتورة';
-
-  @override
-  String get shareCopyLink => 'نسخ الرابط';
-
-  @override
-  String get shareLinkCopied => 'تم نسخ الرابط';
 
   @override
   String get commonCancel => 'إلغاء';

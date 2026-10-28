@@ -152,12 +152,6 @@ abstract class AppLocalizations {
   /// **'No account, no waiting — pick items off the shelf and scan.'**
   String get landingSubtitle;
 
-  /// No description provided for @ctaStartScanning.
-  ///
-  /// In en, this message translates to:
-  /// **'Start Scanning'**
-  String get ctaStartScanning;
-
   /// No description provided for @ctaContinueShopping.
   ///
   /// In en, this message translates to:
@@ -362,30 +356,6 @@ abstract class AppLocalizations {
   /// **'Receipt'**
   String get receiptTitle;
 
-  /// No description provided for @settingsAppMode.
-  ///
-  /// In en, this message translates to:
-  /// **'App mode'**
-  String get settingsAppMode;
-
-  /// No description provided for @modeNormal.
-  ///
-  /// In en, this message translates to:
-  /// **'Normal'**
-  String get modeNormal;
-
-  /// No description provided for @modeKiosk.
-  ///
-  /// In en, this message translates to:
-  /// **'Kiosk'**
-  String get modeKiosk;
-
-  /// No description provided for @modeShopping.
-  ///
-  /// In en, this message translates to:
-  /// **'Shopping'**
-  String get modeShopping;
-
   /// No description provided for @settingsKioskTimers.
   ///
   /// In en, this message translates to:
@@ -403,12 +373,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Language'**
   String get settingsLanguage;
-
-  /// No description provided for @profileTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Profile'**
-  String get profileTitle;
 
   /// No description provided for @navBrowse.
   ///
@@ -470,35 +434,11 @@ abstract class AppLocalizations {
   /// **'Password'**
   String get authPassword;
 
-  /// No description provided for @authRegisterTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Register'**
-  String get authRegisterTitle;
-
-  /// No description provided for @authLoginTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Log In'**
-  String get authLoginTitle;
-
-  /// No description provided for @authRegisterCta.
-  ///
-  /// In en, this message translates to:
-  /// **'Create Account'**
-  String get authRegisterCta;
-
   /// No description provided for @authLoginCta.
   ///
   /// In en, this message translates to:
   /// **'Log In'**
   String get authLoginCta;
-
-  /// No description provided for @authSwitchToLogin.
-  ///
-  /// In en, this message translates to:
-  /// **'Already have an account? Log in'**
-  String get authSwitchToLogin;
 
   /// No description provided for @authSwitchToRegister.
   ///
@@ -511,24 +451,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Username and password are required'**
   String get authRequiredError;
-
-  /// No description provided for @authPhoneLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Phone Number'**
-  String get authPhoneLabel;
-
-  /// No description provided for @authSendOtp.
-  ///
-  /// In en, this message translates to:
-  /// **'Send OTP'**
-  String get authSendOtp;
-
-  /// No description provided for @authAdminLogin.
-  ///
-  /// In en, this message translates to:
-  /// **'Admin Login'**
-  String get authAdminLogin;
 
   /// No description provided for @authDeviceLogin.
   ///
@@ -560,71 +482,17 @@ abstract class AppLocalizations {
   /// **'Choose a Store'**
   String get storePickerTitle;
 
-  /// No description provided for @storePickerEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No stores available'**
-  String get storePickerEmpty;
-
   /// No description provided for @storePickerSetDefault.
   ///
   /// In en, this message translates to:
   /// **'Set as Default Store'**
   String get storePickerSetDefault;
 
-  /// No description provided for @storePickerDefaultSetSuffix.
-  ///
-  /// In en, this message translates to:
-  /// **'set as default store'**
-  String get storePickerDefaultSetSuffix;
-
-  /// No description provided for @storePickerGoToStore.
-  ///
-  /// In en, this message translates to:
-  /// **'Go to Store'**
-  String get storePickerGoToStore;
-
-  /// No description provided for @storePickerMakeDefault.
-  ///
-  /// In en, this message translates to:
-  /// **'Make Default'**
-  String get storePickerMakeDefault;
-
-  /// No description provided for @storePickerIsDefault.
-  ///
-  /// In en, this message translates to:
-  /// **'Default'**
-  String get storePickerIsDefault;
-
   /// No description provided for @storePickerCurrentStore.
   ///
   /// In en, this message translates to:
   /// **'Current'**
   String get storePickerCurrentStore;
-
-  /// No description provided for @storePickerRefreshStore.
-  ///
-  /// In en, this message translates to:
-  /// **'Refresh Store'**
-  String get storePickerRefreshStore;
-
-  /// No description provided for @storePickerRefreshed.
-  ///
-  /// In en, this message translates to:
-  /// **'Store refreshed'**
-  String get storePickerRefreshed;
-
-  /// No description provided for @profileLoggedInPrefix.
-  ///
-  /// In en, this message translates to:
-  /// **'Logged in as'**
-  String get profileLoggedInPrefix;
-
-  /// No description provided for @profileGuestMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'Not logged in — guest checkout still works.'**
-  String get profileGuestMessage;
 
   /// No description provided for @profileLogout.
   ///
@@ -644,29 +512,11 @@ abstract class AppLocalizations {
   /// **'Register'**
   String get profileRegister;
 
-  /// No description provided for @profileChangeStore.
-  ///
-  /// In en, this message translates to:
-  /// **'Change Store'**
-  String get profileChangeStore;
-
   /// No description provided for @profileNoStoreSelected.
   ///
   /// In en, this message translates to:
   /// **'No store selected'**
   String get profileNoStoreSelected;
-
-  /// No description provided for @navSearch.
-  ///
-  /// In en, this message translates to:
-  /// **'Search'**
-  String get navSearch;
-
-  /// No description provided for @navCategories.
-  ///
-  /// In en, this message translates to:
-  /// **'Categories'**
-  String get navCategories;
 
   /// No description provided for @searchTitle.
   ///
@@ -704,12 +554,6 @@ abstract class AppLocalizations {
   /// **'View Cart'**
   String get viewCart;
 
-  /// No description provided for @homeSearchHint.
-  ///
-  /// In en, this message translates to:
-  /// **'What are you looking for?'**
-  String get homeSearchHint;
-
   /// No description provided for @homeProducts.
   ///
   /// In en, this message translates to:
@@ -733,18 +577,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Order Summary'**
   String get checkoutOrderSummary;
-
-  /// No description provided for @seeAll.
-  ///
-  /// In en, this message translates to:
-  /// **'See all'**
-  String get seeAll;
-
-  /// No description provided for @recentlyAdded.
-  ///
-  /// In en, this message translates to:
-  /// **'Recently Added'**
-  String get recentlyAdded;
 
   /// No description provided for @invoiceTitle.
   ///
@@ -787,12 +619,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select Payment Method'**
   String get invoiceSelectPayment;
-
-  /// No description provided for @invoiceDownloadPdf.
-  ///
-  /// In en, this message translates to:
-  /// **'Download Invoice'**
-  String get invoiceDownloadPdf;
 
   /// No description provided for @invoiceDetails.
   ///
@@ -883,24 +709,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Language'**
   String get language;
-
-  /// No description provided for @shareInvoice.
-  ///
-  /// In en, this message translates to:
-  /// **'Share Invoice'**
-  String get shareInvoice;
-
-  /// No description provided for @shareCopyLink.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy Link'**
-  String get shareCopyLink;
-
-  /// No description provided for @shareLinkCopied.
-  ///
-  /// In en, this message translates to:
-  /// **'Link copied to clipboard'**
-  String get shareLinkCopied;
 
   /// No description provided for @commonCancel.
   ///

@@ -16,8 +16,7 @@ import 'store_config_service.dart';
 
 /// Customer identity — Bearer-token auth, opaque token looked up
 /// server-side. Kiosk: operator provisions device once, auto-login
-/// on each launch. Shopping: guest() called first time no usable
-/// cached session exists. Normal: anonymous until checkout gates it.
+/// on each launch.
 class AuthService extends ChangeNotifier {
   String? token;
   int? userId;
@@ -91,29 +90,12 @@ class AuthService extends ChangeNotifier {
   // only the token, validated via GET /api/auth/me on the next start (see
   // resolveStartupAuth). A rejected/expired token means signing in again
   // by hand, never a silent replay of a cached password.
-  Future<void> register(ApiClient api, String username, String password) async {
-    final session = await api.register(username, password);
-    _applySession(session, tokenOverride: session.token);
-    await LocalPrefs.setAuthToken(session.token!);
-    notifyListeners();
-  }
-
   Future<void> login(ApiClient api, String username, String password) async {
     final currentMode = browsingModeService.mode.name.toUpperCase();
     final session = await api
         .login(username, password, sessionProperties: {'mode': currentMode});
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
-    notifyListeners();
-  }
-
-  /// Creates a throwaway Shopping guest session. No credentials cached —
-  /// guest accounts are ephemeral and recreated fresh each time.
-  Future<void> loginAsGuest(ApiClient api) async {
-    final session = await api.guest();
-    _applySession(session, tokenOverride: session.token);
-    await LocalPrefs.setAuthToken(session.token!);
-    // No credentials to cache — guest has no password we know.
     notifyListeners();
   }
 
@@ -212,8 +194,7 @@ class AuthService extends ChangeNotifier {
   ///   Normal/Shopping:
   ///     1. Try cached token via GET /api/auth/me.
   ///     2. If rejected, re-authenticate with cached credentials.
-  ///     3. Shopping mode: mint a fresh guest account via POST /api/auth/guest.
-  ///        Normal: stay logged out (anonymous browsing is allowed there).
+  ///     3. Stay logged out (anonymous browsing is allowed).
   ///   Always: if no store configured after auth, resolve from server default.
   Future<void> resolveStartupAuth(ApiClient api, BrowsingMode mode) async {
     // Load public system config (appName, etc.) before any auth so the title
@@ -276,21 +257,12 @@ class AuthService extends ChangeNotifier {
         // Really rejected (revoked/invalidated), not just unreachable —
         // drop it. Never re-authenticated from a cached password (Waha
         // Rules, Auth — no credentials stored locally, any login type):
-        // Shopping falls through to a fresh guest account below, Normal
         // stays logged out until the person signs in again by hand.
         await LocalPrefs.clearAuthToken();
       } catch (_) {
         // Network/timeout — keep token but still resolve currency if possible.
         token = cachedToken;
         notifyListeners();
-      }
-    }
-
-    if (token == null && mode == BrowsingMode.shopping) {
-      try {
-        await loginAsGuest(api);
-      } catch (_) {
-        // Backend unreachable — stay logged out, surface error at checkout.
       }
     }
 
@@ -320,27 +292,16 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Fetches the server's store list and resolves currency + display name in-memory.
-  /// Honors the preferred store (from LocalPrefs). If it's a non-public store
-  /// (parent/admin node), falls back to the admin store list when logged in.
-  /// Never writes to LocalPrefs.
+  /// Honors the preferred store (from LocalPrefs). Never writes to LocalPrefs.
   Future<void> resolveDefaultStore(ApiClient api) async {
     if (storeConfigService.storeCurrency != null) return;
     try {
       final preferredId = storeConfigService.storeId;
-      List<Store> stores = await api.getStores();
+      final stores = await api.getStores();
 
       Store? preferred = preferredId != null
           ? stores.where((s) => s.id == preferredId).firstOrNull
           : null;
-
-      // Preferred store not in public list (e.g. admin/parent node) — try admin list.
-      if (preferred == null && preferredId != null && token != null) {
-        try {
-          final adminStores = await api.getAdminStores(token!);
-          preferred = adminStores.where((s) => s.id == preferredId).firstOrNull;
-          if (stores.isEmpty) stores = adminStores;
-        } catch (_) {}
-      }
 
       final Store? s = preferred ?? (stores.isNotEmpty ? stores.first : null);
       if (s != null) {
@@ -350,7 +311,7 @@ class AuthService extends ChangeNotifier {
             currency: s.currency);
       }
     } catch (_) {
-      // Non-fatal — user hits StorePicker if they try to browse with no store.
+      // Non-fatal — browsing without a store shows the usual load error.
     }
   }
 }

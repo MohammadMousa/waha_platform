@@ -7,6 +7,7 @@ import '../services/api_client.dart';
 import '../state/auth_service.dart';
 import '../state/locale_service.dart';
 import '../state/store_config_service.dart';
+import '../utils/locale_name.dart';
 
 /// Profile bottom sheet — shown from the AppBar profile icon in Normal mode.
 /// Contains: session info, language switcher, store/orders/logout actions.
@@ -37,14 +38,13 @@ class _ProfileSheetState extends State<ProfileSheet> {
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
     final loggedIn = authService.isLoggedIn;
-    final storeName = context.watch<StoreConfigService>().storeName;
-    final storeId = authService.hasSelectedStore
-        ? authService.sessionStoreId
-        : context.watch<StoreConfigService>().storeId;
-    final storeLabel = storeName ??
-        (storeId != null ? 'Store #$storeId' : l10n.profileNoStoreSelected);
-
+    final storeConfig = context.watch<StoreConfigService>();
     final currentLocale = context.watch<LocaleService>().locale;
+    final displayName =
+        localeName(storeConfig.storeDisplayName, currentLocale.languageCode);
+    final storeLabel = displayName.isNotEmpty
+        ? displayName
+        : (storeConfig.storeName ?? storeConfig.storeSlug ?? l10n.profileNoStoreSelected);
 
     return SafeArea(
       child: Padding(
@@ -75,7 +75,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
             ),
             const SizedBox(height: 12),
 
-            // Name / guest label
+            // Name
             if (loggedIn) ...[
               Text(
                 authService.username ?? '',
@@ -89,12 +89,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                 storeLabel,
                 style: TextStyle(color: scheme.outline, fontSize: 13),
               ),
-            ] else
-              Text(
-                l10n.profileGuestMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.outline),
-              ),
+            ],
 
             const SizedBox(height: 20),
 
@@ -126,17 +121,6 @@ class _ProfileSheetState extends State<ProfileSheet> {
             const SizedBox(height: 8),
 
             if (loggedIn) ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.storefront_outlined, color: scheme.primary),
-                title: Text(l10n.profileChangeStore),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamed(Routes.storePicker);
-                },
-              ),
-              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.tonal(
@@ -150,23 +134,12 @@ class _ProfileSheetState extends State<ProfileSheet> {
                 ),
               ),
             ] else ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.storefront_outlined, color: scheme.primary),
-                title: Text(storeLabel),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamed(Routes.storePicker);
-                },
-              ),
-              const SizedBox(height: 4),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    Navigator.of(context).pushNamed(Routes.login);
+                    Navigator.of(context).pushNamed(Routes.kioskLogin);
                   },
                   child: Text(l10n.profileLogin),
                 ),

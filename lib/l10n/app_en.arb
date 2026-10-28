@@ -13,7 +13,6 @@
   "landingHeadline": "Scan your products to begin",
   "landingSubtitle": "No account, no waiting — pick items off the shelf and scan.",
 
-  "ctaStartScanning": "Start Scanning",
   "ctaContinueShopping": "Continue Shopping",
 
   "cartTitle": "Cart",
@@ -65,15 +64,9 @@
   "successInvoiceQrLabel": "Scan to view your e-invoice",
   "receiptTitle": "Receipt",
 
-  "settingsAppMode": "App mode",
-  "modeNormal": "Normal",
-  "modeKiosk": "Kiosk",
-  "modeShopping": "Shopping",
   "settingsKioskTimers": "Kiosk idle-recovery timers",
   "settingsSaveTimers": "Save Timers",
   "settingsLanguage": "Language",
-
-  "profileTitle": "Profile",
 
   "navBrowse": "Browse",
   "browseTitle": "Products",
@@ -86,42 +79,21 @@
 
   "authUsername": "Username",
   "authPassword": "Password",
-  "authRegisterTitle": "Register",
-  "authLoginTitle": "Log In",
-  "authRegisterCta": "Create Account",
   "authLoginCta": "Log In",
-  "authSwitchToLogin": "Already have an account? Log in",
   "authSwitchToRegister": "New here? Create an account",
   "authRequiredError": "Username and password are required",
-  "authPhoneLabel": "Phone Number",
-  "authSendOtp": "Send OTP",
-  "authAdminLogin": "Admin Login",
   "authDeviceLogin": "Device Login",
   "authPinCode": "PIN",
   "authDeviceLoginSubtitle": "Sign in with this device's kiosk account",
 
   "stores": "Stores",
   "storePickerTitle": "Choose a Store",
-  "storePickerEmpty": "No stores available",
   "storePickerSetDefault": "Set as Default Store",
-  "storePickerDefaultSetSuffix": "set as default store",
-  "storePickerGoToStore": "Go to Store",
-  "storePickerMakeDefault": "Make Default",
-  "storePickerIsDefault": "Default",
   "storePickerCurrentStore": "Current",
-  "storePickerRefreshStore": "Refresh Store",
-  "storePickerRefreshed": "Store refreshed",
-
-  "profileLoggedInPrefix": "Logged in as",
-  "profileGuestMessage": "Not logged in — guest checkout still works.",
   "profileLogout": "Log Out",
   "profileLogin": "Log In",
   "profileRegister": "Register",
-  "profileChangeStore": "Change Store",
   "profileNoStoreSelected": "No store selected",
-
-  "navSearch": "Search",
-  "navCategories": "Categories",
 
   "searchTitle": "Search",
   "searchHint": "Search products…",
@@ -132,15 +104,11 @@
 
   "viewCart": "View Cart",
 
-  "homeSearchHint": "What are you looking for?",
   "homeProducts": "Products",
 
   "checkoutCreating": "Creating your order…",
   "checkoutSelectPayment": "Select Payment Method",
   "checkoutOrderSummary": "Order Summary",
-
-  "seeAll": "See all",
-  "recentlyAdded": "Recently Added",
 
   "invoiceTitle": "Invoice",
   "invoicePaid": "PAID",
@@ -154,7 +122,6 @@
     }
   },
   "invoiceSelectPayment": "Select Payment Method",
-  "invoiceDownloadPdf": "Download Invoice",
   "invoiceDetails": "Invoice Details",
   "invoiceItems": "Items",
   "invoiceRef": "Reference",
@@ -172,10 +139,6 @@
   "payOpenedBrowser": "Complete payment in the browser tab that just opened.",
 
   "language": "Language",
-
-  "shareInvoice": "Share Invoice",
-  "shareCopyLink": "Copy Link",
-  "shareLinkCopied": "Link copied to clipboard",
 
   "commonCancel": "Cancel",
 

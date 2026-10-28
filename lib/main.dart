@@ -22,7 +22,6 @@ import 'services/trace_log.dart';
 import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
 import 'state/browsing_mode_service.dart';
-import 'state/edit_mode_service.dart';
 import 'state/locale_service.dart';
 import 'state/order_flow_controller.dart';
 import 'state/permission_service.dart';
@@ -218,7 +217,6 @@ class WahaApp extends StatelessWidget {
           create: (context) => OrderFlowController(context.read<ApiClient>()),
         ),
         ChangeNotifierProvider(create: (_) => SimulatorService()),
-        ChangeNotifierProvider.value(value: editModeService),
         ChangeNotifierProvider.value(value: storeConfigService),
         ChangeNotifierProvider.value(value: browsingModeService),
         ChangeNotifierProvider.value(value: localeService),

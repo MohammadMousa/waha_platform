@@ -92,11 +92,6 @@ String formatMmSs(int totalSeconds) {
   return '$m:$r';
 }
 
-/// 409 on register — username already taken.
-class UsernameTakenException extends ApiException {
-  const UsernameTakenException(super.statusCode, super.message);
-}
-
 /// Any other non-2xx we didn't specifically anticipate — still carries the
 /// real message, just not a status we've special-cased yet.
 class UnknownApiException extends ApiException {

@@ -13,7 +13,6 @@
   "landingHeadline": "امسح منتجاتك للبدء",
   "landingSubtitle": "بدون حساب، بدون انتظار — التقط المنتجات من الرف وامسحها.",
 
-  "ctaStartScanning": "ابدأ المسح",
   "ctaContinueShopping": "متابعة التسوق",
 
   "cartTitle": "السلة",
@@ -65,15 +64,9 @@
   "successInvoiceQrLabel": "امسح لعرض فاتورتك الإلكترونية",
   "receiptTitle": "الإيصال",
 
-  "settingsAppMode": "وضع التطبيق",
-  "modeNormal": "عادي",
-  "modeKiosk": "كشك",
-  "modeShopping": "تسوق",
   "settingsKioskTimers": "مؤقتات استرداد الكشك عند الخمول",
   "settingsSaveTimers": "حفظ المؤقتات",
   "settingsLanguage": "اللغة",
-
-  "profileTitle": "الملف الشخصي",
 
   "navBrowse": "تصفح",
   "browseTitle": "المنتجات",
@@ -86,42 +79,21 @@
 
   "authUsername": "اسم المستخدم",
   "authPassword": "كلمة المرور",
-  "authRegisterTitle": "إنشاء حساب",
-  "authLoginTitle": "تسجيل الدخول",
-  "authRegisterCta": "إنشاء حساب",
   "authLoginCta": "تسجيل الدخول",
-  "authSwitchToLogin": "لديك حساب بالفعل؟ سجّل الدخول",
   "authSwitchToRegister": "جديد هنا؟ أنشئ حسابًا",
   "authRequiredError": "اسم المستخدم وكلمة المرور مطلوبان",
-  "authPhoneLabel": "رقم الهاتف",
-  "authSendOtp": "إرسال الرمز",
-  "authAdminLogin": "دخول المشرف",
   "authDeviceLogin": "دخول الجهاز",
   "authPinCode": "الرمز السري",
   "authDeviceLoginSubtitle": "سجّل الدخول بحساب الكشك الخاص بهذا الجهاز",
 
   "stores": "المتاجر",
   "storePickerTitle": "اختر متجرًا",
-  "storePickerEmpty": "لا توجد متاجر متاحة",
   "storePickerSetDefault": "تعيين كمتجر افتراضي",
-  "storePickerDefaultSetSuffix": "تم تعيينه كمتجر افتراضي",
-  "storePickerGoToStore": "الذهاب للمتجر",
-  "storePickerMakeDefault": "تعيين افتراضي",
-  "storePickerIsDefault": "افتراضي",
   "storePickerCurrentStore": "الحالي",
-  "storePickerRefreshStore": "تحديث المتجر",
-  "storePickerRefreshed": "تم تحديث المتجر",
-
-  "profileLoggedInPrefix": "مسجّل الدخول باسم",
-  "profileGuestMessage": "غير مسجّل الدخول — الشراء كضيف لا يزال يعمل.",
   "profileLogout": "تسجيل الخروج",
   "profileLogin": "تسجيل الدخول",
   "profileRegister": "إنشاء حساب",
-  "profileChangeStore": "تغيير المتجر",
   "profileNoStoreSelected": "لم يتم اختيار متجر",
-
-  "navSearch": "بحث",
-  "navCategories": "التصنيفات",
 
   "searchTitle": "البحث",
   "searchHint": "ابحث عن منتجات...",
@@ -132,15 +104,11 @@
 
   "viewCart": "عرض السلة",
 
-  "homeSearchHint": "ماذا تبحث عن؟",
   "homeProducts": "المنتجات",
 
   "checkoutCreating": "جاري إنشاء طلبك...",
   "checkoutSelectPayment": "اختر وسيلة الدفع",
   "checkoutOrderSummary": "ملخص الطلب",
-
-  "seeAll": "عرض الكل",
-  "recentlyAdded": "أحدث المنتجات",
 
   "invoiceTitle": "الفاتورة",
   "invoicePaid": "مدفوع",
@@ -154,7 +122,6 @@
     }
   },
   "invoiceSelectPayment": "اختر وسيلة الدفع",
-  "invoiceDownloadPdf": "تحميل الفاتورة",
   "invoiceDetails": "تفاصيل الفاتورة",
   "invoiceItems": "المنتجات",
   "invoiceRef": "المرجع",
@@ -172,10 +139,6 @@
   "payOpenedBrowser": "أكمل الدفع في التبويب الذي فُتح.",
 
   "language": "اللغة",
-
-  "shareInvoice": "مشاركة الفاتورة",
-  "shareCopyLink": "نسخ الرابط",
-  "shareLinkCopied": "تم نسخ الرابط",
 
   "commonCancel": "إلغاء",
 

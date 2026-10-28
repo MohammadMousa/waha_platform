@@ -8,16 +8,13 @@ import '../l10n/generated/app_localizations.dart';
 import '../models/quote.dart';
 import '../router/app_router.dart';
 import '../services/local_prefs.dart';
-import '../services/api_client.dart';
-import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/simulator_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/money.dart';
-import '../utils/scan_actions.dart';
 import '../widgets/cart_line_tile.dart';
+import '../widgets/device_pin_dialog.dart';
 import '../widgets/waha_bottom_nav.dart';
 
 class CartScreen extends StatefulWidget {
@@ -59,7 +56,6 @@ class _CartScreenState extends State<CartScreen> {
       return;
     }
 
-    if (browsingModeService.mode != BrowsingMode.kiosk) return;
     _tapTimer?.cancel();
     _tapCount++;
     if (_tapCount >= 10) {
@@ -73,7 +69,7 @@ class _CartScreenState extends State<CartScreen> {
   Future<void> _showDevicePinDialog() async {
     final unlocked = await showDialog<bool>(
       context: context,
-      builder: (_) => const _DevicePinDialog(),
+      builder: (_) => const DevicePinDialog(),
     );
     if (unlocked == true && mounted) {
       Navigator.of(context).pushNamed(Routes.settings);
@@ -128,17 +124,14 @@ class _CartScreenState extends State<CartScreen> {
   @override
   Widget build(BuildContext context) {
     final flow = context.watch<OrderFlowController>();
-    final mode = context.watch<BrowsingModeService>().mode;
-    final isShopping = mode == BrowsingMode.shopping;
-    final isKiosk = mode == BrowsingMode.kiosk;
     final quote = flow.quote;
     final l10n = AppLocalizations.of(context)!;
     final currency = context.watch<StoreConfigService>().storeCurrency
         ?? flow.order?.currency;
 
-    // Hidden by default in Kiosk mode — the polished design has nothing
-    // below the summary card and action buttons. Settings can opt back in.
-    final showBottomNav = !isKiosk || LocalPrefs.showCartMenuInKiosk;
+    // Hidden by default — the polished design has nothing below the summary
+    // card and action buttons. Settings can opt back in.
+    final showBottomNav = LocalPrefs.showCartMenuInKiosk;
 
     return Scaffold(
       appBar: AppBar(
@@ -195,19 +188,10 @@ class _CartScreenState extends State<CartScreen> {
                           ),
                           const SizedBox(height: 20),
                           OutlinedButton.icon(
-                            icon: Icon(isShopping
-                                ? Icons.qr_code_scanner
-                                : Icons.home_outlined),
-                            label: Text(
-                              isShopping ? l10n.ctaStartScanning : l10n.ctaContinueShopping,
-                            ),
-                            onPressed: () {
-                              if (isShopping) {
-                                openCameraAndAddToCart(context);
-                              } else {
-                                goHomeKeepingLanding(Navigator.of(context));
-                              }
-                            },
+                            icon: const Icon(Icons.home_outlined),
+                            label: Text(l10n.ctaContinueShopping),
+                            onPressed: () =>
+                                goHomeKeepingLanding(Navigator.of(context)),
                           ),
                         ],
                       ),
@@ -457,99 +441,3 @@ class _SummaryRow extends StatelessWidget {
 }
 
 String _fmt(double amount, String? currency) => formatMoney(amount, currency);
-
-// ── Device PIN gate — the way into Settings from Kiosk mode ─────────────────
-// Checked by the backend (POST /api/kiosk/auth/pin/verify, with the device's
-// own session token) — the PIN is never stored or compared on the device.
-// Pops `true` only once the server says the PIN matches.
-
-class _DevicePinDialog extends StatefulWidget {
-  const _DevicePinDialog();
-
-  @override
-  State<_DevicePinDialog> createState() => _DevicePinDialogState();
-}
-
-class _DevicePinDialogState extends State<_DevicePinDialog> {
-  final _pinController = TextEditingController();
-  String? _error;
-  bool _checking = false;
-
-  @override
-  void dispose() {
-    _pinController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_checking) return;
-    final entered = _pinController.text.trim();
-    final token = authService.token;
-    if (token == null) {
-      setState(() => _error = 'Not signed in — restart the app and sign in again');
-      return;
-    }
-    setState(() {
-      _checking = true;
-      _error = null;
-    });
-    final problem = await context.read<ApiClient>().verifyKioskPin(token, entered);
-    if (!mounted) return;
-    if (problem == null) {
-      Navigator.of(context).pop(true);
-    } else {
-      setState(() {
-        _checking = false;
-        _error = problem;
-      });
-      _pinController.clear();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
-    final username = authService.username ?? '—';
-
-    return AlertDialog(
-      icon: Icon(Icons.admin_panel_settings_outlined, color: scheme.primary, size: 32),
-      title: Text(l10n.devicePinDialogTitle),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.devicePinSignedInAs,
-              style: TextStyle(fontSize: 12, color: scheme.outline)),
-          Text(username,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _pinController,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            maxLength: 12,
-            decoration: InputDecoration(
-              labelText: l10n.devicePinLabel,
-              border: const OutlineInputBorder(),
-              errorText: _error,
-              counterText: '',
-            ),
-            onSubmitted: (_) => _submit(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(l10n.commonCancel),
-        ),
-        FilledButton(
-          onPressed: _checking ? null : _submit,
-          child: Text(l10n.devicePinUnlock),
-        ),
-      ],
-    );
-  }
-}

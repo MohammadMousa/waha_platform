@@ -70,16 +70,12 @@ class LocalPrefs {
       _p.setInt(_kDefaultStoreId, value);
 
   static const _kKioskUsername = 'waha.kiosk_username';
-  static String? get kioskUsername => _p.getString(_kKioskUsername);
-  static Future<void> setKioskUsername(String value) =>
-      _p.setString(_kKioskUsername, value);
 
   /// Persists the device username only — NOT the PIN. "Waha Rules" (Auth)
   /// forbids storing passwords/PINs locally for any login type; a device
   /// session is now validated on startup via its token (GET
   /// /api/kiosk/auth/me, see AuthService.resolveStartupAuth), never by
-  /// replaying a cached PIN. Deliberately separate from setKioskUsername
-  /// above, which is unrelated leftover state from IdentityService.
+  /// replaying a cached PIN.
   static Future<void> setKioskUsernameCache(String username) =>
       _p.setString(_kKioskUsername, username);
 

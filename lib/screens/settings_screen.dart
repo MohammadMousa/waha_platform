@@ -736,8 +736,6 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final currentMode = context.watch<BrowsingModeService>().mode;
-    final l10n = AppLocalizations.of(context)!;
 
     return Card(
       elevation: 0,
@@ -810,40 +808,6 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
 
                   const Divider(height: 32),
 
-                  // App Mode — moved in here (was a top-level dropdown) since
-                  // this app is meant to run as Kiosk only for now; keeping
-                  // it behind the same PIN gate as the rest of Developer
-                  // Tools instead of a plain always-visible control.
-                  Text(l10n.settingsAppMode,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<BrowsingMode>(
-                    initialValue: currentMode,
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(), isDense: true),
-                    items: BrowsingMode.values
-                        .where((m) =>
-                            m.availableOnCurrentPlatform || m == currentMode)
-                        .map((m) => DropdownMenuItem(
-                            value: m, child: Text(_modeLabel(m, l10n))))
-                        .toList(),
-                    onChanged: (m) {
-                      if (m != null) browsingModeService.setMode(m);
-                    },
-                  ),
-                  if (!currentMode.availableOnCurrentPlatform) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '${_modeLabel(currentMode, l10n)} is normally used on '
-                      '${currentMode.platforms.map(_platformLabel).join(' or ')} — '
-                      'this platform is ${_platformLabel(currentPlatform())}.',
-                      style:
-                          const TextStyle(color: Colors.orange, fontSize: 13),
-                    ),
-                  ],
-
-                  const Divider(height: 32),
-
                   // Scan feedback
                   const Text('Scan feedback',
                       style: TextStyle(fontWeight: FontWeight.w600)),
@@ -897,16 +861,6 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                         style:
                             const TextStyle(color: Colors.red, fontSize: 12)),
                   ],
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.storefront_outlined),
-                    label: Text(
-                      storeConfigService.storeId != null
-                          ? 'Store #${storeConfigService.storeId} — pick from list'
-                          : 'Pick from store list',
-                    ),
-                    onPressed: () =>
-                        Navigator.of(context).pushNamed(Routes.storePicker),
-                  ),
 
                   const Divider(height: 32),
 
@@ -1260,18 +1214,6 @@ class _SecondsField extends StatelessWidget {
     );
   }
 }
-
-String _modeLabel(BrowsingMode m, AppLocalizations l10n) => switch (m) {
-      BrowsingMode.normal => l10n.modeNormal,
-      BrowsingMode.kiosk => l10n.modeKiosk,
-      BrowsingMode.shopping => l10n.modeShopping,
-    };
-
-String _platformLabel(SupportedPlatform p) => switch (p) {
-      SupportedPlatform.web => 'Web',
-      SupportedPlatform.android => 'Android',
-      SupportedPlatform.desktop => 'Desktop',
-    };
 
 // ── Admin: Payment Methods Panel ──────────────────────────────────────────────
 // Expandable tile in the Admin section. Loads all payment methods for the
@@ -1630,9 +1572,7 @@ class _ServerConnectionPanelState extends State<ServerConnectionPanel> {
       custom: _customOn ? _draft : AppConfig.connection.custom,
       activeApi: api,
       order: order,
-      credentials: _credsNeeded
-          ? SwitchCredentials(_userCtrl.text, _secretCtrl.text)
-          : null,
+      credentials: SwitchCredentials(_userCtrl.text, _secretCtrl.text),
     );
     if (!mounted) return;
     setState(() {
@@ -1656,8 +1596,6 @@ class _ServerConnectionPanelState extends State<ServerConnectionPanel> {
         'server' => 'Server',
         _ => 'Sign-in',
       };
-
-  bool get _credsNeeded => browsingModeService.mode != BrowsingMode.shopping;
 
   @override
   Widget build(BuildContext context) {
@@ -1877,44 +1815,38 @@ class _ServerConnectionPanelState extends State<ServerConnectionPanel> {
                     ],
                     if (_needsApply) ...[
                       const SizedBox(height: 14),
-                      if (_credsNeeded) ...[
-                        Text(
-                          browsingModeService.mode == BrowsingMode.kiosk
-                              ? 'Sign in to the ${_customOn ? 'new' : 'default'} server (device login — not saved)'
-                              : 'Sign in to the ${_customOn ? 'new' : 'default'} server (not saved)',
-                          style: TextStyle(fontSize: 12, color: scheme.outline),
+                      Text(
+                        'Sign in to the ${_customOn ? 'new' : 'default'} server (device login — not saved)',
+                        style: TextStyle(fontSize: 12, color: scheme.outline),
+                      ),
+                      const SizedBox(height: 6),
+                      _FieldRow(
+                        label: 'User',
+                        child: TextField(
+                          controller: _userCtrl,
+                          decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              hintText: authService.username != null
+                                  ? 'optional — ${authService.username}'
+                                  : 'username'),
+                          autocorrect: false,
+                          enableSuggestions: false,
                         ),
-                        const SizedBox(height: 6),
-                        _FieldRow(
-                          label: 'User',
-                          child: TextField(
-                            controller: _userCtrl,
-                            decoration: InputDecoration(
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                                hintText: authService.username != null
-                                    ? 'optional — ${authService.username}'
-                                    : 'username'),
-                            autocorrect: false,
-                            enableSuggestions: false,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      _FieldRow(
+                        label: 'PIN',
+                        child: TextField(
+                          controller: _secretCtrl,
+                          obscureText: true,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                              border: OutlineInputBorder(), isDense: true),
                         ),
-                        const SizedBox(height: 8),
-                        _FieldRow(
-                          label: browsingModeService.mode == BrowsingMode.kiosk
-                              ? 'PIN'
-                              : 'Password',
-                          child: TextField(
-                            controller: _secretCtrl,
-                            obscureText: true,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            decoration: const InputDecoration(
-                                border: OutlineInputBorder(), isDense: true),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
+                      ),
+                      const SizedBox(height: 14),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(

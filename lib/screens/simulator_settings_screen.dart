@@ -11,7 +11,6 @@ import '../services/api_client.dart';
 import '../services/landing_cache.dart';
 import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/simulator_service.dart';
 import '../widgets/info_tiles.dart';
 
@@ -346,11 +345,7 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
   @override
   void initState() {
     super.initState();
-    _selectedKey = switch (browsingModeService.mode) {
-      BrowsingMode.kiosk => 'KIOSK_LANDING',
-      BrowsingMode.shopping => 'SHOPPING_LANDING',
-      BrowsingMode.normal => 'CLIENT_LANDING',
-    };
+    _selectedKey = 'KIOSK_LANDING';
   }
 
   bool get _supportsWebView =>

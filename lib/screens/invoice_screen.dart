@@ -176,7 +176,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   Future<void> _loadMethods() async {
     try {
-      final mode = browsingModeService.mode.name.toUpperCase();
+      const mode = 'KIOSK';
       final storeId =
           authService.sessionStoreId ?? storeConfigService.storeId;
       _methods = await context
@@ -197,21 +197,19 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     // paid order locally and never touches the controller otherwise.
     context.read<OrderFlowController>().setOrder(order);
     setState(() => _phase = _Phase.paid);
-    if (browsingModeService.mode == BrowsingMode.kiosk) {
-      // Delay one frame so the Scaffold beneath the dialog is fully built.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          barrierColor: Colors.black87,
-          builder: (_) => _KioskPaidDialog(
-            order: order,
-            onNewOrder: _resetAndGoHome,
-          ),
-        );
-      });
-    }
+    // Delay one frame so the Scaffold beneath the dialog is fully built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black87,
+        builder: (_) => _KioskPaidDialog(
+          order: order,
+          onNewOrder: _resetAndGoHome,
+        ),
+      );
+    });
   }
 
   void _resetAndGoHome() {
@@ -372,89 +370,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     _pollTimer?.cancel();
     context.read<OrderFlowController>().setPaymentInProgress(false);
     setState(() => _phase = _Phase.loaded);
-  }
-
-  void _shareInvoice(WahaOrder order) {
-    final url = order.invoiceUrl ??
-        Uri.base.resolve('#/invoice/${order.orderId}').toString();
-    final scheme = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context)!;
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 16, 24, MediaQuery.of(ctx).padding.bottom + 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text(l10n.shareInvoice,
-                style: Theme.of(ctx)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 16),
-            _ShareOption(
-              icon: Icons.chat_outlined,
-              label: 'WhatsApp',
-              color: const Color(0xFF25D366),
-              onTap: () async {
-                Navigator.of(ctx).pop();
-                final waUrl = Uri.parse(
-                    'https://wa.me/?text=${Uri.encodeComponent(url)}');
-                await launchUrl(waUrl,
-                    mode: LaunchMode.externalApplication);
-              },
-            ),
-            const SizedBox(height: 8),
-            _ShareOption(
-              icon: Icons.send_outlined,
-              label: 'Telegram',
-              color: const Color(0xFF2AABEE),
-              onTap: () async {
-                Navigator.of(ctx).pop();
-                final tgUrl = Uri.parse(
-                    'https://t.me/share/url?url=${Uri.encodeComponent(url)}');
-                await launchUrl(tgUrl,
-                    mode: LaunchMode.externalApplication);
-              },
-            ),
-            const SizedBox(height: 8),
-            _ShareOption(
-              icon: Icons.copy_outlined,
-              label: l10n.shareCopyLink,
-              color: scheme.outline,
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: url));
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(l10n.shareLinkCopied),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   // The auto-select timer (_maybeStartAutoSelect) and a manual tap both call
@@ -658,28 +573,21 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    // Block back in kiosk/shopping — these are self-service modes with no
-    // meaningful "previous screen" to return to. Normal mode always allows back.
-    final bool isKiosk = browsingModeService.mode == BrowsingMode.kiosk;
-    final bool isShopping = browsingModeService.mode == BrowsingMode.shopping;
-    final bool blockBack = isKiosk || isShopping;
-
+    // Back is blocked — a self-service kiosk has no meaningful "previous
+    // screen" to return to.
     return PopScope(
-      canPop: !blockBack,
+      canPop: false,
       child: Scaffold(
         appBar: AppBar(
           title: Text(l10n.invoiceTitle),
-          leading: blockBack ? null : const BackButton(),
           automaticallyImplyLeading: false,
-          actions: blockBack
-              ? [
-                  TextButton(
-                    onPressed: _resetAndGoHome,
-                    child: Text(l10n.invoiceNewOrder),
-                  ),
-                  const SizedBox(width: 8),
-                ]
-              : null,
+          actions: [
+            TextButton(
+              onPressed: _resetAndGoHome,
+              child: Text(l10n.invoiceNewOrder),
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         body: switch (_phase) {
         _Phase.loading => _error != null
@@ -771,8 +679,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final scheme = Theme.of(context).colorScheme;
     final lang = localeService.locale.languageCode;
     final currency = storeConfigService.storeCurrency ?? order.currency;
-    final isNormal = browsingModeService.mode == BrowsingMode.normal;
-    final isKiosk = browsingModeService.mode == BrowsingMode.kiosk;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -879,16 +785,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
           // Collapsible items
           _CollapsibleItems(order: order, currency: currency, l10n: l10n),
-
-          // Share row — hidden in kiosk (QR is in the header card)
-          if (!isKiosk && isNormal) ...[
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.share_outlined),
-              label: Text(l10n.shareInvoice),
-              onPressed: () => _shareInvoice(order),
-            ),
-          ],
         ],
       ),
     );
@@ -976,17 +872,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               child: Text(l10n.invoiceNewOrder),
             ),
           ),
-          if (order != null && browsingModeService.mode == BrowsingMode.normal) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.share_outlined),
-                label: Text(l10n.shareInvoice),
-                onPressed: () => _shareInvoice(order),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1188,21 +1073,12 @@ class _InvoiceHeaderCard extends StatelessWidget {
         statusLabel = l10n.invoiceUnpaid;
     }
 
-    final isKiosk = browsingModeService.mode == BrowsingMode.kiosk;
-    final isNormal = browsingModeService.mode == BrowsingMode.normal;
-    final lang = localeService.locale.languageCode;
-
     final due = order.status == 'PAID' ? 0.0 : order.total;
     final dueColor = due > 0 ? scheme.primary : Colors.green.shade700;
 
-    // Side widget: QR in kiosk. Everywhere else there's no QR to show, which
-    // used to leave that slot blank (just a small download button, top-
-    // aligned, with empty space below it) — so outside kiosk mode the Due
-    // amount lives here instead, with the download button above it when
-    // available. The info column below drops Due entirely in that case, so
-    // its payment-method line moves up to fill the space Due used to take.
+    // Side widget: the invoice QR.
     Widget? sideWidget;
-    if (isKiosk && order.invoiceUrl != null) {
+    if (order.invoiceUrl != null) {
       sideWidget = Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1214,57 +1090,6 @@ class _InvoiceHeaderCard extends StatelessWidget {
           version: QrVersions.auto,
           size: 82,
         ),
-      );
-    } else if (!isKiosk) {
-      sideWidget = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (isNormal && order.invoiceUrl != null) ...[
-            IconButton.outlined(
-              icon: const Icon(Icons.download_outlined),
-              iconSize: 28,
-              tooltip: l10n.invoiceDownloadPdf,
-              onPressed: () async {
-                final pdfUri = Uri.parse('${order.invoiceUrl}/pdf?lang=$lang');
-                await launchUrl(pdfUri, mode: LaunchMode.externalApplication);
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
-          Text(
-            l10n.invoiceDueLabel,
-            style: TextStyle(fontSize: 12, color: scheme.outline),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                due.toStringAsFixed(2),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: dueColor,
-                      height: 1.1,
-                    ),
-              ),
-              if (currency != null) ...[
-                const SizedBox(width: 4),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    _currencySymbol(currency),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: dueColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
       );
     }
 
@@ -1363,46 +1188,41 @@ class _InvoiceHeaderCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  // Due lives here only in kiosk mode — everywhere else it
-                  // moved into sideWidget (see above), so paymentMethod below
-                  // moves up to take its place instead of leaving a gap.
-                  if (isKiosk) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.invoiceDueLabel,
-                      style: TextStyle(fontSize: 12, color: scheme.outline),
-                    ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          due.toStringAsFixed(2),
-                          style: Theme.of(context)
-                              .textTheme
-                              .displaySmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: dueColor,
-                                height: 1.1,
-                              ),
-                        ),
-                        if (currency != null) ...[
-                          const SizedBox(width: 5),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              _currencySymbol(currency),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: dueColor,
-                                fontWeight: FontWeight.w600,
-                              ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.invoiceDueLabel,
+                    style: TextStyle(fontSize: 12, color: scheme.outline),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        due.toStringAsFixed(2),
+                        style: Theme.of(context)
+                            .textTheme
+                            .displaySmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: dueColor,
+                              height: 1.1,
+                            ),
+                      ),
+                      if (currency != null) ...[
+                        const SizedBox(width: 5),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            _currencySymbol(currency),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: dueColor,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
-                  ],
+                    ],
+                  ),
                   if (order.status == 'PAID' &&
                       order.paymentMethod != null) ...[
                     const SizedBox(height: 6),
@@ -1681,47 +1501,6 @@ class _SummaryRow extends StatelessWidget {
 
 // ── Share option row ─────────────────────────────────────────────────────────
 
-class _ShareOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ShareOption({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 16),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

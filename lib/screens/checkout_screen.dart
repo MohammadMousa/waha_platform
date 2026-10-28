@@ -4,8 +4,6 @@ import 'package:provider/provider.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../services/api_exceptions.dart';
-import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 
 /// Invisible transition screen: authenticates, creates the order, then
@@ -28,14 +26,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   void _startCheckout() {
-    final mode = browsingModeService.mode;
-    if (mode == BrowsingMode.normal && !authService.isLoggedIn) {
-      Navigator.of(context).pushReplacementNamed(
-        Routes.login,
-        arguments: Routes.checkout,
-      );
-      return;
-    }
     _createOrder();
   }
 

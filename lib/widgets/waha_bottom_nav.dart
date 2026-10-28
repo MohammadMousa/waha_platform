@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 
 enum BottomNavTab { home, search, cart, categories }
@@ -14,9 +13,6 @@ class WahaBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mode = context.watch<BrowsingModeService>().mode;
-    final isRestricted =
-        mode == BrowsingMode.kiosk || mode == BrowsingMode.shopping;
     final flow = context.watch<OrderFlowController>();
     final cartCount = flow.cart.fold<int>(0, (sum, c) => sum + c.quantity);
     final scheme = Theme.of(context).colorScheme;
@@ -31,15 +27,6 @@ class WahaBottomNav extends StatelessWidget {
           label: l10n.navHome,
         ),
       ),
-      if (!isRestricted)
-        (
-          BottomNavTab.search,
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.search_outlined),
-            activeIcon: const Icon(Icons.search),
-            label: l10n.navSearch,
-          ),
-        ),
       (
         BottomNavTab.cart,
         BottomNavigationBarItem(
@@ -56,15 +43,6 @@ class WahaBottomNav extends StatelessWidget {
           label: l10n.navCart,
         ),
       ),
-      if (!isRestricted)
-        (
-          BottomNavTab.categories,
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.category_outlined),
-            activeIcon: const Icon(Icons.category),
-            label: l10n.navCategories,
-          ),
-        ),
     ];
 
     final currentIndex =

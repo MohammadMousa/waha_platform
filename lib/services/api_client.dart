@@ -158,29 +158,6 @@ class ApiClient {
 
   // ---- Auth --------------------------------------------------------
 
-  // POST /api/auth/register
-  Future<AuthSession> register(String username, String password,
-      {Map<String, String>? sessionProperties}) async {
-    final resp = await _send(
-      () => _http.post(
-        _uri('/api/auth/register'),
-        headers: _headers(),
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-          if (sessionProperties != null) 'sessionProperties': sessionProperties,
-        }),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      return AuthSession.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 409) throw UsernameTakenException(409, msg);
-    throw UnknownApiException(resp.statusCode, msg);
-  }
-
   // POST /api/auth/login
   Future<AuthSession> login(String username, String password,
       {Map<String, String>? sessionProperties}) async {
@@ -200,18 +177,6 @@ class ApiClient {
           jsonDecode(resp.body) as Map<String, dynamic>);
     }
     throw _loginFailure(resp);
-  }
-
-  // POST /api/auth/guest — Shopping mode only, creates throwaway account
-  Future<AuthSession> guest() async {
-    final resp = await _send(
-      () => _http.post(_uri('/api/auth/guest'), headers: _headers()),
-    );
-    if (resp.statusCode == 200) {
-      return AuthSession.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
   }
 
   // POST /api/kiosk/auth/login — device identity, separate auth domain from

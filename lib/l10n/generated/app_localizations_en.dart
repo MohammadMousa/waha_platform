@@ -37,9 +37,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'No account, no waiting — pick items off the shelf and scan.';
 
   @override
-  String get ctaStartScanning => 'Start Scanning';
-
-  @override
   String get ctaContinueShopping => 'Continue Shopping';
 
   @override
@@ -149,18 +146,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get receiptTitle => 'Receipt';
 
   @override
-  String get settingsAppMode => 'App mode';
-
-  @override
-  String get modeNormal => 'Normal';
-
-  @override
-  String get modeKiosk => 'Kiosk';
-
-  @override
-  String get modeShopping => 'Shopping';
-
-  @override
   String get settingsKioskTimers => 'Kiosk idle-recovery timers';
 
   @override
@@ -168,9 +153,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsLanguage => 'Language';
-
-  @override
-  String get profileTitle => 'Profile';
 
   @override
   String get navBrowse => 'Browse';
@@ -203,34 +185,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authPassword => 'Password';
 
   @override
-  String get authRegisterTitle => 'Register';
-
-  @override
-  String get authLoginTitle => 'Log In';
-
-  @override
-  String get authRegisterCta => 'Create Account';
-
-  @override
   String get authLoginCta => 'Log In';
-
-  @override
-  String get authSwitchToLogin => 'Already have an account? Log in';
 
   @override
   String get authSwitchToRegister => 'New here? Create an account';
 
   @override
   String get authRequiredError => 'Username and password are required';
-
-  @override
-  String get authPhoneLabel => 'Phone Number';
-
-  @override
-  String get authSendOtp => 'Send OTP';
-
-  @override
-  String get authAdminLogin => 'Admin Login';
 
   @override
   String get authDeviceLogin => 'Device Login';
@@ -249,38 +210,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storePickerTitle => 'Choose a Store';
 
   @override
-  String get storePickerEmpty => 'No stores available';
-
-  @override
   String get storePickerSetDefault => 'Set as Default Store';
 
   @override
-  String get storePickerDefaultSetSuffix => 'set as default store';
-
-  @override
-  String get storePickerGoToStore => 'Go to Store';
-
-  @override
-  String get storePickerMakeDefault => 'Make Default';
-
-  @override
-  String get storePickerIsDefault => 'Default';
-
-  @override
   String get storePickerCurrentStore => 'Current';
-
-  @override
-  String get storePickerRefreshStore => 'Refresh Store';
-
-  @override
-  String get storePickerRefreshed => 'Store refreshed';
-
-  @override
-  String get profileLoggedInPrefix => 'Logged in as';
-
-  @override
-  String get profileGuestMessage =>
-      'Not logged in — guest checkout still works.';
 
   @override
   String get profileLogout => 'Log Out';
@@ -292,16 +225,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileRegister => 'Register';
 
   @override
-  String get profileChangeStore => 'Change Store';
-
-  @override
   String get profileNoStoreSelected => 'No store selected';
-
-  @override
-  String get navSearch => 'Search';
-
-  @override
-  String get navCategories => 'Categories';
 
   @override
   String get searchTitle => 'Search';
@@ -322,9 +246,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewCart => 'View Cart';
 
   @override
-  String get homeSearchHint => 'What are you looking for?';
-
-  @override
   String get homeProducts => 'Products';
 
   @override
@@ -335,12 +256,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get checkoutOrderSummary => 'Order Summary';
-
-  @override
-  String get seeAll => 'See all';
-
-  @override
-  String get recentlyAdded => 'Recently Added';
 
   @override
   String get invoiceTitle => 'Invoice';
@@ -364,9 +279,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get invoiceSelectPayment => 'Select Payment Method';
-
-  @override
-  String get invoiceDownloadPdf => 'Download Invoice';
 
   @override
   String get invoiceDetails => 'Invoice Details';
@@ -413,15 +325,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get language => 'Language';
-
-  @override
-  String get shareInvoice => 'Share Invoice';
-
-  @override
-  String get shareCopyLink => 'Copy Link';
-
-  @override
-  String get shareLinkCopied => 'Link copied to clipboard';
 
   @override
   String get commonCancel => 'Cancel';

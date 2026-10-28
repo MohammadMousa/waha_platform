@@ -12,8 +12,7 @@ import 'api_exceptions.dart';
 import 'local_prefs.dart';
 
 /// What the operator typed to sign in to the new server. Used once, never
-/// stored: Kiosk = device username + PIN, Normal = username + password,
-/// Shopping = nothing (a guest account is created).
+/// stored: Kiosk = device username + PIN, any other mode = username + password.
 class SwitchCredentials {
   final String username;
   final String secret;
@@ -72,7 +71,7 @@ class ConnectionSwitcher {
     final username =
         typedUser.isNotEmpty ? typedUser : (authService.username ?? '');
     final secret = credentials?.secret ?? '';
-    if (mode != BrowsingMode.shopping && (username.isEmpty || secret.isEmpty)) {
+    if (username.isEmpty || secret.isEmpty) {
       final what = mode == BrowsingMode.kiosk ? 'PIN' : 'password';
       return SwitchResult.failure(
           'login',
@@ -153,10 +152,9 @@ class ConnectionSwitcher {
       case BrowsingMode.kiosk:
         return api.kioskLogin(c!.username.trim(), c.secret);
       case BrowsingMode.normal:
+      case BrowsingMode.shopping:
         return api.login(c!.username.trim(), c.secret,
             sessionProperties: {'mode': mode.name.toUpperCase()});
-      case BrowsingMode.shopping:
-        return api.guest();
     }
   }
 }

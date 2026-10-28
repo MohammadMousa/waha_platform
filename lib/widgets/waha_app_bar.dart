@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../l10n/generated/app_localizations.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
-import 'profile_sheet.dart';
 
 /// App bar — profile icon for Normal mode, language toggle for Kiosk/Shopping.
 /// Pass [extraActions] to prepend additional action widgets (e.g. EditModeToggle).
@@ -25,29 +22,11 @@ class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mode = context.watch<BrowsingModeService>().mode;
-    final isNormal = mode == BrowsingMode.normal;
-    final l10n = AppLocalizations.of(context)!;
-
     return AppBar(
       title: Text(title),
       actions: [
         ...extraActions,
-        if (isNormal)
-          IconButton(
-            tooltip: l10n.profileTitle,
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              builder: (_) => const ProfileSheet(),
-            ),
-          ),
-        if (!isNormal && showLangToggle)
-          const _LangToggleButton(),
+        if (showLangToggle) const _LangToggleButton(),
       ],
     );
   }
@@ -56,7 +35,7 @@ class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
-/// Compact language toggle for kiosk/shopping — shows the OTHER language
+/// Compact language toggle — shows the OTHER language
 /// so the user immediately knows what they're switching to.
 class _LangToggleButton extends StatelessWidget {
   const _LangToggleButton();

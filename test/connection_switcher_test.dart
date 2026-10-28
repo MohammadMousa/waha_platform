@@ -117,7 +117,7 @@ void main() {
     expect(LocalPrefs.authToken, 'NEW-TOKEN');
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('waha.kiosk_pin'), isNull);
-    expect(LocalPrefs.kioskUsername, isNull);
+    expect(prefs.getString('waha.kiosk_username'), isNull);
 
     // Turning OFF returns to the default and keeps the saved custom fields.
     final saved = AppConfig.connection.custom;
