@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../config/app_config.dart';
-import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../services/landing_cache.dart';
 import '../services/local_prefs.dart';
@@ -292,26 +291,6 @@ class _SimulatorSettingsScreenState extends State<SimulatorSettingsScreen> {
               onPressed: _save,
               child: const Text('Save'),
             ),
-          ),
-
-          const Divider(height: 40),
-          const HeaderWithInfo(
-            'Coupon and Wallet codes',
-            'Coupon and Wallet codes aren\'t here yet — nothing on the '
-                'backend consumes them in this phase.',
-          ),
-          const Divider(height: 32),
-          const HeaderWithInfo(
-            'Navigation lock test',
-            'Navigates to a route outside the allowlist. Kiosk/Shopping '
-                'mode bounces back; Normal lands.',
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.lock_outline),
-            label: const Text('Try disallowed route (lock test)'),
-            onPressed: () =>
-                Navigator.of(context).pushNamed(Routes.debugAdminStub),
           ),
 
           const Divider(height: 40),

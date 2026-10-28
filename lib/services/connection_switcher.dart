@@ -4,7 +4,6 @@ import '../config/app_config.dart';
 import '../config/connection_settings.dart';
 import '../models/auth_session.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
 import 'api_client.dart';
@@ -12,7 +11,7 @@ import 'api_exceptions.dart';
 import 'local_prefs.dart';
 
 /// What the operator typed to sign in to the new server. Used once, never
-/// stored: Kiosk = device username + PIN, any other mode = username + password.
+/// stored: the device username + PIN.
 class SwitchCredentials {
   final String username;
   final String secret;
@@ -64,7 +63,6 @@ class ConnectionSwitcher {
       return const SwitchResult.success('Already using this server');
     }
 
-    final mode = browsingModeService.mode;
     // The username is optional: left blank, the one already signed in on this
     // device is reused, so the operator only types the PIN/password.
     final typedUser = credentials?.username.trim() ?? '';
@@ -72,12 +70,11 @@ class ConnectionSwitcher {
         typedUser.isNotEmpty ? typedUser : (authService.username ?? '');
     final secret = credentials?.secret ?? '';
     if (username.isEmpty || secret.isEmpty) {
-      final what = mode == BrowsingMode.kiosk ? 'PIN' : 'password';
       return SwitchResult.failure(
           'login',
           username.isEmpty
-              ? 'Enter the username and $what for the new server'
-              : 'Enter the $what for the new server');
+              ? 'Enter the username and PIN for the new server'
+              : 'Enter the PIN for the new server');
     }
     final signInAs = SwitchCredentials(username, secret);
 
@@ -90,7 +87,7 @@ class ConnectionSwitcher {
     //    of our own (a wrong PIN counts toward the server's lockout).
     final AuthSession session;
     try {
-      session = await _signIn(probeClient, mode, signInAs);
+      session = await probeClient.kioskLogin(signInAs.username.trim(), signInAs.secret);
     } on AccountLockedException catch (e) {
       return SwitchResult.failure('login', loginFailureText(e));
     } on InvalidCredentialsException catch (e) {
@@ -145,16 +142,4 @@ class ConnectionSwitcher {
 
   static Future<void> _record(bool enabled, CustomConnection custom) =>
       AppConfig.connection.save(enabled: enabled, custom: custom);
-
-  static Future<AuthSession> _signIn(
-      ApiClient api, BrowsingMode mode, SwitchCredentials? c) {
-    switch (mode) {
-      case BrowsingMode.kiosk:
-        return api.kioskLogin(c!.username.trim(), c.secret);
-      case BrowsingMode.normal:
-      case BrowsingMode.shopping:
-        return api.login(c!.username.trim(), c.secret,
-            sessionProperties: {'mode': mode.name.toUpperCase()});
-    }
-  }
 }

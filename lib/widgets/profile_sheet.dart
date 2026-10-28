@@ -9,8 +9,8 @@ import '../state/locale_service.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 
-/// Profile bottom sheet — shown from the AppBar profile icon in Normal mode.
-/// Contains: session info, language switcher, store/orders/logout actions.
+/// Profile bottom sheet — opened by the `cmd=profile` scan after the device
+/// PIN. Contains: session info, language switcher and logout.
 class ProfileSheet extends StatefulWidget {
   const ProfileSheet({super.key});
 

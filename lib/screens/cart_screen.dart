@@ -42,7 +42,7 @@ class _CartScreenState extends State<CartScreen> {
   //    no simulator to reveal, but Settings is otherwise completely
   //    unreachable in Kiosk mode (see kioskAllowlist) — gate a way in
   //    behind the device's own PIN instead of leaving it locked out
-  //    entirely. Not offered in Shopping mode (customer's own phone).
+  //    entirely.
   void _onBodyTap() {
     if (AppConfig.simulatorAvailable) {
       _tapTimer?.cancel();

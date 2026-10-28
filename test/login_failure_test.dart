@@ -60,7 +60,7 @@ void main() {
     addTearDown(() => s.close(force: true));
     final api = ApiClient(baseUrl: 'http://127.0.0.1:${s.port}');
     try {
-      await api.login('u', 'p');
+      await api.kioskLogin('u', '1');
       fail('should throw');
     } on ApiException catch (e) {
       expect(loginFailureText(e), 'Invalid credentials');

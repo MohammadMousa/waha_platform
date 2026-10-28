@@ -13,7 +13,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
+import '../state/kiosk_timer_config.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/permission_service.dart';
@@ -64,10 +64,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Kiosk idle/inactivity timers — off by default (see LocalPrefs doc comment).
   bool _timersEnabled = false;
 
-  // Dev tools — store ID override
-  late final TextEditingController _storeId;
-  String? _storeIdError;
-
   @override
   void initState() {
     super.initState();
@@ -83,8 +79,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _afterCountdown = TextEditingController(
       text: '${kioskTimerConfig.afterInvoiceWarningCountdown.inSeconds}',
     );
-    _storeId = TextEditingController(
-        text: storeConfigService.storeId?.toString() ?? '');
     _terminalTimeout =
         TextEditingController(text: '${LocalPrefs.localTerminalTimeoutSeconds}');
     _devUnlocked = LocalPrefs.devToolsUnlocked;
@@ -98,7 +92,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _beforeCountdown.dispose();
     _afterWarn.dispose();
     _afterCountdown.dispose();
-    _storeId.dispose();
     _terminalTimeout.dispose();
     super.dispose();
   }
@@ -242,46 +235,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _saveStoreId() async {
-    final parsed = int.tryParse(_storeId.text.trim());
-    if (parsed == null || parsed <= 0) {
-      setState(() => _storeIdError = 'Store ID must be a positive number.');
-      return;
-    }
-    setState(() => _storeIdError = null);
-    final flow = context.read<OrderFlowController>();
-    final api = context.read<ApiClient>();
-    final hadItems = flow.cart.isNotEmpty;
-
-    try {
-      // If logged in, update the backend session so store-scoped APIs use the
-      // new store immediately — not just after the next login.
-      if (authService.isLoggedIn) {
-        await authService.selectStore(api, parsed);
-      } else {
-        storeConfigService.setStoreId(parsed);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Store update failed: $e'),
-              backgroundColor: Colors.red),
-        );
-      }
-      return;
-    }
-
-    if (hadItems) flow.clearCart();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(hadItems
-            ? 'Store updated — cart cleared (items were scoped to old store).'
-            : 'Store updated.'),
-      ));
-    }
   }
 
   @override
@@ -585,9 +538,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const ScreenFactorPanel(),
             const SizedBox(height: 20),
             _DevToolsPanel(
-              storeIdController: _storeId,
-              storeIdError: _storeIdError,
-              onSaveStoreId: _saveStoreId,
               onHide: _hideDevTools,
             ),
           ],
@@ -604,15 +554,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 // screen doesn't feel cluttered during normal operation.
 
 class _DevToolsPanel extends StatefulWidget {
-  final TextEditingController storeIdController;
-  final String? storeIdError;
-  final VoidCallback onSaveStoreId;
   final VoidCallback onHide;
 
   const _DevToolsPanel({
-    required this.storeIdController,
-    required this.storeIdError,
-    required this.onSaveStoreId,
     required this.onHide,
   });
 
@@ -829,38 +773,6 @@ class _DevToolsPanelState extends State<_DevToolsPanel> {
                       LocalPrefs.setShowScanSuccessToast(next);
                     },
                   ),
-
-                  const Divider(height: 32),
-
-                  // Store ID override
-                  const Text('Store ID override',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: widget.storeIdController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Store ID',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                          onPressed: widget.onSaveStoreId,
-                          child: const Text('Set')),
-                    ],
-                  ),
-                  if (widget.storeIdError != null) ...[
-                    const SizedBox(height: 4),
-                    Text(widget.storeIdError!,
-                        style:
-                            const TextStyle(color: Colors.red, fontSize: 12)),
-                  ],
 
                   const Divider(height: 32),
 
@@ -1141,7 +1053,6 @@ String sessionInfoText() {
   final username = authService.username ?? '—';
   final storeSlug = storeConfigService.storeSlug ?? '—';
   final host = AppConfig.apiBaseUrlLabel;
-  final mode = browsingModeService.mode.name;
   final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
   final screen = view == null
       ? '—'
@@ -1152,7 +1063,7 @@ String sessionInfoText() {
   return 'user:    $username\n'
       'store:   $storeSlug\n'
       'host:    $host\n'
-      'mode:    $mode\n'
+      'mode:    kiosk\n'
       'screen:  $screen\n'
       'factor:  ${screenFactorSummary()}\n'
       'version: ${AppInfo.version}\n'

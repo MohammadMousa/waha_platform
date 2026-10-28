@@ -158,27 +158,6 @@ class ApiClient {
 
   // ---- Auth --------------------------------------------------------
 
-  // POST /api/auth/login
-  Future<AuthSession> login(String username, String password,
-      {Map<String, String>? sessionProperties}) async {
-    final resp = await _send(
-      () => _http.post(
-        _uri('/api/auth/login'),
-        headers: _headers(),
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-          if (sessionProperties != null) 'sessionProperties': sessionProperties,
-        }),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      return AuthSession.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    throw _loginFailure(resp);
-  }
-
   // POST /api/kiosk/auth/login — device identity, separate auth domain from
   // /api/auth/* (no FK to users; devices/PIN, not username/password). See
   // docs/roles-permissions.md in the backend repo. organizationId defaults
@@ -254,20 +233,6 @@ class ApiClient {
     throw UnknownApiException(resp.statusCode, msg);
   }
 
-  // GET /api/auth/me — session check on app start
-  Future<AuthSession> me(String token) async {
-    final resp = await _send(
-      () => _http.get(_uri('/api/auth/me'), headers: _headers(token: token)),
-    );
-    if (resp.statusCode == 200) {
-      return AuthSession.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
-    throw UnknownApiException(resp.statusCode, msg);
-  }
-
   // GET /api/kiosk/auth/me — the Kiosk-mode equivalent of me() above, so a
   // device session can be validated the same way instead of re-logging-in
   // with a locally cached PIN on every start (see AuthService.resolveStartupAuth).
@@ -277,28 +242,6 @@ class ApiClient {
         ..._headers(token: token),
         'X-App-Version': AppInfo.version,
       }),
-    );
-    if (resp.statusCode == 200) {
-      return AuthSession.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 401) throw UnauthorizedException(401, msg);
-    throw UnknownApiException(resp.statusCode, msg);
-  }
-
-  // POST /api/auth/store
-  Future<AuthSession> selectStore(String token, int storeId,
-      {Map<String, String>? sessionProperties}) async {
-    final resp = await _send(
-      () => _http.post(
-        _uri('/api/auth/store'),
-        headers: _headers(token: token),
-        body: jsonEncode({
-          'storeId': storeId,
-          if (sessionProperties != null) 'sessionProperties': sessionProperties,
-        }),
-      ),
     );
     if (resp.statusCode == 200) {
       return AuthSession.fromJson(
@@ -612,7 +555,7 @@ class ApiClient {
   }
 
   // POST /api/orders/{id}/payment-session
-  // providerMode: 'REDIRECT' (normal/shopping) or 'QR_LINK' (kiosk).
+  // providerMode: 'REDIRECT' or 'QR_LINK' (kiosk).
   // QR_LINK responses include qrCodeDataUri + expiresAt.
   Future<PaymentSessionResult> createPaymentSession(String orderId,
       {required String provider, required String providerMode}) async {

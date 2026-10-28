@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../state/locale_service.dart';
 
-/// App bar — profile icon for Normal mode, language toggle for Kiosk/Shopping.
-/// Pass [extraActions] to prepend additional action widgets (e.g. EditModeToggle).
+/// App bar — language toggle. Pass [extraActions] to prepend additional
+/// action widgets.
 class WahaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget> extraActions;

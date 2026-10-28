@@ -7,15 +7,14 @@ import '../state/locale_service.dart';
 import '../utils/locale_name.dart';
 import '../widgets/waha_app_bar.dart';
 
-/// Normal mode's explicit "Scan" entry. A real hardware scanner (USB/BT
+/// The explicit "Scan" screen. A real hardware scanner (USB/BT
 /// keyboard-wedge) works ambiently here — `HardwareScanListener` is
 /// mounted by the router for every product/cart route, this one
 /// included, so nothing on screen invites a customer to manually type
 /// barcode digits. Manual entry is a dev/testing need, and that's
 /// already covered by the Simulator overlay's Product-scan button.
-/// Kiosk and Shopping don't route through this screen at all: Kiosk
-/// scans ambiently on Landing/Cart/etc., Shopping opens the camera
-/// directly.
+/// The kiosk doesn't route through this screen: it scans ambiently on
+/// Landing/Cart/etc.
 class ScanScreen extends StatelessWidget {
   const ScanScreen({super.key});
 

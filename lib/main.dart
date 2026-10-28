@@ -21,7 +21,7 @@ import 'services/late_approval_service.dart';
 import 'services/trace_log.dart';
 import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
-import 'state/browsing_mode_service.dart';
+import 'state/kiosk_timer_config.dart';
 import 'state/locale_service.dart';
 import 'state/order_flow_controller.dart';
 import 'state/permission_service.dart';
@@ -108,30 +108,8 @@ void main() {
 
 /// Applies every persisted/overridden config value once at startup, all
 /// with `persist: false` — these are LOADS, not new user choices, so
-/// re-writing what was just read back would be redundant at best. The
-/// one exception is the dart-define mode fallback: that one DOES persist
-/// once applied (see below), so it becomes durable from that point on
-/// rather than needing to be re-supplied via --dart-define on every launch.
+/// re-writing what was just read back would be redundant.
 Future<void> _resolveStartupConfig(ApiClient apiClient) async {
-  // Mode: URL override (web, ephemeral, never persisted) > persisted
-  // value (survives restart/reboot) > dart-define (first-run seed,
-  // becomes persisted from here on) > Kiosk (the constructed default).
-  final urlMode = AppConfig.urlOverrideMode;
-  if (urlMode != null) {
-    browsingModeService.setMode(urlMode, persist: false);
-  } else {
-    final persistedMode = parseBrowsingMode(LocalPrefs.mode);
-    if (persistedMode != null) {
-      browsingModeService.setMode(persistedMode, persist: false);
-    } else {
-      final defineMode = AppConfig.dartDefineMode;
-      if (defineMode != null) {
-        browsingModeService.setMode(defineMode); // persists — becomes durable
-      }
-      // else: stays at the BrowsingMode.kiosk it was constructed with.
-    }
-  }
-
   final persistedStoreId = LocalPrefs.storeId;
   if (persistedStoreId != null) {
     storeConfigService.setStoreId(persistedStoreId, persist: false);
@@ -166,13 +144,11 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   // Auth resolution — reuses the shared apiClient passed in (see main()'s
   // comment on why that matters for connection warming) rather than a
   // throwaway instance. Implements the specified MVP flow exactly: try
-  // cached token, fall back to cached credentials, fall back to a fresh
-  // throwaway account for Shopping only. See AuthService.resolveStartupAuth
+  // cached device token; never a cached PIN. See AuthService.resolveStartupAuth
   // for the full precedence and the failure/timeout handling. Awaited (not
   // fire-and-forget) so the very first frame already reflects whether
   // there's a session, rather than flashing a logged-out state for a
-  // moment first. Mode must already be resolved by this point — Shopping's
-  // auto-account behavior depends on it.
+  // moment first.
   // If the server can't be reached at all, don't sit through the slow
   // timeouts of every call below — show the "Connecting…" popup instead,
   // which retries on a growing schedule and finishes this sign-in once the
@@ -181,24 +157,22 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   if (reachError != null) {
     startupConnection.begin(apiClient, reachError);
   } else {
-    await authService.resolveStartupAuth(apiClient, browsingModeService.mode);
+    await authService.resolveStartupAuth(apiClient);
   }
 
-  // Geidea USB terminal (card-present payment) — Kiosk-only, matching
+  // Geidea USB terminal (card-present payment), matching
   // payment_methods.available_modes for the 'terminal' row. Fire-and-forget:
   // USB connection is inherently async/best-effort (the terminal may not be
   // plugged in yet, or this may be a dev device with no hardware at all)
   // and shouldn't block or fail app startup either way.
-  if (browsingModeService.mode == BrowsingMode.kiosk) {
-    unawaited(GeideaTerminalBridge.instance.initialize());
-    UsbDiagnostics.logSnapshot('app start');
-    // So the native log viewer can upload logs even when Flutter can't start.
-    unawaited(
-        GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl));
-    // Keep the native uploader pointed at whichever server is active now.
-    AppConfig.connection.addListener(() => unawaited(
-        GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl)));
-  }
+  unawaited(GeideaTerminalBridge.instance.initialize());
+  UsbDiagnostics.logSnapshot('app start');
+  // So the native log viewer can upload logs even when Flutter can't start.
+  unawaited(
+      GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl));
+  // Keep the native uploader pointed at whichever server is active now.
+  AppConfig.connection.addListener(() => unawaited(
+      GeideaTerminalBridge.instance.setApiBaseUrl(AppConfig.apiBaseUrl)));
 }
 
 class WahaApp extends StatelessWidget {
@@ -218,7 +192,6 @@ class WahaApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => SimulatorService()),
         ChangeNotifierProvider.value(value: storeConfigService),
-        ChangeNotifierProvider.value(value: browsingModeService),
         ChangeNotifierProvider.value(value: localeService),
         ChangeNotifierProvider.value(value: authService),
         ChangeNotifierProvider.value(value: permissionService),

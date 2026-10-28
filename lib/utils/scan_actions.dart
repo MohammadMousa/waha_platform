@@ -12,9 +12,8 @@ import 'locale_name.dart';
 import 'scanner_manager.dart';
 
 /// Pushes the camera scanner, and on a successful detection, adds it to
-/// the cart — the same action the Shopping-mode CTA on Landing/Cart uses.
-/// Shared here so both call sites stay in sync rather than duplicating
-/// the push-then-scan-then-report sequence.
+/// the cart. Shared here rather than duplicating the
+/// push-then-scan-then-report sequence.
 ///
 /// Success is quiet by default — a footer toast only if
 /// LocalPrefs.showScanSuccessToast is on (Dev Tools checkbox); the scan

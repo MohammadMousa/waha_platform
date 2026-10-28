@@ -55,9 +55,8 @@ class OrderFlowController extends ChangeNotifier {
           : storeConfigService.storeId; // null if no store configured yet
 
   /// Username is never sent explicitly anymore — every mode now resolves
-  /// identity through AuthService (Kiosk via a provisioned login,
-  /// Shopping via an auto-registered guest account, Normal via a real
-  /// login gated at checkout). If checkout is somehow reached without a
+  /// identity through AuthService (the device's provisioned login). If
+  /// checkout is somehow reached without a
   /// session, the backend's "username is required" 400 is the honest
   /// outcome — surfacing a real error beats sending a fabricated identity.
   String? get _sessionAwareUsername => null;

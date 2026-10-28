@@ -9,7 +9,6 @@ import 'package:waha_kiosk/services/api_client.dart';
 import 'package:waha_kiosk/services/connection_switcher.dart';
 import 'package:waha_kiosk/services/local_prefs.dart';
 import 'package:waha_kiosk/state/auth_service.dart';
-import 'package:waha_kiosk/state/browsing_mode_service.dart';
 import 'package:waha_kiosk/state/order_flow_controller.dart';
 
 /// Minimal stand-in for a Waha backend: /api/config, kiosk login, stores.
@@ -52,7 +51,6 @@ void main() {
     await LocalPrefs.init();
     await AppConfig.connection
         .save(enabled: false, custom: CustomConnection.empty);
-    browsingModeService.setMode(BrowsingMode.kiosk, persist: false);
     authService.token = 'OLD-TOKEN';
     authService.deviceId = 1;
     api = ApiClient();

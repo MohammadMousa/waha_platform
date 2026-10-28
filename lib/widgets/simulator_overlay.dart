@@ -9,7 +9,6 @@ import '../services/api_exceptions.dart';
 import '../services/app_info.dart';
 import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/simulator_service.dart';
@@ -306,7 +305,7 @@ class _IconBtn extends StatelessWidget {
 /// one line ("Unwrapped" in the reference), and tapping the strip wraps it
 /// onto as many lines as it needs ("click to wrap it") — a per-widget expand/
 /// collapse of the TEXT, not a show/hide of the strip itself. Non-reactive
-/// read of authService/storeConfigService/browsingModeService: it only needs
+/// read of authService/storeConfigService: it only needs
 /// to be current at the moment it's shown, which showing already causes
 /// (SimulatorOverlay rebuilds on SimulatorService changes) — good enough for
 /// a first cut of a diagnostic-only strip.
@@ -349,9 +348,8 @@ class _SessionInfoFooterState extends State<_SessionInfoFooter> {
     final username = authService.username ?? '—';
     final storeSlug = storeConfigService.storeSlug ?? '—';
     final host = AppConfig.apiBaseUrlLabel;
-    final mode = browsingModeService.mode.name;
     final text = 'user:$username  ver:${AppInfo.version}  store:$storeSlug  '
-        'host:$host  build:${AppInfo.buildNumber}  mode:$mode';
+        'host:$host  build:${AppInfo.buildNumber}  mode:kiosk';
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

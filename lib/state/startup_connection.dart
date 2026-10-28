@@ -7,7 +7,6 @@ import '../router/app_router.dart';
 import '../screens/server_connection_screen.dart';
 import '../services/api_client.dart';
 import 'auth_service.dart';
-import 'browsing_mode_service.dart';
 
 /// Seconds to wait after failed attempt number [attempt] (1-based): 10, 20, 40,
 /// 80, 160 … doubling, held at [StartupConnection.maxWaitSeconds].
@@ -120,7 +119,7 @@ class StartupConnection extends ChangeNotifier {
   Future<void> _recovered(ApiClient api) async {
     _stop();
     notifyListeners(); // dismiss the popup the moment the server answers
-    await authService.resolveStartupAuth(api, browsingModeService.mode);
+    await authService.resolveStartupAuth(api);
     navigatorKey.currentState
         ?.pushNamedAndRemoveUntil(Routes.landing, (_) => false);
   }

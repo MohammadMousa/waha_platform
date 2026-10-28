@@ -9,7 +9,6 @@ import '../models/payment_method.dart';
 import '../router/app_router.dart';
 import '../services/api_client.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
@@ -94,7 +93,7 @@ class _PayScreenState extends State<PayScreen> {
 
     // Step 3: Load payment methods.
     try {
-      final mode = browsingModeService.mode.name.toUpperCase();
+      const mode = 'KIOSK';
       final storeId = authService.sessionStoreId ?? storeConfigService.storeId;
       _methods = await context
           .read<ApiClient>()

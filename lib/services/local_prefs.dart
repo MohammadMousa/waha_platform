@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/connection_settings.dart' show CustomConnection;
 
 /// Thin persistence facade — every runtime-configurable service
-/// (BrowsingModeService, StoreConfigService, LocaleService,
+/// (StoreConfigService, LocaleService,
 /// KioskTimerConfig, AuthService) goes through this instead of
 /// talking to SharedPreferences directly, so key names live in one place.
 ///
@@ -30,7 +30,6 @@ class LocalPrefs {
     return prefs;
   }
 
-  static const _kMode = 'waha.browsing_mode';
   static const _kStoreId = 'waha.store_id';
   static const _kDefaultStoreId = 'waha.default_store_id';
   static const _kLocale = 'waha.locale';
@@ -42,8 +41,6 @@ class LocalPrefs {
   static const _kAfterWarn = 'waha.kiosk_after_warn_s';
   static const _kAfterCountdown = 'waha.kiosk_after_countdown_s';
 
-  static String? get mode => _p.getString(_kMode);
-  static Future<void> setMode(String value) => _p.setString(_kMode, value);
 
   static int? get storeId => _p.getInt(_kStoreId);
   static Future<void> setStoreId(int value) => _p.setInt(_kStoreId, value);
@@ -58,8 +55,7 @@ class LocalPrefs {
   static Future<void> clearLandingCacheMeta() async {
     for (final k in _p.getKeys().toList()) {
       if (k.startsWith('waha.landing_hash.') ||
-          k.startsWith('waha.landing_res_url.') ||
-          k == _kLandingNormalKey) {
+          k.startsWith('waha.landing_res_url.')) {
         await _p.remove(k);
       }
     }
@@ -433,12 +429,4 @@ class LocalPrefs {
       _p.getString('waha.landing_res_url.$pageKey');
   static Future<void> setLandingResourceUrl(String pageKey, String url) =>
       _p.setString('waha.landing_res_url.$pageKey', url);
-
-  // Which page key was last used for BrowsingMode.normal — either
-  // 'ADMIN_LANDING' or 'CLIENT_LANDING'. Saved after auth resolves so the
-  // correct page is served on the very next cold start without waiting.
-  static const _kLandingNormalKey = 'waha.landing_normal_key';
-  static String? get landingNormalKey => _p.getString(_kLandingNormalKey);
-  static Future<void> setLandingNormalKey(String key) =>
-      _p.setString(_kLandingNormalKey, key);
 }

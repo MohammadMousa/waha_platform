@@ -16,8 +16,6 @@ import '../services/local_prefs.dart';
 import '../services/trace_log.dart';
 import '../state/auth_service.dart';
 import '../state/locale_service.dart';
-import '../state/permission_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
@@ -119,28 +117,13 @@ class _LandingScreenState extends State<LandingScreen> {
 
   // ── page-key resolution ───────────────────────────────────────────────────
 
-  /// Page key to load at startup — uses the last-saved key for normal mode so
-  /// returning admins don't briefly see the client page.
-  String _startupKey(BrowsingMode mode) => switch (mode) {
-    BrowsingMode.kiosk    => 'KIOSK_LANDING',
-    BrowsingMode.shopping => 'SHOPPING_LANDING',
-    BrowsingMode.normal   => LocalPrefs.landingNormalKey ?? 'CLIENT_LANDING',
-  };
-
-  /// Page key once auth is resolved — now we know the user's actual role.
-  String _authKey(BrowsingMode mode) => switch (mode) {
-    BrowsingMode.kiosk    => 'KIOSK_LANDING',
-    BrowsingMode.shopping => 'SHOPPING_LANDING',
-    BrowsingMode.normal   => permissionService.can('MANAGE_STORES')
-                               ? 'ADMIN_LANDING'
-                               : 'CLIENT_LANDING',
-  };
+  /// The only landing page key the kiosk uses.
+  static const _pageKey = 'KIOSK_LANDING';
 
   // ── startup: read local cache ─────────────────────────────────────────────
 
   Future<void> _loadFromCache() async {
-    final mode = browsingModeService.mode;
-    final pageKey = _startupKey(mode);
+    const pageKey = _pageKey;
     final html = await LandingCache.readHtml(pageKey);
     if (mounted) {
       setState(() {
@@ -245,13 +228,7 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Future<void> _backgroundUpdateLanding() async {
-    final mode = browsingModeService.mode;
-    final pageKey = _authKey(mode);
-
-    // Persist the resolved normal-mode key so next cold start is correct.
-    if (mode == BrowsingMode.normal) {
-      await LocalPrefs.setLandingNormalKey(pageKey);
-    }
+    const pageKey = _pageKey;
 
     if (!mounted) return;
     _log('▶ Fetching $pageKey from server…');
@@ -559,7 +536,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
   }
 }
 
-// ── Kiosk / Shopping mode: scan-first landing ─────────────────────────────────
+// ── Kiosk: scan-first landing ─────────────────────────────────
 
 class _ScanLanding extends StatefulWidget {
   const _ScanLanding();

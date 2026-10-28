@@ -4,7 +4,7 @@ import '../services/local_prefs.dart';
 
 /// Runtime-switchable locale — defaults to English; Settings offers an
 /// EN/AR toggle. Same read-directly-or-watch-via-Provider pattern as
-/// BrowsingModeService: a plain singleton, provided via
+/// StoreConfigService: a plain singleton, provided via
 /// ChangeNotifierProvider.value for reactive rebuilds. Persists on
 /// change, same reasoning as the other config services.
 class LocaleService extends ChangeNotifier {

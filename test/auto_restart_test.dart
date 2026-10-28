@@ -67,9 +67,9 @@ void main() {
   });
 
   group('idle rule', () {
-    bool idle({bool kiosk = true, bool landing = true, bool cartEmpty = true, bool noOrder = true, bool noPayment = true, bool noPending = true}) =>
+    bool idle({bool landing = true, bool cartEmpty = true, bool noOrder = true, bool noPayment = true, bool noPending = true}) =>
         AutoRestartService.isIdle(
-          kioskMode: kiosk, onLanding: landing, cartEmpty: cartEmpty,
+          onLanding: landing, cartEmpty: cartEmpty,
           noOrder: noOrder, noPayment: noPayment, noPendingAttempt: noPending,
         );
 
@@ -78,7 +78,6 @@ void main() {
     });
 
     test('any one busy sign blocks it', () {
-      expect(idle(kiosk: false), isFalse);
       expect(idle(landing: false), isFalse);
       expect(idle(cartEmpty: false), isFalse);
       expect(idle(noOrder: false), isFalse);

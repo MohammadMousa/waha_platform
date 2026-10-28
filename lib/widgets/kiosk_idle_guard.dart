@@ -8,7 +8,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../services/local_prefs.dart';
 import '../services/trace_log.dart';
-import '../state/browsing_mode_service.dart';
+import '../state/kiosk_timer_config.dart';
 import '../state/order_flow_controller.dart';
 import 'timer_footer_sheet.dart';
 
@@ -48,7 +48,6 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   final ValueNotifier<bool> _dismissPing = ValueNotifier(false);
 
   bool get _isGuardedRoute =>
-      browsingModeService.mode == BrowsingMode.kiosk &&
       _routeName != null &&
       _routeName != Routes.landing &&
       Routes.kioskAllowlist.contains(_routeName);

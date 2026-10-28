@@ -5,7 +5,6 @@ import '../screens/browse_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/categories_screen.dart';
 import '../screens/checkout_screen.dart';
-import '../screens/debug_admin_stub_screen.dart';
 import '../screens/account_edit_screen.dart';
 import '../screens/accounts_screen.dart';
 import '../screens/landing_editor_screen.dart';
@@ -24,7 +23,6 @@ import '../screens/settings_screen.dart';
 import '../screens/success_screen.dart';
 import '../models/product.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
 import '../widgets/hardware_scan_listener.dart';
 import '../widgets/simulator_overlay.dart';
 
@@ -109,29 +107,19 @@ class Routes {
   static const receiptInfoEdit = '/admin/receipt-info/edit';
   static const paymentMethods = '/admin/payment-methods';
 
-  /// Debug-only — deliberately NOT in kioskAllowlist. Exists to make the
-  /// lock observable; see debug_admin_stub_screen.dart.
-  static const debugAdminStub = '/debug/admin-stub';
   static const odooAdmin = '/admin/odoo';
   static const landingEditor = '/admin/landing-editor';
   static const accounts = '/admin/accounts';
   static const accountEdit = '/admin/accounts/edit';
 
-  /// Screens reachable while navigation is restricted. Applies to BOTH
-  /// Kiosk and Shopping — per the actual product model, "customer already
-  /// has the item in hand" is what's restricted, and that's true for a
-  /// locked terminal (Kiosk) and a customer's own phone (Shopping) alike.
-  /// Only Normal mode gets the gate lifted. Settings, Profile, Browse,
-  /// Product Detail, Register, Login, and Store Picker are all
-  /// deliberately excluded either way — restricted navigation shouldn't
-  /// offer a way to reach account/config screens mid-session. Browse is
-  /// Normal-mode-only for now on purpose, even though MVP.txt's own table
-  /// lists Shopping as having full browsing too — kept out of scope this
-  /// round to avoid re-litigating Shopping's already-built fast-scan UX
-  /// in the same change; see FRONTEND_AI.md.
+  /// Screens reachable while navigation is restricted — "customer already
+  /// has the item in hand" is what's restricted, on a locked terminal.
+  /// Account and admin screens are deliberately excluded: restricted
+  /// navigation shouldn't offer a way to reach account/config screens
+  /// mid-session.
   // browse/categories/search/productDetail are intentionally included so that
   // HTML landing-page banners (href="/screen?name=browse_screen&tag=X") can
-  // navigate to catalog screens from kiosk/shopping mode without being blocked
+  // navigate to catalog screens without being blocked
   // by the nav guard. Profile and admin/auth routes remain locked. Settings
   // is reachable only via the deliberate 10-tap + device-PIN gesture on the
   // Cart screen — nothing else links to it from kiosk mode, so adding it
@@ -141,8 +129,8 @@ class Routes {
 
   /// Reused (see onGenerateRoute) to decide where the ambient hardware-
   /// scanner listener mounts: the same product/cart screens are exactly
-  /// where a barcode scan should always be accepted, in every mode — not
-  /// just Kiosk/Shopping's restricted set. Deliberately NOT the same set as
+  /// where a barcode scan should always be accepted. Deliberately NOT the
+  /// same set as
   /// kioskAllowlist above — settings has no business accepting a barcode
   /// scan into the cart in the background.
   static const scanEnabledRoutes = {landing, scan, cart, checkout, invoice, pay, success,
@@ -160,17 +148,9 @@ class Routes {
 
 /// Route guard + idle-timer application.
 ///
-/// Navigation lock applies to Kiosk AND Shopping — any route outside
-/// kioskAllowlist bounces back to Landing in both. Only Normal gets full
-/// navigation. Idle-recovery timers are narrower: Kiosk only, since
-/// Shopping runs on the customer's own phone — there's no "walked away
-/// from an unattended terminal" concern to guard against there, even
-/// though its navigation is just as locked as Kiosk's.
-///
-/// Reads `browsingModeService.mode` directly rather than through Provider —
-/// this function gets no BuildContext, so it can't watch a
-/// ChangeNotifier; it just reads the current value fresh on every
-/// navigation, which is what's needed here.
+/// Navigation lock — any route outside kioskAllowlist bounces back to
+/// Landing, and every route is gated behind a device session (the device
+/// login) first.
 ///
 /// Every page is stacked with SimulatorOverlay *here*, inside the route's
 /// own builder — deliberately not done once at the MaterialApp.builder
@@ -183,18 +163,15 @@ class Routes {
 /// Navigator ancestors to find.
 Route<dynamic> onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? Routes.landing;
-  final mode = browsingModeService.mode;
-  final isRestrictedNav = mode == BrowsingMode.kiosk || mode == BrowsingMode.shopping;
-  final isKiosk = mode == BrowsingMode.kiosk;
 
   Widget page;
   // Kiosk is never anonymous: every route (including Landing itself) is
   // gated behind a device session. Checked before the allowlist below —
   // an unauthenticated device shouldn't even reach Landing's "start
   // scanning" entry point, let alone the routes that allowlist opens up.
-  if (isKiosk && !authService.isDeviceSession && name != Routes.kioskLogin) {
+  if (!authService.isDeviceSession && name != Routes.kioskLogin) {
     page = const KioskLoginScreen();
-  } else if (isRestrictedNav && !Routes.kioskAllowlist.contains(name)) {
+  } else if (!Routes.kioskAllowlist.contains(name)) {
     page = const LandingScreen();
   } else {
     switch (name) {
@@ -221,9 +198,6 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
         break;
       case Routes.success:
         page = const SuccessScreen();
-        break;
-      case Routes.debugAdminStub:
-        page = const DebugAdminStubScreen();
         break;
       case Routes.odooAdmin:
         page = const OdooAdminScreen();

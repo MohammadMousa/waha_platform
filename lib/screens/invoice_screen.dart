@@ -15,7 +15,7 @@ import '../services/api_client.dart';
 import '../services/geidea_terminal_bridge.dart';
 import '../services/local_prefs.dart';
 import '../state/auth_service.dart';
-import '../state/browsing_mode_service.dart';
+import '../state/kiosk_timer_config.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../services/trace_log.dart';

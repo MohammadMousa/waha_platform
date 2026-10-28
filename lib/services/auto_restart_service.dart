@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
-import '../state/browsing_mode_service.dart';
 import '../state/order_flow_controller.dart';
 import '../widgets/timer_footer_sheet.dart';
 import 'geidea_terminal_bridge.dart';
@@ -133,18 +132,16 @@ class AutoRestartService {
     _timer ??= Timer.periodic(const Duration(seconds: 30), (_) => _tick());
   }
 
-  /// The idle rule, as pure logic (unit-tested): kiosk mode, the landing
-  /// screen, an empty cart, no order or payment in progress and no terminal
+  /// The idle rule, as pure logic (unit-tested): the landing screen, an empty cart, no order or payment in progress and no terminal
   /// attempt still pending.
   static bool isIdle({
-    required bool kioskMode,
     required bool onLanding,
     required bool cartEmpty,
     required bool noOrder,
     required bool noPayment,
     required bool noPendingAttempt,
   }) =>
-      kioskMode && onLanding && cartEmpty && noOrder && noPayment && noPendingAttempt;
+      onLanding && cartEmpty && noOrder && noPayment && noPendingAttempt;
 
   /// Reads the live state. [ignoreRoute] is for the check made WHILE the
   /// countdown sheet is open: the sheet is itself the top route (the route
@@ -156,7 +153,6 @@ class AutoRestartService {
       if (ctx == null) return false;
       final flow = ctx.read<OrderFlowController>();
       return isIdle(
-        kioskMode: browsingModeService.mode == BrowsingMode.kiosk,
         onLanding: ignoreRoute || KioskRouteObserver.currentRouteName.value == Routes.landing,
         cartEmpty: flow.cart.isEmpty,
         noOrder: flow.orderId == null,
