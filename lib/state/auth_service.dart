@@ -93,33 +93,44 @@ class AuthService extends ChangeNotifier {
   Future<void> loginKiosk(
       ApiClient api, String username, String pinCode) async {
     final session = await api.kioskLogin(username, pinCode);
+    // A new login brings its own store; whatever the previous account left
+    // behind must not survive it.
+    await storeConfigService.clearStore();
     _applySession(session, tokenOverride: session.token);
     await LocalPrefs.setAuthToken(session.token!);
     await LocalPrefs.setKioskUsernameCache(username);
     notifyListeners();
+    await resolveDefaultStore(api);
   }
 
   /// Explicit user-initiated logout. Kiosk devices stay logged in permanently
-  /// once provisioned; see resolveStartupAuth.
-  Future<void> logout(ApiClient api) async {
+  /// once provisioned; see resolveStartupAuth. The server session is removed
+  /// FIRST: if the server can't be reached the device stays signed in and this
+  /// returns false, so a token that never expires is not left alive behind a
+  /// local sign-out.
+  Future<bool> logout(ApiClient api) async {
     final t = token;
-    final wasDeviceSession = isDeviceSession;
-    _clearSessionMemory();
-    await LocalPrefs.clearAuthToken();
-    await LocalPrefs.clearAuthCredentials();
-    await LocalPrefs.clearKioskCredentials();
-    notifyListeners();
     if (t != null) {
       try {
-        if (wasDeviceSession) {
+        if (isDeviceSession) {
           await api.kioskLogout(t);
         } else {
           await api.logout(t);
         }
+      } on UnauthorizedException {
+        // Token already dead on the server — nothing left to remove.
       } catch (_) {
-        // Already logged out locally — server-side failure doesn't undo that.
+        return false;
       }
     }
+    _clearSessionMemory();
+    await LocalPrefs.clearAuthToken();
+    await LocalPrefs.clearAuthCredentials();
+    await LocalPrefs.clearKioskCredentials();
+    await LocalPrefs.clearLandingCacheMeta();
+    await storeConfigService.clearStore();
+    notifyListeners();
+    return true;
   }
 
   void _clearSessionMemory() {

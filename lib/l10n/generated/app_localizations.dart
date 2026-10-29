@@ -428,6 +428,12 @@ abstract class AppLocalizations {
   /// **'Log Out'**
   String get profileLogout;
 
+  /// No description provided for @profileLogoutFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t sign out. Check the connection and try again.'**
+  String get profileLogoutFailed;
+
   /// No description provided for @profileLogin.
   ///
   /// In en, this message translates to:

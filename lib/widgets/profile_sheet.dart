@@ -24,8 +24,15 @@ class _ProfileSheetState extends State<ProfileSheet> {
   Future<void> _logout() async {
     setState(() => _loggingOut = true);
     final api = context.read<ApiClient>();
-    await authService.logout(api);
-    authService.resolveDefaultStore(api); // fire-and-forget
+    final done = await authService.logout(api);
+    if (!done) {
+      if (mounted) {
+        setState(() => _loggingOut = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!.profileLogoutFailed)));
+      }
+      return;
+    }
     if (mounted) {
       Navigator.of(context).pop(); // close sheet
       Navigator.of(context)

@@ -162,6 +162,7 @@ class ApiClient {
   // docs/roles-permissions.md in the backend repo. organizationId defaults
   // to 1 server-side (single-org deployment) if omitted.
   Future<AuthSession> kioskLogin(String username, String pinCode) async {
+    final deviceInfo = await AppInfo.deviceInfo();
     final resp = await _send(
       () => _http.post(
         _uri('/api/kiosk/auth/login'),
@@ -170,6 +171,7 @@ class ApiClient {
           'username': username,
           'pinCode': pinCode,
           'appVersion': AppInfo.version,
+          if (deviceInfo.isNotEmpty) 'sessionProperties': deviceInfo,
         }),
       ),
     );
@@ -215,6 +217,7 @@ class ApiClient {
       () => _http.post(_uri('/api/kiosk/auth/logout'),
           headers: _headers(token: token)),
     );
+    if (resp.statusCode == 401) throw UnauthorizedException(401, _extractMessage(resp));
     if (resp.statusCode != 200) {
       throw UnknownApiException(resp.statusCode, _extractMessage(resp));
     }

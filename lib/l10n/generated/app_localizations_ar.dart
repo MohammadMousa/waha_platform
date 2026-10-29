@@ -181,6 +181,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get profileLogout => 'تسجيل الخروج';
 
   @override
+  String get profileLogoutFailed =>
+      'تعذّر تسجيل الخروج. تحقّق من الاتصال وحاول مرة أخرى.';
+
+  @override
   String get profileLogin => 'تسجيل الدخول';
 
   @override

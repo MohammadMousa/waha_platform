@@ -403,6 +403,9 @@ class MainActivity : FlutterActivity() {
                         restartApp(call.argument<String>("reason") ?: "restart")
                         result.success(true)
                     }
+                    "deviceInfo" -> {
+                        result.success(mapOf("os" to "Android", "osVersion" to Build.VERSION.RELEASE, "model" to Build.MODEL))
+                    }
                     "monotonicNow" -> {
                         // Time since boot (never jumps when the clock is corrected)
                         // plus the boot counter, so Dart can tell "same boot, this

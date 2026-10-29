@@ -182,6 +182,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileLogout => 'Log Out';
 
   @override
+  String get profileLogoutFailed =>
+      'Couldn\'t sign out. Check the connection and try again.';
+
+  @override
   String get profileLogin => 'Log In';
 
   @override

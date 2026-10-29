@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// Runtime read of the version baked into THIS installed build — not
@@ -26,6 +27,24 @@ class AppInfo {
   /// "20260923" — the part after '+' (this project's convention: today's
   /// date, set by tool/bump_version.py on a release build).
   static String get buildNumber => _cached?.buildNumber ?? '?';
+
+  /// OS, OS version and model of this tablet, sent with the device login so
+  /// the dashboard can tell sessions apart. Empty if the native call fails;
+  /// the login then goes without it.
+  static Future<Map<String, String>> deviceInfo() async {
+    try {
+      final m = await const MethodChannel('com.waha/geidea')
+          .invokeMethod<Map>('deviceInfo')
+          .timeout(const Duration(seconds: 2));
+      return {
+        for (final e in (m ?? const {}).entries)
+          if (e.value != null && '${e.value}'.isNotEmpty)
+            '${e.key}': '${e.value}',
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
 
   /// When this build was made — stamped by scripts/build_release.sh through
   /// --dart-define=BUILD_TIME. A plain `flutter run` isn't stamped.

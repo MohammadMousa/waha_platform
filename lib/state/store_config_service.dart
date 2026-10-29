@@ -73,6 +73,19 @@ class StoreConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Forgets the active store (id, names, slug, currency) so the next login
+  /// starts from its own store and a signed-out device shows none. The app
+  /// name is organization-wide and stays.
+  Future<void> clearStore() async {
+    _storeId = null;
+    _storeName = null;
+    _storeDisplayName = null;
+    _storeSlug = null;
+    _storeCurrency = null;
+    await LocalPrefs.clearStoreIds();
+    notifyListeners();
+  }
+
   /// Forgets everything tied to the previous server (store binding, names,
   /// currency) — ids from one backend mean nothing on another.
   Future<void> resetForServerChange() async {
