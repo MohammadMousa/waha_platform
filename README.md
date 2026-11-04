@@ -1,8 +1,12 @@
 # Waha Kiosk — Flutter app
 
-Self-service kiosk app for Waha. A customer scans or browses products, reviews the cart, and pays by card terminal or QR code. It talks to the [Waha backend](github.com/MohammadMousa/waha) REST API.
+Self-service kiosk app for Waha. A customer scans or browses products, reviews the cart, and pays by card terminal or QR code. It talks to the [Waha backend](https://github.com/MohammadMousa/waha) REST API.
 
-This repository is **kiosk-only**. The web and phone app (normal and shopping flows, admin screens) lives in `waha_client`, and the dashboard in `waha_admin`.
+The Waha modules are separate repositories:
+
+- **`waha_platform`** (this repo) — the self-service kiosk.
+- **`waha_client`** — the normal / shopping app (web and phone).
+- **`waha_admin`** — the dashboard and admin screens.
 
 ---
 
@@ -123,6 +127,8 @@ See `docs/landing-page-rendering.md`. Pages are HTML from the store's resource l
 
 ## Screenshots
 
-| Browse with quantity stepper | Invoice (unpaid) | Invoice (paid) |
-|---|---|---|
-| ![Browse](docs/screenshots/ui/browse-stepper.png) | ![Unpaid](docs/screenshots/ui/invoice-unpaid.png) | ![Paid](docs/screenshots/ui/invoice-paid.png) |
+Kiosk screens (Arabic, RTL), with a 50% offer applied.
+
+| Cart with offer | Invoice and payment method | Paid, invoice QR | Idle prompt |
+|---|---|---|---|
+| <img src="docs/screenshots/kiosk/cart-with-offer.png" width="220"> | <img src="docs/screenshots/kiosk/invoice-with-offer.png" width="220"> | <img src="docs/screenshots/kiosk/paid-invoice-qr.png" width="220"> | <img src="docs/screenshots/kiosk/idle-timer.jpg" width="220"> |
