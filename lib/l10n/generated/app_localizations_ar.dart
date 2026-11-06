@@ -87,6 +87,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get scanNotSellableMessage => 'هذا المنتج غير متاح للبيع حاليًا.';
 
   @override
+  String get offlineNotReady =>
+      'لا يزال تحميل المنتجات جاريًا، يرجى الانتظار قليلًا.';
+
+  @override
   String scanFailedMessage(String error) {
     return 'فشل المسح: $error';
   }

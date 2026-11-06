@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -13,6 +14,10 @@ import '../models/product_page.dart';
 import '../models/quote.dart';
 import '../models/store.dart';
 import '../models/terminal_session.dart';
+import 'package:uuid/uuid.dart';
+import '../data/catalog/offline_mode.dart';
+import '../data/orders/local_order_service.dart';
+import '../data/orders/order_push_service.dart';
 import 'api_exceptions.dart';
 import 'app_info.dart';
 
@@ -285,6 +290,16 @@ class ApiClient {
 
   // GET /api/products/barcode/{barcode}?storeId={id}
   Future<Product> getProductByBarcode(String barcode, int storeId) async {
+    if (OfflineMode.active) {
+      final p = await OfflineMode.catalog!.findByBarcode(barcode);
+      if (p == null) {
+        throw ProductNotFoundException(404, 'No product found for barcode $barcode');
+      }
+      if (!p.active && !OfflineMode.scanDisabledAllowed) {
+        throw const ProductNotSellableException(409, 'Product is not currently sellable');
+      }
+      return p;
+    }
     final resp = await _send(
       () => _http.get(_uri(
         '/api/products/barcode/${Uri.encodeComponent(barcode)}',
@@ -308,6 +323,9 @@ class ApiClient {
     int? categoryId,
     String? sort,
   }) async {
+    if (OfflineMode.active) {
+      return OfflineMode.catalog!.browse(categoryId: categoryId, page: page, size: size);
+    }
     final resp = await _send(
       () => _http.get(
         _uri('/api/products').replace(queryParameters: {
@@ -335,6 +353,9 @@ class ApiClient {
     int size = 50,
     String? token,
   }) async {
+    if (OfflineMode.active) {
+      return OfflineMode.catalog!.search(q, page: page, size: size);
+    }
     final resp = await _send(
       () => _http.get(
         _uri('/api/products/search').replace(queryParameters: {
@@ -355,6 +376,7 @@ class ApiClient {
 
   // GET /api/categories?storeId=
   Future<List<Category>> getCategories({required int storeId}) async {
+    if (OfflineMode.active) return OfflineMode.catalog!.categories();
     final resp = await _send(
       () => _http.get(
         _uri('/api/categories')
@@ -372,6 +394,11 @@ class ApiClient {
 
   // GET /api/products/{id}
   Future<Product> getProductDetail(int id) async {
+    if (OfflineMode.active) {
+      final p = await OfflineMode.catalog!.productDetail(id);
+      if (p == null) throw ProductNotFoundException(404, 'Product $id not found');
+      return p;
+    }
     final resp = await _send(() => _http.get(_uri('/api/products/$id')));
     if (resp.statusCode == 200) {
       return Product.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
@@ -386,6 +413,7 @@ class ApiClient {
   // GET /api/payment-methods?storeId=&mode=
   Future<List<PaymentMethod>> getPaymentMethods(
       {required String mode, int? storeId}) async {
+    if (OfflineMode.active) return OfflineMode.catalog!.offlinePaymentMethods();
     final resp = await _send(
       () => _http.get(
         _uri('/api/payment-methods').replace(queryParameters: {
@@ -408,6 +436,10 @@ class ApiClient {
   // POST /api/orders/quote
   Future<Quote> quote(List<CartItem> items,
       {int? storeId, String? token}) async {
+    if (OfflineMode.active) {
+      return OfflineMode.catalog!
+          .quote(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed);
+    }
     final resp = await _send(
       () => _http.post(
         _uri('/api/orders/quote'),
@@ -434,6 +466,16 @@ class ApiClient {
     String? username,
     String? token,
   }) async {
+    if (OfflineMode.active) {
+      final lines = await OfflineMode.catalog!
+          .orderLines(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed);
+      await OfflineMode.orders!.createOrder(
+        lines: lines,
+        username: username ?? OfflineMode.username(),
+        orderId: orderId,
+      );
+      return (await OfflineMode.orders!.toWahaOrder(orderId))!;
+    }
     final resp = await _send(
       () => _http.post(
         _uri('/api/orders'),
@@ -456,6 +498,21 @@ class ApiClient {
 
   // POST /api/orders/{id}/pay — Kiosk simulated
   Future<PayResult> pay(String orderId, {String? simulateOutcome}) async {
+    if (OfflineMode.active && await OfflineMode.orders!.findOrder(orderId) != null) {
+      final orders = OfflineMode.orders!;
+      final declined = simulateOutcome != null && simulateOutcome.toUpperCase() != 'SUCCESS';
+      if (!declined) {
+        await orders.markPaid(orderId, const PaidPayment(provider: 'simulated'));
+        unawaited(OrderPushService.instance.pushPending());
+      }
+      final order = (await orders.toWahaOrder(orderId))!;
+      return PayResult(
+        paid: !declined,
+        status: declined ? 'FAILED' : 'PAID',
+        detail: declined ? 'Simulated decline' : null,
+        order: order,
+      );
+    }
     final resp = await _send(
       () => _http.post(
         _uri('/api/orders/$orderId/pay'),
@@ -507,6 +564,23 @@ class ApiClient {
 
   Future<TerminalSession> createTerminalSession(String orderId,
       {String? token}) async {
+    if (OfflineMode.active) {
+      final o = await OfflineMode.orders!.findOrder(orderId);
+      if (o != null) {
+        if (o.status == 'PAID') {
+          throw const OrderAlreadyPaidException(409, 'Order is already paid');
+        }
+        final id = const Uuid().v4(); // becomes the payment id
+        OfflineMode.sessionOrder[id] = orderId;
+        return TerminalSession(
+          id: id,
+          orderId: orderId,
+          amount: double.parse(o.totalAmount),
+          currency: o.currency,
+          status: 'PENDING',
+        );
+      }
+    }
     final resp = await _send(
       () => _http.post(_uri('/api/orders/$orderId/terminal-session'),
           headers: _headers(token: token)),
@@ -528,6 +602,24 @@ class ApiClient {
       {required String authCode,
       required Map<String, dynamic> notes,
       String? token}) async {
+    final localOrderId = OfflineMode.sessionOrder[sessionId];
+    if (localOrderId != null) {
+      // Offline: the payment is saved on the device FIRST, then pushed.
+      final rrn = notes['rrn'] as String?;
+      await OfflineMode.orders!.markPaid(
+        localOrderId,
+        PaidPayment(
+          provider: 'terminal',
+          providerReference: (rrn == null || rrn.isEmpty) ? null : rrn,
+          authCode: authCode,
+          notes: notes,
+        ),
+        paymentId: sessionId,
+      );
+      OfflineMode.sessionOrder.remove(sessionId);
+      unawaited(OrderPushService.instance.pushPending());
+      return;
+    }
     final resp = await _send(
       () => _http.post(
         _uri('/api/terminal-sessions/$sessionId/confirm'),
@@ -542,6 +634,7 @@ class ApiClient {
   // Declined/error/gave up. Closes the PENDING record; does not preserve a
   // decline reason server-side (flagged to backend, accepted as-is for now).
   Future<void> cancelTerminalSession(String sessionId, {String? token}) async {
+    if (OfflineMode.sessionOrder.remove(sessionId) != null) return; // nothing on a server
     await _send(() => _http.post(
         _uri('/api/terminal-sessions/$sessionId/cancel'),
         headers: _headers(token: token)));
@@ -561,6 +654,22 @@ class ApiClient {
     String? terminalId,
     String? token,
   }) async {
+    if (OfflineMode.active && await OfflineMode.orders!.findOrder(orderId) != null) {
+      // The card was charged after the kiosk gave up: the order is paid as
+      // soon as the transaction arrives (same rule as the owner decided).
+      await OfflineMode.orders!.markPaid(
+        orderId,
+        PaidPayment(
+          provider: 'terminal',
+          providerReference: rrn,
+          authCode: approvalCode,
+          notes: {'rrn': rrn, if (terminalId != null) 'terminalId': terminalId, 'amount': amount},
+          lateApproval: true,
+        ),
+      );
+      unawaited(OrderPushService.instance.pushPending());
+      return 'PAID';
+    }
     final resp = await _send(
       () => _http.post(
         _uri('/api/orders/$orderId/late-approval'),
@@ -600,6 +709,10 @@ class ApiClient {
 
   // GET /api/orders/{id}
   Future<WahaOrder> getOrder(String orderId) async {
+    if (OfflineMode.active) {
+      final local = await OfflineMode.orders!.toWahaOrder(orderId);
+      if (local != null) return local;
+    }
     final resp = await _send(() => _http.get(_uri('/api/orders/$orderId')));
     if (resp.statusCode == 200) {
       return WahaOrder.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);

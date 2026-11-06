@@ -248,6 +248,12 @@ abstract class AppLocalizations {
   /// **'This product is not available for sale right now.'**
   String get scanNotSellableMessage;
 
+  /// Shown on a kiosk in offline mode until the first full download of products, barcodes and payment methods has finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Products are still loading, please wait a moment.'**
+  String get offlineNotReady;
+
   /// No description provided for @scanFailedMessage.
   ///
   /// In en, this message translates to:

@@ -16,6 +16,9 @@ class WahaOrder {
   final String? username;
   final String? invoiceUrl;
   final int? displayId; // human-readable order number, per-store sequential
+  /// What the customer was shown when the server had not numbered the order
+  /// yet (orders made offline), e.g. WH-01-0233.
+  final String? orderReference;
   final int? storeId;
   final String? createdAt;
   final List<QuoteLine> items;
@@ -23,6 +26,11 @@ class WahaOrder {
   /// Total discount from all offers, and the invoice-level offer if any.
   final double discountAmount;
   final AppliedOffer? invoiceOffer;
+
+  /// The number to show: the server's order number when there is one, else
+  /// the order reference.
+  String? get displayNumber =>
+      displayId != null ? '#$displayId' : orderReference;
 
   const WahaOrder({
     required this.orderId,
@@ -38,6 +46,7 @@ class WahaOrder {
     this.username,
     this.invoiceUrl,
     this.displayId,
+    this.orderReference,
     this.storeId,
     this.createdAt,
     required this.items,
@@ -59,6 +68,7 @@ class WahaOrder {
         username: json['username'] as String?,
         invoiceUrl: json['invoiceUrl'] as String?,
         displayId: json['displayId'] as int?,
+        orderReference: json['orderReference'] as String?,
         storeId: json['storeId'] as int?,
         createdAt: json['createdAt'] as String?,
         items: (json['items'] as List<dynamic>? ?? [])

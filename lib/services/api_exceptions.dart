@@ -1,3 +1,6 @@
+import '../l10n/generated/app_localizations.dart';
+import '../state/locale_service.dart';
+
 /// Base class for any non-2xx response. `message` is the backend's own
 /// human-readable string — display it or log it, never parse it (there's
 /// no error code/enum field per FRONTEND_CONTEXT.md).
@@ -20,6 +23,14 @@ class ProductNotFoundException extends ApiException {
 /// between scan and checkout.
 class ProductNotSellableException extends ApiException {
   const ProductNotSellableException(super.statusCode, super.message);
+}
+
+/// Offline mode is on but the local copy of the catalog is not complete yet
+/// (products, barcodes and payment methods each need one full pull first).
+class OfflineNotReadyException extends ApiException {
+  // The text follows the language the kiosk is showing right now.
+  OfflineNotReadyException()
+      : super(503, lookupAppLocalizations(localeService.locale).offlineNotReady);
 }
 
 /// 404 on GET/POST against an order id that doesn't exist.

@@ -36,6 +36,8 @@
     }
   },
   "scanNotSellableMessage": "This product is not available for sale right now.",
+  "offlineNotReady": "Products are still loading, please wait a moment.",
+  "@offlineNotReady": { "description": "Shown on a kiosk in offline mode until the first full download of products, barcodes and payment methods has finished." },
   "scanFailedMessage": "Scan failed: {error}",
   "@scanFailedMessage": {
     "placeholders": {

@@ -74,3 +74,6 @@ devtools_options.yaml
 # *.example.json next to it, drop ".example", fill in — see README.
 /config/*.json
 !/config/*.example.json
+
+# Drift generated code (run: dart run build_runner build)
+lib/data/**/*.g.dart

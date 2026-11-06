@@ -24,6 +24,8 @@ import '../services/usb_diagnostics.dart';
 import '../state/store_config_service.dart';
 import 'simulator_settings_screen.dart';
 import '../widgets/info_tiles.dart';
+import '../widgets/offline_data_panel.dart';
+import '../widgets/offline_orders_panel.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -364,6 +366,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
           const Divider(height: 40),
+
+          const OfflineDataPanel(),
+          const SizedBox(height: 12),
+          const OfflineOrdersPanel(),
+          const SizedBox(height: 12),
 
           // ── POS Terminal Options (Geidea) ────────────────────────────────
           // Collapsed by default — everything terminal-related lives here

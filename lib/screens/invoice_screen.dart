@@ -650,8 +650,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           if (order != null) ...[
             const SizedBox(height: 8),
             Text(
-              order.displayId != null
-                  ? '${l10n.invoiceOrderNum} #${order.displayId}'
+              order.displayNumber != null
+                  ? '${l10n.invoiceOrderNum} ${order.displayNumber}'
                   : order.orderId.substring(0, 8),
               style: TextStyle(color: scheme.outline),
             ),
@@ -1113,7 +1113,7 @@ class _InvoiceHeaderCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: order.displayId != null
+                        child: order.displayNumber != null
                             ? RichText(
                                 text: TextSpan(
                                   style: DefaultTextStyle.of(context).style,
@@ -1125,7 +1125,7 @@ class _InvoiceHeaderCard extends StatelessWidget {
                                           color: scheme.outline),
                                     ),
                                     TextSpan(
-                                      text: '#${order.displayId}',
+                                      text: order.displayNumber!,
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleMedium

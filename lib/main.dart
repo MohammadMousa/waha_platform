@@ -12,6 +12,7 @@ import 'router/app_router.dart';
 import 'services/api_client.dart';
 import 'services/app_messenger.dart';
 import 'services/geidea_terminal_bridge.dart';
+import 'data/sync/sync_service.dart';
 import 'services/geidea_usb_activity_logger.dart';
 import 'services/app_info.dart';
 import 'services/local_prefs.dart';
@@ -100,6 +101,7 @@ void main() {
         ));
     LateApprovalService.instance.start(apiClient);
     HeartbeatService.instance.start(apiClient);
+    SyncService.instance.start(apiClient);
     runApp(WahaApp(apiClient: apiClient));
   }, (error, stack) {
     TraceLog.log('Uncaught zone error: $error\n$stack');
@@ -155,7 +157,14 @@ Future<void> _resolveStartupConfig(ApiClient apiClient) async {
   // server answers (see StartupConnection).
   final reachError = await apiClient.probe();
   if (reachError != null) {
-    startupConnection.begin(apiClient, reachError);
+    // A device that was signed in before opens normally from its saved
+    // session; the order push and heartbeat notice when the server returns.
+    // Only a device with nothing saved waits behind the popup.
+    final opened = await authService.restoreSavedSession();
+    TraceLog.log(opened
+        ? 'STARTUP: server unreachable ($reachError) — opened from saved session'
+        : 'STARTUP: server unreachable ($reachError) — no saved session, waiting');
+    if (!opened) startupConnection.begin(apiClient, reachError);
   } else {
     await authService.resolveStartupAuth(apiClient);
   }

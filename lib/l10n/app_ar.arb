@@ -36,6 +36,7 @@
     }
   },
   "scanNotSellableMessage": "هذا المنتج غير متاح للبيع حاليًا.",
+  "offlineNotReady": "لا يزال تحميل المنتجات جاريًا، يرجى الانتظار قليلًا.",
   "scanFailedMessage": "فشل المسح: {error}",
   "@scanFailedMessage": {
     "placeholders": {

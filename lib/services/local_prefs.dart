@@ -34,6 +34,7 @@ class LocalPrefs {
   static const _kDefaultStoreId = 'waha.default_store_id';
   static const _kLocale = 'waha.locale';
   static const _kAuthToken = 'waha.auth_token';
+  static const _kSessionSnapshot = 'waha.session_snapshot';
   static const _kAuthUsername = 'waha.auth_username';
   static const _kAuthPassword = 'waha.auth_password';
   static const _kBeforeWarn = 'waha.kiosk_before_warn_s';
@@ -96,7 +97,18 @@ class LocalPrefs {
   static String? get authToken => _p.getString(_kAuthToken);
   static Future<void> setAuthToken(String value) =>
       _p.setString(_kAuthToken, value);
-  static Future<void> clearAuthToken() => _p.remove(_kAuthToken);
+  static Future<void> clearAuthToken() async {
+    await _p.remove(_kAuthToken);
+    // The saved session details belong to that token — they go with it.
+    await _p.remove(_kSessionSnapshot);
+  }
+
+  /// What the server last said about the signed-in device (ids, store,
+  /// permissions), kept so the kiosk can open normally when the server
+  /// can't be reached at startup. JSON text; removed with the token.
+  static String? get sessionSnapshot => _p.getString(_kSessionSnapshot);
+  static Future<void> setSessionSnapshot(String value) =>
+      _p.setString(_kSessionSnapshot, value);
 
   /// No password is cached anymore (Waha Rules, Auth — no credentials
   /// stored locally, any login type): a rejected/expired token means
@@ -219,6 +231,19 @@ class LocalPrefs {
   // build (see main.dart, which seeds this same persisted value from that
   // define on first run — from then on this toggle is the durable control).
   // Remove alongside the rest of the trace-logging system once no longer needed.
+  // Last values of the offline properties from /api/config, so the kiosk
+  // knows how to behave on start even when the server cannot be reached.
+  static const _kOfflineMode = 'waha.offline_mode';
+  static bool get offlineMode => _p.getBool(_kOfflineMode) ?? false;
+  static Future<void> setOfflineMode(bool value) =>
+      _p.setBool(_kOfflineMode, value);
+
+  static const _kScanDisabledProducts = 'waha.scan_disabled_products';
+  static bool get scanDisabledProducts =>
+      _p.getBool(_kScanDisabledProducts) ?? false;
+  static Future<void> setScanDisabledProducts(bool value) =>
+      _p.setBool(_kScanDisabledProducts, value);
+
   static const _kLoggingEnabled = 'waha.logging_enabled';
   static bool get loggingEnabled => _p.getBool(_kLoggingEnabled) ?? false;
   static Future<void> setLoggingEnabled(bool value) =>

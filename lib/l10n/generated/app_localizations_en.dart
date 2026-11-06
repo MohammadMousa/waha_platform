@@ -88,6 +88,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This product is not available for sale right now.';
 
   @override
+  String get offlineNotReady =>
+      'Products are still loading, please wait a moment.';
+
+  @override
   String scanFailedMessage(String error) {
     return 'Scan failed: $error';
   }

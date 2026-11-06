@@ -101,6 +101,7 @@ class AuthService extends ChangeNotifier {
     await LocalPrefs.setKioskUsernameCache(username);
     notifyListeners();
     await resolveDefaultStore(api);
+    await _saveSnapshot();
   }
 
   /// Explicit user-initiated logout. Kiosk devices stay logged in permanently
@@ -189,12 +190,14 @@ class AuthService extends ChangeNotifier {
     // deliberately doesn't touch the harmless username cache below.
     await LocalPrefs.purgeLegacyKioskPin();
     final cachedToken = LocalPrefs.authToken;
+    var confirmed = false;
     if (cachedToken != null) {
       try {
         final session =
             await api.kioskMe(cachedToken).timeout(const Duration(seconds: 5));
         token = cachedToken;
         _applySession(session);
+        confirmed = true;
         notifyListeners();
       } on UnauthorizedException {
         // Really rejected (revoked/invalidated), not just unreachable —
@@ -209,7 +212,74 @@ class AuthService extends ChangeNotifier {
       }
     }
     await resolveDefaultStore(api);
+    // Only what the server just confirmed is worth keeping for next time.
+    if (confirmed) await _saveSnapshot();
     await _applyStartupLanguageSeed(api);
+  }
+
+  /// Opens the saved session without asking the server — for a startup where
+  /// the server can't be reached. Returns false when there is no token or no
+  /// saved details (never signed in on this build), in which case the caller
+  /// falls back to the "Connecting…" popup. Never signs anyone out: only a
+  /// real 401 does that, and it can only come from the server.
+  Future<bool> restoreSavedSession() async {
+    final saved = LocalPrefs.authToken;
+    final raw = LocalPrefs.sessionSnapshot;
+    if (saved == null || raw == null) return false;
+    try {
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      token = saved;
+      userId = m['userId'] as int?;
+      deviceId = m['deviceId'] as int?;
+      username = m['username'] as String?;
+      sessionStoreId = m['sessionStoreId'] as int?;
+      organizationId = m['organizationId'] as int?;
+      defaultStoreId = m['defaultStoreId'] as int?;
+      if (organizationId != null) {
+        GeideaTerminalBridge.instance.setOrgId(organizationId);
+      }
+      final perms = m['permissions'];
+      permissionService.update(
+          perms is List ? perms.map((e) => e.toString()).toSet() : <String>{});
+      final storeId = m['storeId'] as int?;
+      if (storeId != null) {
+        storeConfigService.applySessionStore(
+          storeId,
+          displayName: (m['storeDisplayName'] as Map?)?.cast<String, dynamic>(),
+          slug: m['storeSlug'] as String?,
+          currency: m['storeCurrency'] as String?,
+        );
+      }
+      final app = m['appName'];
+      if (app is Map) storeConfigService.setAppName(app.cast<String, dynamic>());
+      notifyListeners();
+      return true;
+    } catch (_) {
+      token = null;
+      return false;
+    }
+  }
+
+  Future<void> _saveSnapshot() async {
+    if (token == null) return;
+    try {
+      await LocalPrefs.setSessionSnapshot(jsonEncode({
+        'userId': userId,
+        'deviceId': deviceId,
+        'username': username,
+        'sessionStoreId': sessionStoreId,
+        'organizationId': organizationId,
+        'defaultStoreId': defaultStoreId,
+        'permissions': permissionService.all.toList(),
+        'storeId': storeConfigService.storeId,
+        'storeSlug': storeConfigService.storeSlug,
+        'storeDisplayName': storeConfigService.storeDisplayName,
+        'storeCurrency': storeConfigService.storeCurrency,
+        'appName': storeConfigService.appName,
+      }));
+    } catch (_) {
+      // Best effort — the next confirmed start saves it again.
+    }
   }
 
   /// Applies the org's default_language right at startup, as soon as

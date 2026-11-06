@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 class PermissionService extends ChangeNotifier {
   Set<String> _permissions = {};
 
+  Set<String> get all => Set.unmodifiable(_permissions);
+
   bool can(String permission) => _permissions.contains(permission);
 
   void update(Set<String> permissions) {

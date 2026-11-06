@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../data/sync/activity_gate.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../router/app_router.dart';
 import '../services/local_prefs.dart';
@@ -110,7 +111,10 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
   // HID barcode scanner generates key events, not pointer events.
   // Return false to not consume the event — just observe it.
   bool _onKeyEvent(KeyEvent event) {
-    if (event is KeyDownEvent) _onActivity();
+    if (event is KeyDownEvent) {
+      ActivityGate.instance.touch();
+      _onActivity();
+    }
     return false;
   }
 
@@ -185,8 +189,14 @@ class _KioskIdleGuardState extends State<KioskIdleGuard> {
       // sheet as "Continue" (the ping below) before the button's own onPressed
       // (fired on release) could run — New Order just hid the timer. The
       // sheet handles its own taps; the modal barrier is not dismissible.
-      onPointerDown: (_) { if (!_warningShowing) _onActivity(); },
-      onPointerMove: (_) { if (!_warningShowing) _onActivity(); },
+      onPointerDown: (_) {
+        ActivityGate.instance.touch();
+        if (!_warningShowing) _onActivity();
+      },
+      onPointerMove: (_) {
+        ActivityGate.instance.touch();
+        if (!_warningShowing) _onActivity();
+      },
       child: widget.child,
     );
   }

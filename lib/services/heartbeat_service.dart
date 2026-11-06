@@ -18,6 +18,7 @@ class HeartbeatService {
   ApiClient? _api;
   Timer? _timer;
   int _minutes = 0;
+  bool _down = false;
 
   /// `heartbeat_minutes`: whole minutes, 0 (off) to 1440. Missing or
   /// unusable means off.
@@ -59,8 +60,12 @@ class HeartbeatService {
     if (api == null || token == null || !authService.isDeviceSession) return;
     try {
       await api.kioskHeartbeat(token);
+      if (_down) TraceLog.log('HEARTBEAT: server reachable again');
+      _down = false;
     } catch (e) {
-      TraceLog.log('HEARTBEAT: not sent ($e)');
+      // Once per outage, not on every beat.
+      if (!_down) TraceLog.log('HEARTBEAT: server unreachable ($e)');
+      _down = true;
     }
   }
 }
