@@ -367,6 +367,17 @@ class LocalPrefs {
   static Future<void> setHeartbeatMinutes(int value) =>
       _p.setInt(_kHeartbeatMinutes, value);
 
+  // Organization property `prices_exclude_vat` (a missing value means false,
+  // so prices include VAT, the default): which kind of unit price the cart
+  // labels. In offline mode it comes from the device settings instead
+  // (`pricesIncludeVat`, the opposite). Only values the server actually
+  // returned are kept; reads are safe before the preferences are loaded.
+  static const _kPricesExcludeVat = 'waha.prices_exclude_vat';
+  static bool get pricesExcludeVat =>
+      _prefs?.getBool(_kPricesExcludeVat) ?? false;
+  static Future<void> setPricesExcludeVat(bool value) =>
+      _p.setBool(_kPricesExcludeVat, value);
+
   // Late card approvals still to be reported to the server (a JSON list, one
   // entry per payment). Kept on disk so a restart or a lost connection does
   // not drop a charge the kiosk already knows about; see LateApprovalService.

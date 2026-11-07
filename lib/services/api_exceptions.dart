@@ -33,6 +33,15 @@ class OfflineNotReadyException extends ApiException {
       : super(503, lookupAppLocalizations(localeService.locale).offlineNotReady);
 }
 
+/// 422 from a quote or order create: the server refused the coupon. [code] is
+/// the server's error code, such as COUPON_EXPIRED; the kiosk shows its own
+/// Arabic or English text for each code.
+class CouponRejectedException extends ApiException {
+  final String code;
+  const CouponRejectedException(super.statusCode, super.message,
+      {required this.code});
+}
+
 /// 404 on GET/POST against an order id that doesn't exist.
 class OrderNotFoundException extends ApiException {
   const OrderNotFoundException(super.statusCode, super.message);

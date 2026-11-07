@@ -10,6 +10,7 @@ import 'trace_log.dart';
 ///                                           (see AutoRestartService.applyConfig)
 ///  - `terminal_timeout_seconds`      (below)
 ///  - `heartbeat_minutes`                    (see HeartbeatService.applyConfig)
+///  - `prices_exclude_vat`                   (below)
 ///
 /// An empty config means the request failed: nothing changes, so the last
 /// known values stay in force.
@@ -37,11 +38,20 @@ class DeviceConfig {
     }
   }
 
+  /// `prices_exclude_vat`: `true` means shown prices are without VAT; a missing
+  /// key is the default, `false` (VAT included). Empty config = request failed.
+  static Future<void> applyPricesExcludeVat(Map<String, String> config) async {
+    if (config.isEmpty) return;
+    final v = (config['prices_exclude_vat'] ?? 'false').trim().toLowerCase() == 'true';
+    if (LocalPrefs.pricesExcludeVat != v) await LocalPrefs.setPricesExcludeVat(v);
+  }
+
   /// Applies every property from a config the server actually returned.
   static Future<void> apply(Map<String, String> config) async {
     await TraceLog.applyRemoteConfig(config);
     await AutoRestartService.applyConfig(config);
     await applyTerminalTimeout(config);
     await HeartbeatService.applyConfig(config);
+    await applyPricesExcludeVat(config);
   }
 }

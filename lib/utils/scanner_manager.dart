@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../l10n/generated/app_localizations.dart';
+import '../router/app_router.dart';
+import '../services/api_exceptions.dart';
+import '../state/order_flow_controller.dart';
+import 'coupon_text.dart';
 
 import '../screens/settings_screen.dart' show showCopyableTextDialog;
 import '../services/geidea_terminal_bridge.dart';
@@ -26,6 +33,54 @@ class ScannerManager {
     'upload-logs': _uploadLogs,
     'profile': _profile,
   };
+
+  static const _couponPrefix = 'coupon=';
+
+  // The server's rule for a coupon code: 2 to 50 letters, digits, dot, dash
+  // or underscore.
+  static final _couponFormat = RegExp(r'^[A-Za-z0-9._-]{2,50}$');
+
+  /// A scanned `coupon=<code>`. Checked before the "unpaid order" block, so
+  /// the camera and the hardware scanner both get it. True when [code] was a
+  /// coupon (handled, or refused with a message); false means "not mine".
+  ///
+  /// Where it is scanned: while an unpaid order is open (invoice screen) it is
+  /// refused; with an empty cart the customer is asked to add items first;
+  /// otherwise the server validates it. From the landing page an accepted
+  /// coupon also opens the cart.
+  Future<bool> handleCoupon(BuildContext context, String code) async {
+    if (!code.startsWith(_couponPrefix)) return false;
+    final l = AppLocalizations.of(context)!;
+    final flow = context.read<OrderFlowController>();
+    final nav = Navigator.of(context);
+    final value = code.substring(_couponPrefix.length).trim();
+
+    if (flow.orderId != null && flow.order?.status != 'PAID') {
+      showCouponToast(l.couponStage, problem: true);
+      return true;
+    }
+    if (flow.cart.isEmpty) {
+      showCouponToast(l.couponNeedItems, problem: true);
+      return true;
+    }
+    if (!_couponFormat.hasMatch(value)) {
+      showCouponToast(l.couponRejected(value, l.couponErrNotFound),
+          problem: true);
+      return true;
+    }
+    final onLanding = KioskRouteObserver.currentRouteName.value == Routes.landing;
+    try {
+      final q = await flow.applyCoupon(value);
+      showCouponToast(l.couponApplied(q.coupon?.code ?? value));
+      if (onLanding) nav.pushNamed(Routes.cart);
+    } on CouponRejectedException catch (e) {
+      showCouponToast(l.couponRejected(value, couponErrorText(l, e.code)),
+          problem: true);
+    } catch (_) {
+      showCouponToast(l.couponCheckFailed, problem: true);
+    }
+    return true;
+  }
 
   /// True when [code] was a command — handled, or simply not recognized —
   /// either way the caller must NOT also treat it as a product barcode.

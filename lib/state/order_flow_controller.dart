@@ -10,8 +10,11 @@ import '../models/quote.dart';
 import '../models/product.dart';
 import '../services/api_client.dart';
 import '../services/api_exceptions.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../services/scan_sound_service.dart';
+import '../utils/coupon_text.dart';
 import 'auth_service.dart';
+import 'locale_service.dart';
 import 'store_config_service.dart';
 
 const _uuid = Uuid();
@@ -34,6 +37,11 @@ class OrderFlowController extends ChangeNotifier {
   String? orderId;
   WahaOrder? order;
   PayResult? lastPayResult;
+
+  /// The one coupon code on this cart, sent with every quote and with the
+  /// order. Set only after the server accepted it; dropped when the server
+  /// refuses it later, when the cart is emptied, and when the order is made.
+  String? couponCode;
 
   bool busy = false;
   String? lastError;
@@ -150,12 +158,24 @@ class OrderFlowController extends ChangeNotifier {
   Future<void> _refreshQuote() async {
     if (cart.isEmpty) {
       quote = null;
+      couponCode = null;
       notifyListeners();
       return;
     }
     _setBusy(true);
     try {
-      quote = await _api.quote(cart, storeId: _sessionAwareStoreId, token: _authToken);
+      try {
+        quote = await _api.quote(cart,
+            storeId: _sessionAwareStoreId,
+            token: _authToken,
+            couponCode: couponCode);
+      } on CouponRejectedException catch (e) {
+        // The coupon no longer holds (minimum not met, expired, ...): drop it,
+        // say why, and price the cart without it.
+        _dropCoupon(e.code);
+        quote = await _api.quote(cart,
+            storeId: _sessionAwareStoreId, token: _authToken);
+      }
       lastError = null;
     } on ApiException catch (e) {
       lastError = e.message;
@@ -168,6 +188,41 @@ class OrderFlowController extends ChangeNotifier {
     } finally {
       _setBusy(false);
     }
+  }
+
+  void _dropCoupon(String reasonCode) {
+    final dropped = couponCode;
+    couponCode = null;
+    if (dropped == null) return;
+    final l = lookupAppLocalizations(localeService.locale);
+    showCouponToast(l.couponDropped(dropped, couponErrorText(l, reasonCode)),
+        problem: true);
+  }
+
+  /// Checks [code] with the server against the current cart and, when it is
+  /// accepted, makes it the cart's coupon (replacing any earlier one). A
+  /// refused code throws [CouponRejectedException] and changes nothing; a
+  /// failure to reach the server throws too. The caller shows the message.
+  Future<Quote> applyCoupon(String code) async {
+    _setBusy(true);
+    try {
+      final q = await _api.quote(cart,
+          storeId: _sessionAwareStoreId, token: _authToken, couponCode: code);
+      couponCode = q.coupon?.code ?? code;
+      quote = q;
+      lastError = null;
+      return q;
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  /// The customer's remove button in the cart.
+  Future<void> removeCoupon() async {
+    if (couponCode == null) return;
+    couponCode = null;
+    notifyListeners();
+    await _refreshQuote();
   }
 
   // ---- Checkout ----------------------------------------------------
@@ -205,11 +260,19 @@ class OrderFlowController extends ChangeNotifier {
         storeId: _sessionAwareStoreId,
         username: _sessionAwareUsername,
         token: _authToken,
+        couponCode: couponCode,
       );
       cart.clear();
       quote = null;
+      couponCode = null; // the order now carries it
       lastError = null;
       return order!;
+    } on CouponRejectedException catch (e) {
+      // The coupon stopped being valid between the quote and the order.
+      _dropCoupon(e.code);
+      lastError = e.message;
+      unawaited(_refreshQuote());
+      rethrow;
     } on ApiException catch (e) {
       lastError = e.message;
       rethrow;
@@ -298,6 +361,7 @@ class OrderFlowController extends ChangeNotifier {
   void reset() {
     cart.clear();
     quote = null;
+    couponCode = null;
     orderId = null;
     order = null;
     lastPayResult = null;
@@ -312,6 +376,7 @@ class OrderFlowController extends ChangeNotifier {
   void clearCart() {
     cart.clear();
     quote = null;
+    couponCode = null;
     lastError = null;
     notifyListeners();
   }

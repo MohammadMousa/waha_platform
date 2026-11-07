@@ -256,8 +256,12 @@ class SyncService extends ChangeNotifier {
               headers: {'Authorization': 'Bearer $token'})
           .timeout(_settings.requestTimeout);
       if (resp.statusCode == 200) {
-        await saveDeviceConfig(
-            db, jsonDecode(resp.body) as Map<String, dynamic>);
+        final cfg = jsonDecode(resp.body) as Map<String, dynamic>;
+        await saveDeviceConfig(db, cfg);
+        // The device settings carry the VAT choice with its default applied;
+        // it is the opposite of the online `prices_exclude_vat`.
+        await LocalPrefs.setPricesExcludeVat(
+            !(cfg['pricesIncludeVat'] as bool? ?? true));
       } else {
         TraceLog.log('Sync: device-config answered ${resp.statusCode}');
       }

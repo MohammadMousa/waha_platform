@@ -92,6 +92,84 @@ class AppLocalizationsEn extends AppLocalizations {
       'Products are still loading, please wait a moment.';
 
   @override
+  String get couponErrNotFound => 'This coupon code is not valid.';
+
+  @override
+  String get couponErrDisabled => 'This coupon is not active.';
+
+  @override
+  String get couponErrNotYetValid => 'This coupon is not valid yet.';
+
+  @override
+  String get couponErrExpired => 'This coupon has expired.';
+
+  @override
+  String get couponErrWrongStore => 'This coupon is not valid in this store.';
+
+  @override
+  String get couponErrUsageLimit => 'This coupon has reached its usage limit.';
+
+  @override
+  String get couponErrUserLimit =>
+      'You have reached the usage limit for this coupon.';
+
+  @override
+  String get couponErrAmountExhausted =>
+      'The discount available with this coupon has been used up.';
+
+  @override
+  String get couponErrUserAmountExhausted =>
+      'You have used up the discount available to you with this coupon.';
+
+  @override
+  String get couponErrMinimum =>
+      'The cart total is below the minimum for this coupon.';
+
+  @override
+  String get couponErrNotCombinable =>
+      'This coupon can\'t be combined with the current offers.';
+
+  @override
+  String get couponErrNotApplicable =>
+      'No item in the cart qualifies for this coupon.';
+
+  @override
+  String get couponErrGeneric => 'The coupon could not be applied.';
+
+  @override
+  String couponApplied(String code) {
+    return 'Coupon $code applied';
+  }
+
+  @override
+  String couponRejected(String code, String reason) {
+    return 'Coupon $code: $reason';
+  }
+
+  @override
+  String couponDropped(String code, String reason) {
+    return 'Coupon $code was removed: $reason';
+  }
+
+  @override
+  String get couponStage => 'Coupons can\'t be added at this stage';
+
+  @override
+  String get couponNeedItems => 'Add some items to the cart first';
+
+  @override
+  String get couponCheckFailed =>
+      'Can\'t reach the server, so the coupon can\'t be checked. Try again when connected.';
+
+  @override
+  String cartCoupon(String code) {
+    return 'Coupon $code';
+  }
+
+  @override
+  String get cartCouponRemove => 'Remove coupon';
+
+  @override
   String get offlineDataTitle => 'Offline data';
 
   @override
@@ -405,6 +483,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get perUnit => 'per unit';
+
+  @override
+  String get priceInclVat => 'incl. VAT';
+
+  @override
+  String get priceExclVat => 'excl. VAT';
 
   @override
   String get kioskIdleTitle => 'Are you still there?';

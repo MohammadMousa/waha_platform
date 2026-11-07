@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/cart_item.dart';
 import '../models/quote.dart';
+import '../services/local_prefs.dart';
 import '../state/locale_service.dart';
 import '../utils/locale_name.dart';
 import '../utils/money.dart';
@@ -75,6 +76,7 @@ class CartLineTile extends StatelessWidget {
                   Text(
                     unitPrice != null
                         ? '${formatMoney(unitPrice, currency)} ${l10n.perUnit}'
+                            ' · ${LocalPrefs.pricesExcludeVat ? l10n.priceExclVat : l10n.priceInclVat}'
                         : 'Calculating price…',
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline),

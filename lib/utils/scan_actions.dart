@@ -37,6 +37,11 @@ Future<void> openCameraAndAddToCart(BuildContext context) async {
 Future<void> addScannedBarcodeToCart(BuildContext context, String barcode) async {
   final flow = context.read<OrderFlowController>();
 
+  // A coupon code (QR `coupon=<code>`) is handled first, even while an order
+  // is open, so the invoice screen can say coupons can't be added there.
+  if (await ScannerManager.instance.handleCoupon(context, barcode)) return;
+  if (!context.mounted) return;
+
   // An order has already been placed and isn't paid yet (customer is sitting
   // on the Invoice screen, or anywhere else mid-payment) — a scan here would
   // silently try to add to a cart that's no longer what's being paid for.

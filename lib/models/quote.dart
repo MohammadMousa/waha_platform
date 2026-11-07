@@ -13,6 +13,27 @@ class AppliedOffer {
   }
 }
 
+/// The coupon the server applied to a quote.
+class AppliedCoupon {
+  final String code;
+  final String name;
+  final double discountAmount;
+
+  const AppliedCoupon(
+      {required this.code, required this.name, required this.discountAmount});
+
+  static AppliedCoupon? fromJson(dynamic json) {
+    if (json is! Map<String, dynamic>) return null;
+    final code = json['code'];
+    if (code is! String || code.isEmpty) return null;
+    return AppliedCoupon(
+      code: code,
+      name: (json['name'] ?? '').toString(),
+      discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class QuoteLine {
   final int productId;
   final Map<String, dynamic> name; // {"ar": "...", "en": "..."}
@@ -56,6 +77,10 @@ class Quote {
   final double discountAmount;
   final AppliedOffer? invoiceOffer;
 
+  /// The coupon applied to this quote, when one was sent and accepted. Its
+  /// discount is already part of [discountAmount].
+  final AppliedCoupon? coupon;
+
   const Quote({
     required this.subtotal,
     required this.tax,
@@ -63,6 +88,7 @@ class Quote {
     required this.items,
     this.discountAmount = 0.0,
     this.invoiceOffer,
+    this.coupon,
   });
 
   factory Quote.fromJson(Map<String, dynamic> json) => Quote(
@@ -74,5 +100,6 @@ class Quote {
             .toList(),
         discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
         invoiceOffer: AppliedOffer.fromJson(json['invoiceOffer']),
+        coupon: AppliedCoupon.fromJson(json['coupon']),
       );
 }

@@ -95,6 +95,20 @@ class ApiClient {
     }
   }
 
+  /// A 422 whose error code starts with COUPON_ is a refused coupon.
+  void _throwIfCouponRejected(http.Response resp, String msg) {
+    if (resp.statusCode != 422) return;
+    try {
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      final code = body['error'] ?? body['code'];
+      if (code is String && code.startsWith('COUPON_')) {
+        throw CouponRejectedException(422, msg, code: code);
+      }
+    } on CouponRejectedException {
+      rethrow;
+    } catch (_) {/* not a coupon answer */}
+  }
+
   /// Turns a failed login response into the specific exception: locked
   /// (429/423 or code ACCOUNT_LOCKED), wrong credentials with tries left, or
   /// the plain 401 an older backend sends. Reads snake_case and camelCase.
@@ -434,9 +448,11 @@ class ApiClient {
   // ---- Cart / order ----------------------------------------------------
 
   // POST /api/orders/quote
+  // A coupon is always checked by the server, even in offline mode: only it
+  // knows the codes and their limits. Without a coupon the local pricing is used.
   Future<Quote> quote(List<CartItem> items,
-      {int? storeId, String? token}) async {
-    if (OfflineMode.active) {
+      {int? storeId, String? token, String? couponCode}) async {
+    if (OfflineMode.active && couponCode == null) {
       return OfflineMode.catalog!
           .quote(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed);
     }
@@ -447,6 +463,7 @@ class ApiClient {
         body: jsonEncode({
           if (storeId != null) 'storeId': storeId,
           'items': items.map((e) => e.toOrderLine()).toList(),
+          if (couponCode != null) 'couponCode': couponCode,
         }),
       ),
     );
@@ -454,6 +471,7 @@ class ApiClient {
       return Quote.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
+    _throwIfCouponRejected(resp, msg);
     if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
     throw UnknownApiException(resp.statusCode, msg);
   }
@@ -465,8 +483,9 @@ class ApiClient {
     int? storeId,
     String? username,
     String? token,
+    String? couponCode,
   }) async {
-    if (OfflineMode.active) {
+    if (OfflineMode.active && couponCode == null) {
       final lines = await OfflineMode.catalog!
           .orderLines(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed);
       await OfflineMode.orders!.createOrder(
@@ -485,6 +504,7 @@ class ApiClient {
           'orderId': orderId,
           if (username != null) 'username': username,
           'items': items.map((e) => e.toOrderLine()).toList(),
+          if (couponCode != null) 'couponCode': couponCode,
         }),
       ),
     );
@@ -492,6 +512,7 @@ class ApiClient {
       return WahaOrder.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
     }
     final msg = _extractMessage(resp);
+    _throwIfCouponRejected(resp, msg);
     if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
     throw UnknownApiException(resp.statusCode, msg);
   }

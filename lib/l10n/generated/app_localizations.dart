@@ -254,6 +254,132 @@ abstract class AppLocalizations {
   /// **'Products are still loading, please wait a moment.'**
   String get offlineNotReady;
 
+  /// No description provided for @couponErrNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon code is not valid.'**
+  String get couponErrNotFound;
+
+  /// No description provided for @couponErrDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon is not active.'**
+  String get couponErrDisabled;
+
+  /// No description provided for @couponErrNotYetValid.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon is not valid yet.'**
+  String get couponErrNotYetValid;
+
+  /// No description provided for @couponErrExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon has expired.'**
+  String get couponErrExpired;
+
+  /// No description provided for @couponErrWrongStore.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon is not valid in this store.'**
+  String get couponErrWrongStore;
+
+  /// No description provided for @couponErrUsageLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon has reached its usage limit.'**
+  String get couponErrUsageLimit;
+
+  /// No description provided for @couponErrUserLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'You have reached the usage limit for this coupon.'**
+  String get couponErrUserLimit;
+
+  /// No description provided for @couponErrAmountExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'The discount available with this coupon has been used up.'**
+  String get couponErrAmountExhausted;
+
+  /// No description provided for @couponErrUserAmountExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'You have used up the discount available to you with this coupon.'**
+  String get couponErrUserAmountExhausted;
+
+  /// No description provided for @couponErrMinimum.
+  ///
+  /// In en, this message translates to:
+  /// **'The cart total is below the minimum for this coupon.'**
+  String get couponErrMinimum;
+
+  /// No description provided for @couponErrNotCombinable.
+  ///
+  /// In en, this message translates to:
+  /// **'This coupon can\'t be combined with the current offers.'**
+  String get couponErrNotCombinable;
+
+  /// No description provided for @couponErrNotApplicable.
+  ///
+  /// In en, this message translates to:
+  /// **'No item in the cart qualifies for this coupon.'**
+  String get couponErrNotApplicable;
+
+  /// No description provided for @couponErrGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'The coupon could not be applied.'**
+  String get couponErrGeneric;
+
+  /// No description provided for @couponApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'Coupon {code} applied'**
+  String couponApplied(String code);
+
+  /// No description provided for @couponRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Coupon {code}: {reason}'**
+  String couponRejected(String code, String reason);
+
+  /// No description provided for @couponDropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Coupon {code} was removed: {reason}'**
+  String couponDropped(String code, String reason);
+
+  /// No description provided for @couponStage.
+  ///
+  /// In en, this message translates to:
+  /// **'Coupons can\'t be added at this stage'**
+  String get couponStage;
+
+  /// No description provided for @couponNeedItems.
+  ///
+  /// In en, this message translates to:
+  /// **'Add some items to the cart first'**
+  String get couponNeedItems;
+
+  /// No description provided for @couponCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach the server, so the coupon can\'t be checked. Try again when connected.'**
+  String get couponCheckFailed;
+
+  /// No description provided for @cartCoupon.
+  ///
+  /// In en, this message translates to:
+  /// **'Coupon {code}'**
+  String cartCoupon(String code);
+
+  /// No description provided for @cartCouponRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove coupon'**
+  String get cartCouponRemove;
+
   /// No description provided for @offlineDataTitle.
   ///
   /// In en, this message translates to:
@@ -793,6 +919,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'per unit'**
   String get perUnit;
+
+  /// No description provided for @priceInclVat.
+  ///
+  /// In en, this message translates to:
+  /// **'incl. VAT'**
+  String get priceInclVat;
+
+  /// No description provided for @priceExclVat.
+  ///
+  /// In en, this message translates to:
+  /// **'excl. VAT'**
+  String get priceExclVat;
 
   /// No description provided for @kioskIdleTitle.
   ///

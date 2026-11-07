@@ -91,6 +91,82 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا يزال تحميل المنتجات جاريًا، يرجى الانتظار قليلًا.';
 
   @override
+  String get couponErrNotFound => 'رمز القسيمة غير صالح.';
+
+  @override
+  String get couponErrDisabled => 'هذه القسيمة غير مفعّلة.';
+
+  @override
+  String get couponErrNotYetValid => 'هذه القسيمة لم يبدأ سريانها بعد.';
+
+  @override
+  String get couponErrExpired => 'انتهت صلاحية هذه القسيمة.';
+
+  @override
+  String get couponErrWrongStore => 'هذه القسيمة غير صالحة في هذا الفرع.';
+
+  @override
+  String get couponErrUsageLimit => 'استُنفد الحد الأقصى لاستخدام هذه القسيمة.';
+
+  @override
+  String get couponErrUserLimit => 'وصلت إلى الحد الأقصى لاستخدام هذه القسيمة.';
+
+  @override
+  String get couponErrAmountExhausted =>
+      'استُنفد مبلغ الخصم المتاح لهذه القسيمة.';
+
+  @override
+  String get couponErrUserAmountExhausted =>
+      'استنفدت مبلغ الخصم المتاح لك بهذه القسيمة.';
+
+  @override
+  String get couponErrMinimum => 'قيمة السلة أقل من الحد الأدنى لهذه القسيمة.';
+
+  @override
+  String get couponErrNotCombinable =>
+      'لا يمكن الجمع بين هذه القسيمة والعروض الحالية.';
+
+  @override
+  String get couponErrNotApplicable =>
+      'لا يوجد في السلة ما تنطبق عليه هذه القسيمة.';
+
+  @override
+  String get couponErrGeneric => 'تعذّر تطبيق القسيمة.';
+
+  @override
+  String couponApplied(String code) {
+    return 'تم تطبيق القسيمة $code';
+  }
+
+  @override
+  String couponRejected(String code, String reason) {
+    return 'القسيمة $code: $reason';
+  }
+
+  @override
+  String couponDropped(String code, String reason) {
+    return 'تمت إزالة القسيمة $code: $reason';
+  }
+
+  @override
+  String get couponStage => 'لا يمكن إضافة قسيمة في هذه المرحلة';
+
+  @override
+  String get couponNeedItems => 'أضف بعض المنتجات إلى السلة أولاً';
+
+  @override
+  String get couponCheckFailed =>
+      'تعذّر الوصول إلى الخادم، لذلك لا يمكن التحقق من القسيمة. حاول مرة أخرى عند الاتصال.';
+
+  @override
+  String cartCoupon(String code) {
+    return 'قسيمة $code';
+  }
+
+  @override
+  String get cartCouponRemove => 'إزالة القسيمة';
+
+  @override
   String get offlineDataTitle => 'البيانات دون اتصال';
 
   @override
@@ -402,6 +478,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get perUnit => 'للوحدة';
+
+  @override
+  String get priceInclVat => 'شامل الضريبة';
+
+  @override
+  String get priceExclVat => 'غير شامل الضريبة';
 
   @override
   String get kioskIdleTitle => 'هل لا تزال هنا؟';

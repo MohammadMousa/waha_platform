@@ -233,6 +233,14 @@ class _CartScreenState extends State<CartScreen> {
                     },
                   ),
           ),
+          if (flow.couponCode != null && quote?.coupon != null)
+            _CouponStrip(
+              label: l10n.cartCoupon(quote!.coupon!.code),
+              amount: quote.coupon!.discountAmount,
+              currency: currency,
+              removeLabel: l10n.cartCouponRemove,
+              onRemove: flow.busy ? null : () => flow.removeCoupon(),
+            ),
           _CartSummaryCard(
             subtotal: quote?.subtotal ?? 0.0,
             tax: quote?.tax ?? 0.0,
@@ -252,6 +260,60 @@ class _CartScreenState extends State<CartScreen> {
             onCheckout: () => Navigator.of(context).pushNamed(Routes.checkout),
           ),
         ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Coupon 50OFF  −5.00 SAR" with a remove button, just above the totals.
+class _CouponStrip extends StatelessWidget {
+  final String label;
+  final double amount;
+  final String? currency;
+  final String removeLabel;
+  final VoidCallback? onRemove;
+
+  const _CouponStrip({
+    required this.label,
+    required this.amount,
+    required this.currency,
+    required this.removeLabel,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsetsDirectional.fromSTEB(14, 4, 4, 4),
+            child: Row(
+              children: [
+                Icon(Icons.local_offer_outlined, size: 20, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(label,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                Text(_fmt(-amount, currency),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                IconButton(
+                  tooltip: removeLabel,
+                  icon: const Icon(Icons.close),
+                  onPressed: onRemove,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
