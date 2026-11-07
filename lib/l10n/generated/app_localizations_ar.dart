@@ -91,6 +91,147 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا يزال تحميل المنتجات جاريًا، يرجى الانتظار قليلًا.';
 
   @override
+  String get offlineDataTitle => 'البيانات دون اتصال';
+
+  @override
+  String offlineRows(String feed, String count) {
+    return '$feed: $count سجل';
+  }
+
+  @override
+  String get offlineFullDone => '(تم التحميل الكامل)';
+
+  @override
+  String get offlineNotComplete => '(غير مكتمل)';
+
+  @override
+  String offlineCursor(String since, String afterId) {
+    return 'المؤشر $since / $afterId';
+  }
+
+  @override
+  String offlineLastPull(String at) {
+    return 'آخر تحميل $at';
+  }
+
+  @override
+  String offlineErrorLine(String error) {
+    return 'خطأ: $error';
+  }
+
+  @override
+  String get offlinePullNow => 'تحميل الآن';
+
+  @override
+  String get offlinePulling => 'جارٍ التحميل…';
+
+  @override
+  String offlineLastResult(String time, String message) {
+    return 'آخر نتيجة ($time): $message';
+  }
+
+  @override
+  String pullDone(String count) {
+    return 'اكتمل التحميل: تم تحديث $count سجل';
+  }
+
+  @override
+  String pullFailed(String error) {
+    return 'فشل التحميل: $error';
+  }
+
+  @override
+  String get pullNoSession => 'تم التخطي: الجهاز غير مسجّل الدخول';
+
+  @override
+  String get pullCustomerActive =>
+      'تم التخطي: الشاشة قيد الاستخدام. حاول مرة أخرى عند الخمول.';
+
+  @override
+  String get pullBusy => 'هناك تحميل قيد التنفيذ…';
+
+  @override
+  String pullServerBusy(String seconds) {
+    return 'توقف التحميل: طلب الخادم الانتظار $seconds ثانية';
+  }
+
+  @override
+  String get pullAuthStopped =>
+      'توقف التحميل: رفض الخادم تسجيل دخول هذا الجهاز';
+
+  @override
+  String ordersTitle(String pending, String dead) {
+    return 'طلبات للإرسال ($pending بالانتظار، $dead فاشلة)';
+  }
+
+  @override
+  String get ordersAuthStopped => 'توقف الإرسال: رفض الخادم جلسة هذا الجهاز.';
+
+  @override
+  String get ordersAuthStoppedHint =>
+      'الطلبات محفوظة وسيتم إرسالها بعد تسجيل دخول الجهاز من جديد.';
+
+  @override
+  String ordersLastAccepted(String at) {
+    return 'آخر قبول من الخادم: $at';
+  }
+
+  @override
+  String get ordersNoFailed => 'لا توجد طلبات فاشلة.';
+
+  @override
+  String ordersTotal(String ref, String amount, String currency) {
+    return '$ref   الإجمالي $amount $currency';
+  }
+
+  @override
+  String ordersMade(String at) {
+    return 'أُنشئ $at';
+  }
+
+  @override
+  String get ordersRetry => 'إعادة المحاولة';
+
+  @override
+  String get ordersSendNow => 'إرسال الآن';
+
+  @override
+  String get ordersSending => 'جارٍ الإرسال…';
+
+  @override
+  String sendDone(String count) {
+    return 'تم إرسال $count طلب(ات) إلى الخادم';
+  }
+
+  @override
+  String get sendNothing => 'لا يوجد ما ينتظر الإرسال';
+
+  @override
+  String sendPartial(String sent, String rejected) {
+    return 'تم إرسال $sent؛ ورفض الخادم $rejected (انظر قائمة الفاشلة)';
+  }
+
+  @override
+  String sendRejected(String rejected) {
+    return 'رفض الخادم $rejected طلب(ات) (انظر قائمة الفاشلة)';
+  }
+
+  @override
+  String sendFailed(String error) {
+    return 'فشل الإرسال: $error';
+  }
+
+  @override
+  String get sendNoSession => 'تم تخطي الإرسال: الجهاز غير مسجّل الدخول';
+
+  @override
+  String get sendAuthStopped =>
+      'توقف الإرسال: رفض الخادم تسجيل دخول هذا الجهاز';
+
+  @override
+  String get sendBusy => 'الإرسال قيد التنفيذ…';
+
+  @override
   String scanFailedMessage(String error) {
     return 'فشل المسح: $error';
   }

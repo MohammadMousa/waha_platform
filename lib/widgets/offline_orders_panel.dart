@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/db/app_database.dart';
 import '../data/orders/order_push_service.dart';
 import '../data/sync/sync_service.dart';
+import '../l10n/generated/app_localizations.dart';
+import 'run_result_text.dart';
 
 /// Settings section for orders made on the device: how many wait to be sent,
 /// the failed ones (dead-letter list) with a Retry button, and a warning when
@@ -42,35 +44,65 @@ class _OfflineOrdersPanelState extends State<OfflineOrdersPanel> {
     });
   }
 
+  Future<void> _send(AppLocalizations l) async {
+    showResultToast(l.ordersSending);
+    final r = await _push.pushPending();
+    showResultToast(sendResultText(l, r), problem: isProblem(r));
+  }
+
+  Future<void> _retry(AppLocalizations l, String orderId) async {
+    await _push.retryDead(orderId);
+    await _send(l);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final last = _push.lastResult;
+    final lastAt = _push.lastResultAt;
     return Card(
       child: ExpansionTile(
         leading: const Icon(Icons.outbox_outlined),
-        title: Text('Orders to send (${_counts.pending} waiting, ${_counts.dead} failed)'),
+        title: Text(
+            l.ordersTitle('${_counts.pending}', '${_counts.dead}')),
         children: [
           if (_push.authBlocked)
-            const ListTile(
-              leading: Icon(Icons.warning_amber_rounded, color: Colors.orange),
-              title: Text('Sending is stopped: the server refused this device\'s session.'),
-              subtitle: Text('The orders are kept and will be sent once the device is signed in again.'),
+            ListTile(
+              leading: const Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange),
+              title: Text(l.ordersAuthStopped),
+              subtitle: Text(l.ordersAuthStoppedHint),
             ),
           ListTile(
             dense: true,
-            title: Text('Last accepted by the server: ${_counts.lastPushAt ?? '-'}'),
+            title: Text(l.ordersLastAccepted('${_counts.lastPushAt ?? '-'}')),
           ),
+          if (last != null && lastAt != null)
+            ListTile(
+              dense: true,
+              leading: Icon(
+                isProblem(last)
+                    ? Icons.error_outline
+                    : Icons.check_circle_outline,
+                color: isProblem(last) ? Colors.red.shade700 : Colors.green,
+              ),
+              title: Text(l.offlineLastResult(
+                  clockTime(lastAt), sendResultText(l, last))),
+            ),
           if (_dead.isEmpty)
-            const ListTile(dense: true, title: Text('No failed orders.'))
+            ListTile(dense: true, title: Text(l.ordersNoFailed))
           else
             for (final o in _dead)
               ListTile(
                 dense: true,
-                title: Text('${o.orderReference}   total ${o.totalAmount} ${o.currency}'),
-                subtitle: Text('${o.lastErrorCode ?? ''} ${o.lastError ?? ''}\nmade ${o.createdAt}'),
+                title: Text(l.ordersTotal(
+                    o.orderReference, '${o.totalAmount}', o.currency)),
+                subtitle: Text(
+                    '${o.lastErrorCode ?? ''} ${o.lastError ?? ''}\n${l.ordersMade(o.createdAt)}'),
                 isThreeLine: true,
                 trailing: TextButton(
-                  onPressed: () => _push.retryDead(o.orderId),
-                  child: const Text('Retry'),
+                  onPressed: _push.running ? null : () => _retry(l, o.orderId),
+                  child: Text(l.ordersRetry),
                 ),
               ),
           Padding(
@@ -78,8 +110,8 @@ class _OfflineOrdersPanelState extends State<OfflineOrdersPanel> {
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: FilledButton(
-                onPressed: _push.running ? null : () => _push.pushPending(),
-                child: Text(_push.running ? 'Sending…' : 'Send now'),
+                onPressed: _push.running ? null : () => _send(l),
+                child: Text(_push.running ? l.ordersSending : l.ordersSendNow),
               ),
             ),
           ),

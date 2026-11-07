@@ -254,6 +254,216 @@ abstract class AppLocalizations {
   /// **'Products are still loading, please wait a moment.'**
   String get offlineNotReady;
 
+  /// No description provided for @offlineDataTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline data'**
+  String get offlineDataTitle;
+
+  /// No description provided for @offlineRows.
+  ///
+  /// In en, this message translates to:
+  /// **'{feed}: {count} rows'**
+  String offlineRows(String feed, String count);
+
+  /// No description provided for @offlineFullDone.
+  ///
+  /// In en, this message translates to:
+  /// **'(full pull done)'**
+  String get offlineFullDone;
+
+  /// No description provided for @offlineNotComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'(not complete)'**
+  String get offlineNotComplete;
+
+  /// No description provided for @offlineCursor.
+  ///
+  /// In en, this message translates to:
+  /// **'cursor {since} / {afterId}'**
+  String offlineCursor(String since, String afterId);
+
+  /// No description provided for @offlineLastPull.
+  ///
+  /// In en, this message translates to:
+  /// **'last pull {at}'**
+  String offlineLastPull(String at);
+
+  /// No description provided for @offlineErrorLine.
+  ///
+  /// In en, this message translates to:
+  /// **'error: {error}'**
+  String offlineErrorLine(String error);
+
+  /// No description provided for @offlinePullNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull now'**
+  String get offlinePullNow;
+
+  /// No description provided for @offlinePulling.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulling…'**
+  String get offlinePulling;
+
+  /// No description provided for @offlineLastResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Last result ({time}): {message}'**
+  String offlineLastResult(String time, String message);
+
+  /// No description provided for @pullDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull finished: {count} rows updated'**
+  String pullDone(String count);
+
+  /// No description provided for @pullFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull failed: {error}'**
+  String pullFailed(String error);
+
+  /// No description provided for @pullNoSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull skipped: this device is not signed in'**
+  String get pullNoSession;
+
+  /// No description provided for @pullCustomerActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull skipped: the screen is in use. Try again when it is idle.'**
+  String get pullCustomerActive;
+
+  /// No description provided for @pullBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'A pull is already running…'**
+  String get pullBusy;
+
+  /// No description provided for @pullServerBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull stopped: the server asked to wait {seconds} seconds'**
+  String pullServerBusy(String seconds);
+
+  /// No description provided for @pullAuthStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull stopped: the server refused this device\'s login'**
+  String get pullAuthStopped;
+
+  /// No description provided for @ordersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Orders to send ({pending} waiting, {dead} failed)'**
+  String ordersTitle(String pending, String dead);
+
+  /// No description provided for @ordersAuthStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending is stopped: the server refused this device\'s session.'**
+  String get ordersAuthStopped;
+
+  /// No description provided for @ordersAuthStoppedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The orders are kept and will be sent once the device is signed in again.'**
+  String get ordersAuthStoppedHint;
+
+  /// No description provided for @ordersLastAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Last accepted by the server: {at}'**
+  String ordersLastAccepted(String at);
+
+  /// No description provided for @ordersNoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'No failed orders.'**
+  String get ordersNoFailed;
+
+  /// No description provided for @ordersTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'{ref}   total {amount} {currency}'**
+  String ordersTotal(String ref, String amount, String currency);
+
+  /// No description provided for @ordersMade.
+  ///
+  /// In en, this message translates to:
+  /// **'made {at}'**
+  String ordersMade(String at);
+
+  /// No description provided for @ordersRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get ordersRetry;
+
+  /// No description provided for @ordersSendNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Send now'**
+  String get ordersSendNow;
+
+  /// No description provided for @ordersSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending…'**
+  String get ordersSending;
+
+  /// No description provided for @sendDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent {count} order(s) to the server'**
+  String sendDone(String count);
+
+  /// No description provided for @sendNothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is waiting to send'**
+  String get sendNothing;
+
+  /// No description provided for @sendPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent {sent}; the server rejected {rejected} (see the failed list)'**
+  String sendPartial(String sent, String rejected);
+
+  /// No description provided for @sendRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The server rejected {rejected} order(s) (see the failed list)'**
+  String sendRejected(String rejected);
+
+  /// No description provided for @sendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending failed: {error}'**
+  String sendFailed(String error);
+
+  /// No description provided for @sendNoSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending skipped: this device is not signed in'**
+  String get sendNoSession;
+
+  /// No description provided for @sendAuthStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending stopped: the server refused this device\'s login'**
+  String get sendAuthStopped;
+
+  /// No description provided for @sendBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Already sending…'**
+  String get sendBusy;
+
   /// No description provided for @scanFailedMessage.
   ///
   /// In en, this message translates to:

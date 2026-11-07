@@ -21,6 +21,7 @@ import 'device_settings.dart';
 import 'sync_schedule.dart';
 import 'sync_settings.dart';
 import 'feeds.dart';
+import 'run_result.dart';
 import 'sync_engine.dart';
 
 /// Runs the pull in the background: waits for the start delay, then repeats.
@@ -35,6 +36,7 @@ class SyncService extends ChangeNotifier {
   Timer? _timer;
   bool _running = false;
   Completer<void>? _abort;
+  bool _manualRun = false;
   StreamSubscription<void>? _activitySub;
   SyncSettings _settings = const SyncSettings();
 
@@ -46,6 +48,7 @@ class SyncService extends ChangeNotifier {
   void start(ApiClient api) {
     _api = api;
     _activitySub ??= ActivityGate.instance.onActivity.listen((_) {
+      if (_manualRun) return; // the person pressing Pull now is on the screen
       final a = _abort;
       if (a != null && !a.isCompleted) a.complete();
     });
@@ -151,16 +154,21 @@ class SyncService extends ChangeNotifier {
   }
 
   /// One full cycle over every feed. Safe to call from Settings too.
-  Future<void> runOnce() async {
-    if (_running) return;
+  ///
+  /// [manual] is the Settings button: the person pressing it is the one using
+  /// the screen, so the "wait until idle" rule does not apply to that run.
+  Future<RunResult> runOnce({bool manual = false}) async {
+    if (_running) return const RunResult(RunKind.busy);
     _running = true;
+    _manualRun = manual;
     notifyListeners();
+    var rows = 0;
     try {
       await refreshSettings();
       final token = authService.token;
       if (token == null) {
         TraceLog.log('Sync: no session, skipping this cycle');
-        return;
+        return lastResult = const RunResult(RunKind.noSession);
       }
       await _refreshDeviceConfig(token);
       final engine = SyncEngine(
@@ -173,9 +181,9 @@ class SyncService extends ChangeNotifier {
       for (final feed in kSyncFeeds) {
         // Wait for the screen to be idle; a customer present means we stop
         // this cycle and try again at the next interval.
-        if (ActivityGate.instance.idleFor < _settings.idleNeeded) {
+        if (!manual && ActivityGate.instance.idleFor < _settings.idleNeeded) {
           TraceLog.log('Sync: customer active, pausing before $feed');
-          return;
+          return lastResult = const RunResult(RunKind.customerActive);
         }
         _abort = Completer<void>();
         try {
@@ -183,36 +191,42 @@ class SyncService extends ChangeNotifier {
             feed,
             abort: _abort!.future,
             beforeEachPage: () async {
-              if (ActivityGate.instance.idleFor < _settings.idleNeeded) {
+              if (!manual &&
+                  ActivityGate.instance.idleFor < _settings.idleNeeded) {
                 throw const PullCancelled();
               }
             },
           );
+          rows += n;
           TraceLog.log('Sync: $feed up to date ($n rows)');
         } on PullCancelled {
           TraceLog.log('Sync: $feed pull cancelled (customer active)');
-          return;
+          return lastResult = const RunResult(RunKind.customerActive);
         } on PullRetryAfter catch (r) {
           TraceLog.log('Sync: $feed server asked to wait ${r.delay.inSeconds}s');
           _retryAfterOverride = r.delay;
-          return;
+          return lastResult =
+              RunResult(RunKind.serverBusy, waitSeconds: r.delay.inSeconds);
         } on PullUnauthorized {
           // Step 1 only stops. Signing out on a real 401 is wired later,
           // together with the cached-session start.
           TraceLog.log('Sync: 401 on $feed, stopping the pull');
           await engine.recordError(feed, 'unauthorized');
-          return;
+          return lastResult = const RunResult(RunKind.authStopped);
         } catch (e) {
           TraceLog.log('Sync: $feed failed: $e');
           if (e is! PullHttpError) noteNetwork(false); // no answer at all
           await engine.recordError(feed, e.toString());
-          return;
+          return lastResult = RunResult(RunKind.failed, detail: _short(e));
         } finally {
           _abort = null;
         }
       }
+      return lastResult = RunResult(RunKind.done, count: rows);
     } finally {
       _running = false;
+      _manualRun = false;
+      lastResultAt = DateTime.now();
       notifyListeners();
       unawaited(reportStatus());
       unawaited(_cleanup());
@@ -221,6 +235,15 @@ class SyncService extends ChangeNotifier {
       _schedule(wait ??
           _settings.interval + Duration(milliseconds: (_settings.interval.inMilliseconds * _intervalJitter).round()));
     }
+  }
+
+  /// The latest outcome of a pull, for the Settings panel.
+  RunResult? lastResult;
+  DateTime? lastResultAt;
+
+  static String _short(Object e) {
+    final t = e.toString().replaceAll(RegExp(r'\s+'), ' ');
+    return t.length > 140 ? '${t.substring(0, 140)}…' : t;
   }
 
   /// Keeps the cached device settings fresh. A failure never matters here:

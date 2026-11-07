@@ -13,6 +13,7 @@ import '../db/app_database.dart';
 import '../sync/sync_schedule.dart';
 import '../sync/sync_settings.dart';
 import 'local_order_service.dart';
+import '../sync/run_result.dart';
 
 /// What happened to one push attempt.
 sealed class PushOutcome {
@@ -139,6 +140,15 @@ class OrderPushService extends ChangeNotifier {
   bool authBlocked = false;
   bool get running => _running;
 
+  /// The latest outcome of a send pass, for the Settings panel.
+  RunResult? lastResult;
+  DateTime? lastResultAt;
+
+  static String _short(String t) {
+    final c = t.replaceAll(RegExp(r'\s+'), ' ');
+    return c.length > 140 ? '${c.substring(0, 140)}…' : c;
+  }
+
   DateTime _now() => (_nowOverride ?? DateTime.now)().toUtc();
   String? _token() => _tokenOverride != null ? _tokenOverride!() : authService.token;
   String get _base => _baseUrlOverride ?? AppConfig.apiBaseUrl;
@@ -169,14 +179,16 @@ class OrderPushService extends ChangeNotifier {
 
   /// One pass over every paid order that is waiting and due. Safe to call at
   /// any time, for example right after an order was paid.
-  Future<void> pushPending() async {
+  Future<RunResult> pushPending() async {
     final db = _db;
-    if (db == null || _running) return;
+    if (db == null || _running) return const RunResult(RunKind.busy);
     final token = _token();
-    if (token == null) return;
+    if (token == null) return lastResult = const RunResult(RunKind.noSession);
     _running = true;
     notifyListeners();
     var attempted = false;
+    var sent = 0;
+    var rejected = 0;
     try {
       final nowIso = _now().toIso8601String();
       // A retry time further away than the longest back-off (plus its jitter)
@@ -201,26 +213,35 @@ class OrderPushService extends ChangeNotifier {
           case PushAccepted():
             authBlocked = false;
             await _markSynced(db, o.orderId, outcome.displayId);
+            sent++;
             TraceLog.log('Push: ${o.orderReference} ${outcome.result}');
           case PushRejected():
             await _markDead(db, o.orderId, outcome.code, outcome.message);
+            rejected++;
             TraceLog.log('Push: ${o.orderReference} rejected ${outcome.code}');
           case PushRetry():
             await _markRetry(db, o, outcome.message, outcome.retryAfter);
             TraceLog.log('Push: ${o.orderReference} will retry: ${outcome.message}');
             // The server is busy or unreachable: don't hammer it with the rest.
             notifyListeners();
-            return;
+            return lastResult = RunResult(RunKind.failed,
+                count: sent,
+                rejected: rejected,
+                detail: _short(outcome.message));
           case PushAuthStop():
             authBlocked = true;
             TraceLog.log('Push: ${outcome.status}, stopping; orders kept');
             notifyListeners();
-            return;
+            return lastResult = RunResult(RunKind.authStopped,
+                count: sent, rejected: rejected);
         }
         notifyListeners();
       }
+      return lastResult =
+          RunResult(RunKind.done, count: sent, rejected: rejected);
     } finally {
       _running = false;
+      lastResultAt = DateTime.now();
       notifyListeners();
       if (attempted) {
         final cb = _onAttempt;

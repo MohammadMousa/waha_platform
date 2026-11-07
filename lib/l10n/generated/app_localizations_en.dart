@@ -92,6 +92,148 @@ class AppLocalizationsEn extends AppLocalizations {
       'Products are still loading, please wait a moment.';
 
   @override
+  String get offlineDataTitle => 'Offline data';
+
+  @override
+  String offlineRows(String feed, String count) {
+    return '$feed: $count rows';
+  }
+
+  @override
+  String get offlineFullDone => '(full pull done)';
+
+  @override
+  String get offlineNotComplete => '(not complete)';
+
+  @override
+  String offlineCursor(String since, String afterId) {
+    return 'cursor $since / $afterId';
+  }
+
+  @override
+  String offlineLastPull(String at) {
+    return 'last pull $at';
+  }
+
+  @override
+  String offlineErrorLine(String error) {
+    return 'error: $error';
+  }
+
+  @override
+  String get offlinePullNow => 'Pull now';
+
+  @override
+  String get offlinePulling => 'Pulling…';
+
+  @override
+  String offlineLastResult(String time, String message) {
+    return 'Last result ($time): $message';
+  }
+
+  @override
+  String pullDone(String count) {
+    return 'Pull finished: $count rows updated';
+  }
+
+  @override
+  String pullFailed(String error) {
+    return 'Pull failed: $error';
+  }
+
+  @override
+  String get pullNoSession => 'Pull skipped: this device is not signed in';
+
+  @override
+  String get pullCustomerActive =>
+      'Pull skipped: the screen is in use. Try again when it is idle.';
+
+  @override
+  String get pullBusy => 'A pull is already running…';
+
+  @override
+  String pullServerBusy(String seconds) {
+    return 'Pull stopped: the server asked to wait $seconds seconds';
+  }
+
+  @override
+  String get pullAuthStopped =>
+      'Pull stopped: the server refused this device\'s login';
+
+  @override
+  String ordersTitle(String pending, String dead) {
+    return 'Orders to send ($pending waiting, $dead failed)';
+  }
+
+  @override
+  String get ordersAuthStopped =>
+      'Sending is stopped: the server refused this device\'s session.';
+
+  @override
+  String get ordersAuthStoppedHint =>
+      'The orders are kept and will be sent once the device is signed in again.';
+
+  @override
+  String ordersLastAccepted(String at) {
+    return 'Last accepted by the server: $at';
+  }
+
+  @override
+  String get ordersNoFailed => 'No failed orders.';
+
+  @override
+  String ordersTotal(String ref, String amount, String currency) {
+    return '$ref   total $amount $currency';
+  }
+
+  @override
+  String ordersMade(String at) {
+    return 'made $at';
+  }
+
+  @override
+  String get ordersRetry => 'Retry';
+
+  @override
+  String get ordersSendNow => 'Send now';
+
+  @override
+  String get ordersSending => 'Sending…';
+
+  @override
+  String sendDone(String count) {
+    return 'Sent $count order(s) to the server';
+  }
+
+  @override
+  String get sendNothing => 'Nothing is waiting to send';
+
+  @override
+  String sendPartial(String sent, String rejected) {
+    return 'Sent $sent; the server rejected $rejected (see the failed list)';
+  }
+
+  @override
+  String sendRejected(String rejected) {
+    return 'The server rejected $rejected order(s) (see the failed list)';
+  }
+
+  @override
+  String sendFailed(String error) {
+    return 'Sending failed: $error';
+  }
+
+  @override
+  String get sendNoSession => 'Sending skipped: this device is not signed in';
+
+  @override
+  String get sendAuthStopped =>
+      'Sending stopped: the server refused this device\'s login';
+
+  @override
+  String get sendBusy => 'Already sending…';
+
+  @override
   String scanFailedMessage(String error) {
     return 'Scan failed: $error';
   }

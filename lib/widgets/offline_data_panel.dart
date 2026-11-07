@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../data/db/app_database.dart';
 import '../data/sync/feeds.dart';
+import '../l10n/generated/app_localizations.dart';
+import 'run_result_text.dart';
 import '../data/sync/sync_service.dart';
 
 /// Read-only view of the local offline data for the Settings screen:
@@ -57,31 +59,52 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
     });
   }
 
+  Future<void> _pull(AppLocalizations l) async {
+    showResultToast(l.offlinePulling);
+    final r = await _svc.runOnce(manual: true);
+    showResultToast(pullResultText(l, r), problem: isProblem(r));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final last = _svc.lastResult;
+    final lastAt = _svc.lastResultAt;
     return Card(
       child: ExpansionTile(
         leading: const Icon(Icons.storage_outlined),
-        title: const Text('Offline data'),
+        title: Text(l.offlineDataTitle),
         children: [
           for (final f in kSyncFeeds)
             ListTile(
               dense: true,
-              title: Text('$f: ${_counts[f] ?? 0} rows'
-                  '${_state[f]?.fullPullDone == true ? ' (full pull done)' : ' (not complete)'}'),
+              title: Text('${l.offlineRows(f, '${_counts[f] ?? 0}')} '
+                  '${_state[f]?.fullPullDone == true ? l.offlineFullDone : l.offlineNotComplete}'),
               subtitle: Text(
-                'cursor ${_state[f]?.since ?? '-'} / ${_state[f]?.afterId ?? 0}'
-                '\nlast pull ${_state[f]?.lastPullAt ?? '-'}'
-                '${_state[f]?.lastError != null ? '\nerror: ${_state[f]!.lastError}' : ''}',
+                '${l.offlineCursor('${_state[f]?.since ?? '-'}', '${_state[f]?.afterId ?? 0}')}'
+                '\n${l.offlineLastPull('${_state[f]?.lastPullAt ?? '-'}')}'
+                '${_state[f]?.lastError != null ? '\n${l.offlineErrorLine(_state[f]!.lastError!)}' : ''}',
               ),
+            ),
+          if (last != null && lastAt != null)
+            ListTile(
+              dense: true,
+              leading: Icon(
+                isProblem(last)
+                    ? Icons.error_outline
+                    : Icons.check_circle_outline,
+                color: isProblem(last) ? Colors.red.shade700 : Colors.green,
+              ),
+              title: Text(l.offlineLastResult(
+                  clockTime(lastAt), pullResultText(l, last))),
             ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: FilledButton(
-                onPressed: _svc.running ? null : () => _svc.runOnce(),
-                child: Text(_svc.running ? 'Pulling…' : 'Pull now'),
+                onPressed: _svc.running ? null : () => _pull(l),
+                child: Text(_svc.running ? l.offlinePulling : l.offlinePullNow),
               ),
             ),
           ),
