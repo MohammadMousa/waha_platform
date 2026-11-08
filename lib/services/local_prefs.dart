@@ -247,9 +247,10 @@ class LocalPrefs {
   static OfflineLevel get offlineLevel {
     final saved = savedConfig;
     if (saved.isNotEmpty) return OfflineLevel.parse(saved['offline_mode']);
-    final v = _p.getString(_kOfflineLevel);
+    // Safe before the preferences are loaded (tests, early start): off.
+    final v = _prefs?.getString(_kOfflineLevel);
     if (v != null) return OfflineLevel.parse(v);
-    return (_p.get(_kOfflineMode) == true) ? OfflineLevel.full : OfflineLevel.off;
+    return (_prefs?.get(_kOfflineMode) == true) ? OfflineLevel.full : OfflineLevel.off;
   }
 
   static Future<void> setOfflineLevel(OfflineLevel v) =>
@@ -288,7 +289,7 @@ class LocalPrefs {
     if (saved.isNotEmpty) {
       return (saved['scan_disabled_products'] ?? 'false').toLowerCase() == 'true';
     }
-    return _p.getBool(_kScanDisabledProducts) ?? false;
+    return _prefs?.getBool(_kScanDisabledProducts) ?? false;
   }
 
   static Future<void> setScanDisabledProducts(bool value) =>

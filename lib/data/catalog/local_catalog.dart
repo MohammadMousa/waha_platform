@@ -9,6 +9,8 @@ import '../../models/product.dart';
 import '../../models/product_page.dart';
 import '../../models/quote.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/local_prefs.dart';
+import 'offline_level.dart';
 import '../db/app_database.dart';
 import '../orders/decimal.dart';
 import '../orders/local_order_service.dart';
@@ -35,6 +37,9 @@ class LocalCatalog {
   }
 
   Future<void> requireReady() async {
+    // `caching` has no first download: the copy is whatever earlier reads
+    // saved, so there is nothing to wait for.
+    if (LocalPrefs.offlineLevel == OfflineLevel.caching) return;
     if (!await isReady()) throw OfflineNotReadyException();
   }
 
@@ -65,8 +70,11 @@ class LocalCatalog {
         imageResourceIds: gallery,
       );
 
+  // Device settings only exist after a full-mode sync; in caching mode the
+  // saved server config says whether shown prices include VAT.
   Future<bool> _includeVat() async =>
-      (await readDeviceSettings(db))?.pricesIncludeVat ?? true;
+      (await readDeviceSettings(db))?.pricesIncludeVat ??
+      !LocalPrefs.pricesExcludeVat;
 
   /// A scan: through the barcode table, then the product's own barcode.
   /// Returns null when the code is unknown. Inactive products ARE returned;

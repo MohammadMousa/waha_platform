@@ -16,6 +16,7 @@ import '../models/store.dart';
 import '../models/terminal_session.dart';
 import 'package:uuid/uuid.dart';
 import '../data/catalog/offline_mode.dart';
+import '../data/catalog/read_cache.dart';
 import 'local_prefs.dart';
 import '../data/orders/local_order_service.dart';
 import '../data/orders/order_push_service.dart';
@@ -175,6 +176,66 @@ class ApiClient {
     }
   }
 
+  /// `caching` mode: ask the server first; use the saved local copy only when
+  /// the server cannot be reached (no connection, timeout, 5xx). Any other
+  /// answer (404, 409, other 4xx) is the server's real answer and is passed on
+  /// as is, never replaced by the cache. Other modes call [online] only
+  /// (`full` is handled by each caller before this).
+  Future<T> _readThrough<T>(
+      Future<T> Function() online, Future<T> Function() local) async {
+    if (!OfflineMode.caching) return online();
+    try {
+      return await online();
+    } on NetworkException {
+      return local();
+    } on UnknownApiException catch (e) {
+      if (e.statusCode >= 500) return local();
+      rethrow;
+    }
+  }
+
+  /// `full` mode only: a product that is not in the local copy is asked for
+  /// from the server, once, with a short wait (3 s, no retry) so the till is
+  /// never held up when the server is down. A complete answer is saved into
+  /// the local tables (so it is found locally from then on) and returned as
+  /// the local copy would show it. The server's 404 / 409 / other 4xx are its
+  /// real answers and are passed on; no connection, timeout or 5xx returns
+  /// null (the caller then says "not found", as before). Error answers are
+  /// never saved.
+  Future<Product?> _fetchMissingProduct(Uri uri,
+      {String? scannedBarcode,
+      required Future<Product?> Function() rereadLocal}) async {
+    http.Response resp;
+    try {
+      resp = await _http.get(uri).timeout(const Duration(seconds: 3));
+    } catch (_) {
+      return null;
+    }
+    if (resp.statusCode == 200) {
+      try {
+        final json = jsonDecode(resp.body) as Map<String, dynamic>;
+        await ReadCache(OfflineMode.catalog!.db)
+            .saveProducts([json], scannedBarcode: scannedBarcode);
+        // Shown the way the local copy shows it (device VAT setting); an
+        // incomplete answer was not saved, so then the server's own is used.
+        return await rereadLocal() ?? Product.fromJson(json);
+      } catch (_) {
+        return null;
+      }
+    }
+    final msg = _extractMessage(resp);
+    if (resp.statusCode == 404) throw ProductNotFoundException(404, msg);
+    if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
+    if (resp.statusCode >= 500) return null;
+    throw UnknownApiException(resp.statusCode, msg);
+  }
+
+  /// Saved copy of what the server answered (caching mode only).
+  ReadCache? get _cache {
+    final c = OfflineMode.catalog;
+    return (OfflineMode.caching && c != null) ? ReadCache(c.db) : null;
+  }
+
   // ---- Auth --------------------------------------------------------
 
   // POST /api/kiosk/auth/login — device identity, separate auth domain from
@@ -314,7 +375,15 @@ class ApiClient {
   // GET /api/products/barcode/{barcode}?storeId={id}
   Future<Product> getProductByBarcode(String barcode, int storeId) async {
     if (OfflineMode.active) {
-      final p = await OfflineMode.catalog!.findByBarcode(barcode);
+      // Local first. A product that is not in the local copy (added on the
+      // server after the last pull) is asked for from the server and saved,
+      // so it is found locally from then on. See [_fetchMissingProduct].
+      final p = await OfflineMode.catalog!.findByBarcode(barcode) ??
+          await _fetchMissingProduct(
+              _uri('/api/products/barcode/${Uri.encodeComponent(barcode)}')
+                  .replace(queryParameters: {'storeId': '$storeId', 'full': '1'}),
+              scannedBarcode: barcode,
+              rereadLocal: () => OfflineMode.catalog!.findByBarcode(barcode));
       if (p == null) {
         throw ProductNotFoundException(404, 'No product found for barcode $barcode');
       }
@@ -323,18 +392,37 @@ class ApiClient {
       }
       return p;
     }
-    final resp = await _send(
-      () => _http.get(_uri(
-        '/api/products/barcode/${Uri.encodeComponent(barcode)}',
-      ).replace(queryParameters: {'storeId': '$storeId'})),
-    );
-    if (resp.statusCode == 200) {
-      return Product.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+    return _readThrough(() async {
+      final resp = await _send(
+        () => _http.get(_uri(
+          '/api/products/barcode/${Uri.encodeComponent(barcode)}',
+        ).replace(queryParameters: {
+          'storeId': '$storeId',
+          if (OfflineMode.caching) 'full': '1',
+        })),
+      );
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(resp.body) as Map<String, dynamic>;
+        await _cache?.saveProducts([json], scannedBarcode: barcode);
+        return Product.fromJson(json);
+      }
+      final msg = _extractMessage(resp);
+      if (resp.statusCode == 404) throw ProductNotFoundException(404, msg);
+      if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
+      throw UnknownApiException(resp.statusCode, msg);
+    }, () => _localBarcode(barcode));
+  }
+
+  /// The saved copy's answer to a scan, with the same refusals as full mode.
+  Future<Product> _localBarcode(String barcode) async {
+    final p = await OfflineMode.catalog!.findByBarcode(barcode);
+    if (p == null) {
+      throw ProductNotFoundException(404, 'No product found for barcode $barcode');
     }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 404) throw ProductNotFoundException(404, msg);
-    if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
-    throw UnknownApiException(resp.statusCode, msg);
+    if (!p.active && !OfflineMode.scanDisabledAllowed) {
+      throw const ProductNotSellableException(409, 'Product is not currently sellable');
+    }
+    return p;
   }
 
   // GET /api/products?storeId=&page=&size=&categoryId=&sort=
@@ -349,24 +437,33 @@ class ApiClient {
     if (OfflineMode.active) {
       return OfflineMode.catalog!.browse(categoryId: categoryId, page: page, size: size);
     }
-    final resp = await _send(
-      () => _http.get(
-        _uri('/api/products').replace(queryParameters: {
-          if (storeId != null) 'storeId': '$storeId',
-          'page': '$page',
-          'size': '$size',
-          if (categoryId != null) 'categoryId': '$categoryId',
-          if (sort != null) 'sort': sort,
-        }),
-        headers: _headers(token: token),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      return ProductPage.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    return _readThrough(() async {
+      final resp = await _send(
+        () => _http.get(
+          _uri('/api/products').replace(queryParameters: {
+            if (storeId != null) 'storeId': '$storeId',
+            'page': '$page',
+            'size': '$size',
+            if (categoryId != null) 'categoryId': '$categoryId',
+            if (sort != null) 'sort': sort,
+            if (OfflineMode.caching) 'full': '1',
+          }),
+          headers: _headers(token: token),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(resp.body) as Map<String, dynamic>;
+        await _cache?.saveProducts(_productMaps(json));
+        return ProductPage.fromJson(json);
+      }
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }, () => OfflineMode.catalog!.browse(categoryId: categoryId, page: page, size: size));
   }
+
+  static List<Map<String, dynamic>> _productMaps(Map<String, dynamic> page) => [
+        for (final e in (page['products'] as List<dynamic>? ?? []))
+          e as Map<String, dynamic>
+      ];
 
   // GET /api/products/search?q=&storeId=&page=&size=
   Future<ProductPage> searchProducts({
@@ -379,56 +476,76 @@ class ApiClient {
     if (OfflineMode.active) {
       return OfflineMode.catalog!.search(q, page: page, size: size);
     }
-    final resp = await _send(
-      () => _http.get(
-        _uri('/api/products/search').replace(queryParameters: {
-          'q': q,
-          if (storeId != null) 'storeId': '$storeId',
-          'page': '$page',
-          'size': '$size',
-        }),
-        headers: _headers(token: token),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      return ProductPage.fromJson(
-          jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    return _readThrough(() async {
+      final resp = await _send(
+        () => _http.get(
+          _uri('/api/products/search').replace(queryParameters: {
+            'q': q,
+            if (storeId != null) 'storeId': '$storeId',
+            'page': '$page',
+            'size': '$size',
+            if (OfflineMode.caching) 'full': '1',
+          }),
+          headers: _headers(token: token),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(resp.body) as Map<String, dynamic>;
+        await _cache?.saveProducts(_productMaps(json));
+        return ProductPage.fromJson(json);
+      }
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }, () => OfflineMode.catalog!.search(q, page: page, size: size));
   }
 
   // GET /api/categories?storeId=
   Future<List<Category>> getCategories({required int storeId}) async {
     if (OfflineMode.active) return OfflineMode.catalog!.categories();
-    final resp = await _send(
-      () => _http.get(
-        _uri('/api/categories')
-            .replace(queryParameters: {'storeId': '$storeId'}),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      final list = jsonDecode(resp.body) as List<dynamic>;
-      return list
-          .map((e) => Category.fromJson(e as Map<String, dynamic>))
-          .toList();
-    }
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    return _readThrough(() async {
+      final resp = await _send(
+        () => _http.get(
+          _uri('/api/categories')
+              .replace(queryParameters: {'storeId': '$storeId'}),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        final list = jsonDecode(resp.body) as List<dynamic>;
+        await _cache?.saveCategories(
+            [for (final e in list) e as Map<String, dynamic>]);
+        return list
+            .map((e) => Category.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }, () => OfflineMode.catalog!.categories());
   }
 
   // GET /api/products/{id}
   Future<Product> getProductDetail(int id) async {
     if (OfflineMode.active) {
-      final p = await OfflineMode.catalog!.productDetail(id);
+      final p = await OfflineMode.catalog!.productDetail(id) ??
+          await _fetchMissingProduct(
+              _uri('/api/products/$id').replace(queryParameters: {'full': '1'}),
+              rereadLocal: () => OfflineMode.catalog!.productDetail(id));
       if (p == null) throw ProductNotFoundException(404, 'Product $id not found');
       return p;
     }
-    final resp = await _send(() => _http.get(_uri('/api/products/$id')));
-    if (resp.statusCode == 200) {
-      return Product.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    final msg = _extractMessage(resp);
-    if (resp.statusCode == 404) throw ProductNotFoundException(404, msg);
-    throw UnknownApiException(resp.statusCode, msg);
+    return _readThrough(() async {
+      final resp = await _send(() => _http.get(_uri('/api/products/$id')
+          .replace(queryParameters: {if (OfflineMode.caching) 'full': '1'})));
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(resp.body) as Map<String, dynamic>;
+        await _cache?.saveProducts([json]);
+        return Product.fromJson(json);
+      }
+      final msg = _extractMessage(resp);
+      if (resp.statusCode == 404) throw ProductNotFoundException(404, msg);
+      throw UnknownApiException(resp.statusCode, msg);
+    }, () async {
+      final p = await OfflineMode.catalog!.productDetail(id);
+      if (p == null) throw ProductNotFoundException(404, 'Product $id not found');
+      return p;
+    });
   }
 
   // ---- Payment methods -----------------------------------------------
@@ -437,21 +554,25 @@ class ApiClient {
   Future<List<PaymentMethod>> getPaymentMethods(
       {required String mode, int? storeId}) async {
     if (OfflineMode.active) return OfflineMode.catalog!.offlinePaymentMethods();
-    final resp = await _send(
-      () => _http.get(
-        _uri('/api/payment-methods').replace(queryParameters: {
-          'mode': mode,
-          if (storeId != null) 'storeId': '$storeId',
-        }),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      final list = jsonDecode(resp.body) as List<dynamic>;
-      return list
-          .map((e) => PaymentMethod.fromJson(e as Map<String, dynamic>))
-          .toList();
-    }
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    return _readThrough(() async {
+      final resp = await _send(
+        () => _http.get(
+          _uri('/api/payment-methods').replace(queryParameters: {
+            'mode': mode,
+            if (storeId != null) 'storeId': '$storeId',
+          }),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        final list = jsonDecode(resp.body) as List<dynamic>;
+        await _cache?.savePaymentMethods(
+            mode, [for (final e in list) e as Map<String, dynamic>]);
+        return list
+            .map((e) => PaymentMethod.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    }, () => OfflineMode.catalog!.offlinePaymentMethods());
   }
 
   // ---- Cart / order ----------------------------------------------------
