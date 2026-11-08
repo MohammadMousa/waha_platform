@@ -219,8 +219,10 @@ void main() {
       expect(o.status, 'PAID');
       expect(o.syncState, 'PAY_PENDING');
       final p = await db.select(db.localPayments).getSingle();
-      expect(p.paymentId, 'sess-1');
+      expect(p.paymentId, isNot('sess-1')); // a new id, never the session's
+      expect(p.paymentId, hasLength(36)); // a UUID
       expect(p.providerReference, 'rrn-1');
+      expect(jsonDecode(p.notesJson!)['terminalSessionId'], 'sess-1');
       expect(p.syncedAt, isNull);
       // the invoice screen then reads the order: server lines, paid
       final shown = await api.getOrder(id);

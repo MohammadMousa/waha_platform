@@ -862,14 +862,18 @@ class ApiClient {
     try {
       await OfflineMode.orders!.keepPaymentOfServerOrder(
         orderId: session.orderId,
-        paymentId: sessionId,
+        // A NEW id, not the terminal session's: the server already holds a
+        // record under the session id (made when the session was opened) and
+        // a payment sent with that id would clash with it. The session id
+        // travels in the notes so the two can still be matched.
+        paymentId: const Uuid().v4(),
         order: OfflineMode.serverOrders[session.orderId],
         session: session,
         pay: PaidPayment(
           provider: 'terminal',
           providerReference: (rrn == null || rrn.isEmpty) ? null : rrn,
           authCode: authCode,
-          notes: notes,
+          notes: {...notes, 'terminalSessionId': sessionId},
         ),
       );
     } catch (_) {
