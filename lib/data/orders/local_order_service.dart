@@ -184,7 +184,11 @@ class LocalOrderService {
           .getSingleOrNull();
 
   /// The order in the shape the invoice screens already read. The invoice
-  /// link is the same one the server would give: <invoiceBaseUrl>/api/invoices/<uuid>.
+  /// link is the same one the server would give, <invoiceBaseUrl>/api/invoices/<uuid>,
+  /// plus the marker ?offline=1. Every order made on this device gets the
+  /// marker (even if it is sent to the server a moment later): the server may
+  /// not have the order yet, and with the marker it shows a waiting page
+  /// instead of a 404. Orders made on the server keep the plain link.
   Future<WahaOrder?> toWahaOrder(String orderId) async {
     final o = await findOrder(orderId);
     if (o == null) return null;
@@ -210,7 +214,7 @@ class LocalOrderService {
       paymentReference: pay?.providerReference,
       paymentMethod: pay?.provider,
       username: o.username,
-      invoiceUrl: '$base/api/invoices/${o.orderId}',
+      invoiceUrl: '$base/api/invoices/${o.orderId}?offline=1',
       displayId: o.displayId,
       orderReference: o.orderReference,
       storeId: o.storeId,

@@ -102,7 +102,7 @@ void main() {
     expect(o.tax, 0.53);
     expect(o.items.single.unitPrice, 2.01);
     expect(o.items.single.lineTotal, 4.03);
-    expect(o.invoiceUrl, 'http://192.168.1.42:8081/api/invoices/$id');
+    expect(o.invoiceUrl, 'http://192.168.1.42:8081/api/invoices/$id?offline=1');
     expect(flow.cart, isEmpty);
   });
 
