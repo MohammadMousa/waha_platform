@@ -14,6 +14,7 @@ import 'activity_gate.dart';
 import '../../services/local_prefs.dart';
 import '../catalog/local_catalog.dart';
 import '../catalog/offline_level.dart';
+import '../resources/resource_cache_holder.dart';
 import '../catalog/offline_mode.dart';
 import '../orders/local_order_service.dart';
 import '../orders/order_cleanup.dart';
@@ -57,6 +58,7 @@ class SyncService extends ChangeNotifier {
       final a = _abort;
       if (a != null && !a.isCompleted) a.complete();
     });
+    unawaited(ResourceCacheHolder.start(db, canReach: () => serverReachable));
     OfflineMode.catalog = LocalCatalog(db);
     OfflineMode.orders = LocalOrderService(db);
     OfflineMode.username = () => authService.username;
@@ -74,6 +76,9 @@ class SyncService extends ChangeNotifier {
   double _intervalJitter = 0;
   Duration? _retryAfterOverride;
   bool _offline = false;
+
+  /// False after the server stopped answering, until it answers again.
+  bool get serverReachable => !_offline;
   Timer? _probeTimer;
 
   Future<void> _begin() async {

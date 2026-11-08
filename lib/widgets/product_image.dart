@@ -1,9 +1,19 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
+import '../data/resources/resource_cache.dart';
+import '../data/resources/resource_cache_holder.dart';
 
-class ProductImage extends StatelessWidget {
+/// A product's picture. Lazy: nothing is downloaded until a screen shows it.
+/// It comes from the resource cache (saved on the device the first time, shown
+/// from the file after that, also when the server cannot be reached). A
+/// replaced image has a NEW resource id, so a saved one never goes stale.
+/// While it loads there is a spinner; with nothing saved and no server there
+/// is the placeholder.
+class ProductImage extends StatefulWidget {
   final int? imageResourceId;
   final double? width;
   final double? height;
@@ -18,6 +28,39 @@ class ProductImage extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.borderRadius,
   });
+
+  @override
+  State<ProductImage> createState() => _ProductImageState();
+}
+
+class _ProductImageState extends State<ProductImage> {
+  Future<SavedResource?>? _future;
+
+  int? get imageResourceId => widget.imageResourceId;
+  double? get width => widget.width;
+  double? get height => widget.height;
+  BoxFit get fit => widget.fit;
+  BorderRadius? get borderRadius => widget.borderRadius;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(ProductImage old) {
+    super.didUpdateWidget(old);
+    if (old.imageResourceId != widget.imageResourceId) _load();
+  }
+
+  void _load() {
+    final id = widget.imageResourceId;
+    final cache = ResourceCacheHolder.instance;
+    _future = (id == null || cache == null)
+        ? null
+        : cache.get('/api/resources/$id');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,19 +115,43 @@ class ProductImage extends StatelessWidget {
       ],
     );
 
-    final url = '${AppConfig.apiBaseUrl}/api/resources/$imageResourceId';
+    // The web build has no disk: it loads the picture from the network.
+    if (kIsWeb) {
+      return SizedBox(
+        width: w, height: h,
+        child: ClipRRect(
+          borderRadius: br,
+          child: Image.network(
+            '${AppConfig.apiBaseUrl}/api/resources/$imageResourceId',
+            width: w, height: h, fit: fit,
+            loadingBuilder: (_, child, p) => p == null ? child : loadingWidget,
+            errorBuilder: (_, __, ___) => placeholder,
+          ),
+        ),
+      );
+    }
 
+    final future = _future;
+    if (future == null) return SizedBox(width: w, height: h, child: placeholder);
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     return SizedBox(
       width: w, height: h,
       child: ClipRRect(
         borderRadius: br,
-        child: CachedNetworkImage(
-          imageUrl: url,
-          width: w, height: h,
-          fit: fit,
-          // Disk + memory cache — survives app restarts
-          placeholder: (_, __) => loadingWidget,
-          errorWidget: (_, __, ___) => placeholder,
+        child: FutureBuilder<SavedResource?>(
+          future: future,
+          builder: (_, snap) {
+            if (snap.connectionState != ConnectionState.done) return loadingWidget;
+            final saved = snap.data;
+            if (saved == null) return placeholder;
+            return Image.file(
+              saved.file,
+              width: w, height: h, fit: fit,
+              // Decode at the size it is shown, not the file's full size.
+              cacheWidth: (w * dpr).round(),
+              errorBuilder: (_, __, ___) => placeholder,
+            );
+          },
         ),
       ),
     );

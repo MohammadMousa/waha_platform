@@ -97,6 +97,26 @@ class LocalProductImages extends Table {
 
 // One row per feed: the saved cursor and whether one full pull ever finished.
 // `since` is the server's own text for the instant, kept exactly as sent.
+/// One row per saved resource (a product image, the landing page, a file the
+/// landing page uses), keyed by the address the kiosk asked for. The bytes
+/// are NOT here: they are files in one folder, named by the hash of their
+/// content, so two addresses with the same bytes share one file. This table
+/// only says which address maps to which file and when it was last checked
+/// and shown. See lib/data/resources/resource_cache.dart.
+class CachedResources extends Table {
+  TextColumn get address => text()(); // e.g. /api/resources/125, /resource/waha/pages/x.png
+  TextColumn get mimeType => text()(); // from the response's Content-Type
+  TextColumn get etag => text().nullable()(); // exactly as the server sent it, quotes included
+  TextColumn get fileHash => text()(); // sha256 of the bytes = the file's name
+  IntColumn get sizeBytes => integer()();
+  TextColumn get createdAt => text()();
+  TextColumn get lastCheckedAt => text()(); // last time the server confirmed or sent it
+  TextColumn get lastUsedAt => text()(); // last time it was shown (decides what to remove)
+
+  @override
+  Set<Column> get primaryKey => {address};
+}
+
 class SyncState extends Table {
   TextColumn get feed => text()();
   TextColumn get since => text().nullable()();
@@ -228,6 +248,7 @@ class ReferenceCounter extends Table {
   LocalOrderItems,
   LocalPayments,
   ReferenceCounter,
+  CachedResources,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
@@ -236,7 +257,7 @@ class AppDatabase extends _$AppDatabase {
   // Bump this for every schema change and add a step in [migration].
   // Never edit an old step: devices in the field run them in order.
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -288,6 +309,9 @@ class AppDatabase extends _$AppDatabase {
                 'UPDATE local_payments SET synced_at = (SELECT synced_at FROM local_orders '
                 "WHERE local_orders.order_id = local_payments.order_id AND local_orders.sync_state = 'SYNCED') "
                 'WHERE synced_at IS NULL');
+          }
+          if (from < 6) {
+            await m.createTable(cachedResources);
           }
         },
         beforeOpen: (details) async {

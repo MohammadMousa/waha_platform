@@ -1,15 +1,26 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 
+import '../data/resources/resource_cache_holder.dart';
+import 'api_client.dart';
 import 'local_prefs.dart';
 
-/// Persists landing page HTML to a local file so the WebView can be shown
-/// instantly on cold start, independent of network or auth state.
+/// Persists landing page HTML so the WebView can be shown instantly on cold
+/// start, independent of network or auth state.
 ///
-/// Files live at: <appSupportDir>/landing/{pageKey}.html
-/// Content hashes live in LocalPrefs under waha.landing_hash.{pageKey}.
+/// The page is a resource like any other: it is saved by the resource cache
+/// (lib/data/resources/resource_cache.dart), under the address the server
+/// gave (LocalPrefs.landingResourceUrl). The files the page uses are cached
+/// the same way (see HtmlAssets). The content hash the server reports is kept
+/// in LocalPrefs under waha.landing_hash.{pageKey}; it is compared with the
+/// server's on every check, so a check costs no download.
+///
+/// Where the cache does not exist (the web build) the old file is used:
+/// <appSupportDir>/landing/{pageKey}.html. A file saved there by an earlier
+/// version is still read until the cache holds the page.
 ///
 /// One entry per page key (the kiosk uses KIOSK_LANDING).
 class LandingCache {
@@ -25,6 +36,16 @@ class LandingCache {
 
   /// Returns cached HTML for [pageKey], or null if never downloaded.
   static Future<String?> readHtml(String pageKey) async {
+    try {
+      final cache = ResourceCacheHolder.instance;
+      final address = LocalPrefs.landingResourceUrl(pageKey);
+      if (cache != null && address != null) {
+        final saved = await cache.peek(address);
+        if (saved != null) {
+          return utf8.decode(await saved.file.readAsBytes(), allowMalformed: true);
+        }
+      }
+    } catch (_) {/* fall back to the old file */}
     try {
       final file = await _file(pageKey);
       if (file == null || !await file.exists()) return null;
@@ -42,6 +63,34 @@ class LandingCache {
       if (file == null) return;
       await file.writeAsString(html);
       await LocalPrefs.setLandingHash(pageKey, hash);
+    } catch (_) {}
+  }
+
+  /// Downloads the page at [resourceUrl] and saves it, returning its HTML. It
+  /// goes through the resource cache (the old copy keeps showing until the new
+  /// one has fully arrived); without a cache it is saved to the old file.
+  /// Throws when the page cannot be fetched, as before.
+  static Future<String> fetchAndSave(ApiClient api, String? token,
+      String pageKey, String resourceUrl, String hash) async {
+    final cache = ResourceCacheHolder.instance;
+    if (cache != null) {
+      final saved = await cache.refresh(resourceUrl);
+      if (saved != null) {
+        await LocalPrefs.setLandingResourceUrl(pageKey, resourceUrl);
+        await LocalPrefs.setLandingHash(pageKey, hash);
+        await _deleteOldFile(pageKey);
+        return utf8.decode(await saved.file.readAsBytes(), allowMalformed: true);
+      }
+    }
+    final html = await api.fetchResourceContent(resourceUrl, token);
+    await writeHtml(pageKey, html, hash);
+    return html;
+  }
+
+  static Future<void> _deleteOldFile(String pageKey) async {
+    try {
+      final f = await _file(pageKey);
+      if (f != null && await f.exists()) await f.delete();
     } catch (_) {}
   }
 

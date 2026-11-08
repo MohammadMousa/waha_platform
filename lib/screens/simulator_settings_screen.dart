@@ -354,8 +354,8 @@ class _LandingTestPanelState extends State<_LandingTestPanel> {
         return;
       }
       if (!mounted) return;
-      final html = await api.fetchResourceContent(info.resourceUrl, token);
-      await LandingCache.writeHtml(key, html, info.contentHash);
+      final html = await LandingCache.fetchAndSave(
+          api, token, key, info.resourceUrl, info.contentHash);
       await LocalPrefs.setLandingResourceUrl(key, info.resourceUrl);
       if (!mounted) return;
       setState(() => _busy = false);

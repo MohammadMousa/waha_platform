@@ -22,6 +22,7 @@ import '../utils/locale_name.dart';
 import '../widgets/waha_app_bar.dart';
 import '../widgets/waha_bottom_nav.dart';
 import '../config/app_config.dart';
+import '../data/resources/html_assets.dart';
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -264,16 +265,16 @@ class _LandingScreenState extends State<LandingScreen> {
       String html;
       if (hashChanged) {
         _log('⬇ $pageKey — downloading updated HTML…');
-        html = await api.fetchResourceContent(info.resourceUrl, authService.token);
-        await LandingCache.writeHtml(pageKey, html, info.contentHash);
+        html = await LandingCache.fetchAndSave(api, authService.token, pageKey,
+            info.resourceUrl, info.contentHash);
         _log('✅ $pageKey — new version saved (${html.length} chars), updating display');
       } else {
         _log('📂 $pageKey — hash same but key changed, loading from cache…');
         html = await LandingCache.readHtml(pageKey) ?? '';
         if (html.isEmpty) {
           _log('⬇ $pageKey — cache miss, downloading…');
-          html = await api.fetchResourceContent(info.resourceUrl, authService.token);
-          await LandingCache.writeHtml(pageKey, html, info.contentHash);
+          html = await LandingCache.fetchAndSave(api, authService.token, pageKey,
+              info.resourceUrl, info.contentHash);
           _log('✅ $pageKey — downloaded and cached (${html.length} chars)');
         }
       }
@@ -369,10 +370,19 @@ class _WebViewLandingState extends State<_WebViewLanding> {
     // Android because the SurfaceProducer / EGL context isn't ready yet.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final resolved =
-          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
-      _controller.loadHtmlString(resolved, baseUrl: widget.baseUrl);
+      _showPage();
     });
+  }
+
+  /// Loads the page. Files of it that are already saved on the device are put
+  /// in from the saved copy (see HtmlAssets); the rest load from the server
+  /// and are saved for next time.
+  Future<void> _showPage() async {
+    final resolved =
+        LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
+    final page = await HtmlAssets.withSavedCopies(resolved, widget.baseUrl);
+    if (!mounted) return;
+    _controller.loadHtmlString(page, baseUrl: widget.baseUrl);
   }
 
   @override
@@ -419,9 +429,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
     super.didUpdateWidget(old);
     if (old.htmlContent != widget.htmlContent) {
       setState(() { _loaded = false; _errored = false; });
-      final resolved =
-          LandingCache.resolveAbsolutePaths(widget.htmlContent, widget.baseUrl);
-      _controller.loadHtmlString(resolved, baseUrl: widget.baseUrl);
+      _showPage();
     } else if (old.lang != widget.lang) {
       _applyLang(widget.lang);
     }
@@ -507,9 +515,7 @@ class _WebViewLandingState extends State<_WebViewLanding> {
                       TextButton(
                         onPressed: () {
                           setState(() { _loaded = false; _errored = false; });
-                          final resolved = LandingCache.resolveAbsolutePaths(
-                              widget.htmlContent, widget.baseUrl);
-                          _controller.loadHtmlString(resolved, baseUrl: widget.baseUrl);
+                          _showPage();
                         },
                         child: const Text('Retry',
                             style: TextStyle(color: Colors.white)),
