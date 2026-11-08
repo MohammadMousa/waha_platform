@@ -98,6 +98,78 @@ abstract class AppLocalizations {
     Locale('en')
   ];
 
+  /// No description provided for @timeJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'just now'**
+  String get timeJustNow;
+
+  /// No description provided for @timeAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{t} ago'**
+  String timeAgo(String t);
+
+  /// No description provided for @timeDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{n}d'**
+  String timeDays(String n);
+
+  /// No description provided for @timeHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{n}h'**
+  String timeHours(String n);
+
+  /// No description provided for @timeMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{n}m'**
+  String timeMinutes(String n);
+
+  /// No description provided for @timeSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{n}s'**
+  String timeSeconds(String n);
+
+  /// No description provided for @timeAm.
+  ///
+  /// In en, this message translates to:
+  /// **'AM'**
+  String get timeAm;
+
+  /// No description provided for @timePm.
+  ///
+  /// In en, this message translates to:
+  /// **'PM'**
+  String get timePm;
+
+  /// No description provided for @offlineLastAttempt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last attempt: {when}'**
+  String offlineLastAttempt(String when);
+
+  /// No description provided for @ordersLastAttempt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last send attempt: {when}'**
+  String ordersLastAttempt(String when);
+
+  /// No description provided for @offlineLastPull.
+  ///
+  /// In en, this message translates to:
+  /// **'Last successful pull: {when}'**
+  String offlineLastPull(String when);
+
+  /// No description provided for @ordersLastAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Last accepted by the server: {when}'**
+  String ordersLastAccepted(String when);
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
@@ -410,12 +482,6 @@ abstract class AppLocalizations {
   /// **'cursor {since} / {afterId}'**
   String offlineCursor(String since, String afterId);
 
-  /// No description provided for @offlineLastPull.
-  ///
-  /// In en, this message translates to:
-  /// **'last pull {at}'**
-  String offlineLastPull(String at);
-
   /// No description provided for @offlineErrorLine.
   ///
   /// In en, this message translates to:
@@ -499,12 +565,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The orders are kept and will be sent once the device is signed in again.'**
   String get ordersAuthStoppedHint;
-
-  /// No description provided for @ordersLastAccepted.
-  ///
-  /// In en, this message translates to:
-  /// **'Last accepted by the server: {at}'**
-  String ordersLastAccepted(String at);
 
   /// No description provided for @ordersNoFailed.
   ///

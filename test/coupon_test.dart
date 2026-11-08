@@ -216,10 +216,10 @@ void main() {
     final (ctx, f) = await pump(tester);
     final m = ScannerManager.instance;
 
-    expect(await m.handleCoupon(ctx, '6281000123456'), isFalse);
+    expect(await m.handle(ctx, '6281000123456'), isFalse);
 
     // empty cart
-    expect(await m.handleCoupon(ctx, 'coupon=GOOD'), isTrue);
+    expect(await m.handle(ctx, 'coupon=GOOD'), isTrue);
     await tester.pump();
     expect(find.text('Add some items to the cart first'), findsOneWidget);
     expect(f.couponCode, isNull);
@@ -227,7 +227,7 @@ void main() {
     // an unpaid order is open: not at this stage
     f.cart.add(_item(2));
     f.orderId = 'abc';
-    expect(await m.handleCoupon(ctx, 'coupon=GOOD'), isTrue);
+    expect(await m.handle(ctx, 'coupon=GOOD'), isTrue);
     await tester.pump();
     expect(find.text("Coupons can't be added at this stage"), findsOneWidget);
     expect(f.couponCode, isNull);
@@ -235,11 +235,11 @@ void main() {
 
     // bad format never reaches the server
     final before = fake.quotes.length;
-    expect(await m.handleCoupon(ctx, 'coupon=a b'), isTrue);
+    expect(await m.handle(ctx, 'coupon=a b'), isTrue);
     expect(fake.quotes.length, before);
 
     // a good one
-    await tester.runAsync(() => m.handleCoupon(ctx, 'coupon=GOOD'));
+    await tester.runAsync(() => m.handle(ctx, 'coupon=GOOD'));
     await tester.pump();
     expect(f.couponCode, 'GOOD');
     expect(find.text('Coupon GOOD applied'), findsOneWidget);
@@ -269,7 +269,7 @@ void main() {
     ));
     expect(ctx, isNotNull);
     await tester.runAsync(
-        () => ScannerManager.instance.handleCoupon(dctx, 'coupon=GOOD'));
+        () => ScannerManager.instance.handle(dctx, 'coupon=GOOD'));
     await tester.pump();
     expect(find.textContaining("Can't reach the server"), findsOneWidget);
     expect(dead.couponCode, isNull);

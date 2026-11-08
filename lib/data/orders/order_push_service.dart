@@ -1,3 +1,4 @@
+import '../../services/local_prefs.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -242,6 +243,7 @@ class OrderPushService extends ChangeNotifier {
     } finally {
       _running = false;
       lastResultAt = DateTime.now();
+      if (attempted) unawaited(LocalPrefs.setPushAttemptAt(lastResultAt!));
       notifyListeners();
       if (attempted) {
         final cb = _onAttempt;

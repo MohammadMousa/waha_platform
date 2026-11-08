@@ -189,16 +189,9 @@ class SimulatorOverlay extends StatelessWidget {
   }) async {
     final flow = context.read<OrderFlowController>();
 
-    // Same guard as the real scan paths (scan_actions.dart) — an order placed
-    // but not yet paid must block a scan here too, not just from hardware.
-    if (flow.orderId != null && flow.order?.status != 'PAID') {
-      await showUnpaidOrderBlockedDialog(context);
-      return;
-    }
-
-    // Same kiosk-command check as the real scan path (scan_actions.dart) —
-    // the simulator's camera button pushes the same CameraScanScreen, so a
-    // `cmd=` QR can reach here too, not just from real hardware.
+    // Same single call as the real scan paths: every scan rule (coupon,
+    // unpaid-order block, cmd= commands) lives in ScannerManager.handle. Do
+    // not add scan rules here.
     if (await ScannerManager.instance.handle(context, code)) return;
     if (!context.mounted) return;
 

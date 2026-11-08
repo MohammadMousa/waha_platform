@@ -6,14 +6,23 @@ import '../router/app_router.dart';
 import '../services/api_exceptions.dart';
 import '../state/order_flow_controller.dart';
 import 'coupon_text.dart';
+import 'scan_actions.dart' show showUnpaidOrderBlockedDialog;
 
 import '../screens/settings_screen.dart' show showCopyableTextDialog;
 import '../services/geidea_terminal_bridge.dart';
 import '../widgets/device_pin_dialog.dart';
 import '../widgets/profile_sheet.dart';
 
-/// The single place every scan — hardware scanner or camera — passes
-/// through before `scan_actions.dart` treats it as a product barcode. A
+/// THE single place every scan passes through before it is treated as a
+/// product barcode: hardware scanner, camera AND the on-screen simulator all
+/// make exactly ONE call, [handle]. Every scan rule belongs inside [handle]
+/// (coupon, unpaid-order block, `cmd=` commands, anything added later) so a
+/// new rule is one edit that reaches every scan path. NEVER add a second
+/// public entry point or put a scan rule in a caller (scan_actions.dart,
+/// simulator_overlay.dart): a rule outside [handle] is silently skipped by
+/// whichever caller doesn't have it (this already happened once with coupons
+/// and the simulator). A `cmd=` prefix marks a kiosk command instead of a
+/// product code. A
 /// `cmd=` prefix marks a kiosk command instead of a product code: e.g. a QR
 /// sticker (content `cmd=upload-logs`) the client can scan to self-report
 /// diagnostics without hunting for the Settings PIN. Add a new command only
@@ -40,15 +49,14 @@ class ScannerManager {
   // or underscore.
   static final _couponFormat = RegExp(r'^[A-Za-z0-9._-]{2,50}$');
 
-  /// A scanned `coupon=<code>`. Checked before the "unpaid order" block, so
-  /// the camera and the hardware scanner both get it. True when [code] was a
-  /// coupon (handled, or refused with a message); false means "not mine".
+  /// A scanned `coupon=<code>`, called only from [handle]. True when [code]
+  /// was a coupon (handled, or refused with a message); false means "not mine".
   ///
   /// Where it is scanned: while an unpaid order is open (invoice screen) it is
   /// refused; with an empty cart the customer is asked to add items first;
   /// otherwise the server validates it. From the landing page an accepted
   /// coupon also opens the cart.
-  Future<bool> handleCoupon(BuildContext context, String code) async {
+  Future<bool> _handleCoupon(BuildContext context, String code) async {
     if (!code.startsWith(_couponPrefix)) return false;
     final l = AppLocalizations.of(context)!;
     final flow = context.read<OrderFlowController>();
@@ -82,10 +90,23 @@ class ScannerManager {
     return true;
   }
 
-  /// True when [code] was a command — handled, or simply not recognized —
-  /// either way the caller must NOT also treat it as a product barcode.
-  /// False means "not mine," i.e. a normal barcode: proceed as usual.
+  /// The one entry point for every scan. True means the scan was dealt with
+  /// here (a coupon, a refusal, a command, or the unpaid-order block) and the
+  /// caller must NOT also treat it as a product barcode. False means a normal
+  /// barcode: the caller adds it to the cart.
+  ///
+  /// Order matters: a coupon comes first because on the invoice screen it has
+  /// its own message ("coupons can't be added at this stage"); then, while an
+  /// order is placed but unpaid, every other scan (product or `cmd=`) is
+  /// blocked; then `cmd=` commands.
   Future<bool> handle(BuildContext context, String code) async {
+    if (await _handleCoupon(context, code)) return true;
+    if (!context.mounted) return true;
+    final flow = context.read<OrderFlowController>();
+    if (flow.orderId != null && flow.order?.status != 'PAID') {
+      await showUnpaidOrderBlockedDialog(context);
+      return true;
+    }
     if (!code.startsWith(_prefix)) return false;
     final command = _commands[code.substring(_prefix.length)];
     if (command != null) await command(context);

@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/db/app_database.dart';
 import '../data/orders/order_push_service.dart';
 import '../data/sync/sync_service.dart';
 import '../l10n/generated/app_localizations.dart';
+import '../services/local_prefs.dart';
+import '../utils/time_text.dart';
 import 'run_result_text.dart';
 
 /// Settings section for orders made on the device: how many wait to be sent,
@@ -20,16 +24,22 @@ class _OfflineOrdersPanelState extends State<OfflineOrdersPanel> {
   final _push = OrderPushService.instance;
   OrderCounts _counts = const OrderCounts(0, 0, null);
   List<LocalOrder> _dead = [];
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
     _push.addListener(_load);
     _load();
+    // Redraw every 30 s so the "ago" texts keep moving.
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _tick?.cancel();
     _push.removeListener(_load);
     super.dispose();
   }
@@ -75,7 +85,12 @@ class _OfflineOrdersPanelState extends State<OfflineOrdersPanel> {
             ),
           ListTile(
             dense: true,
-            title: Text(l.ordersLastAccepted('${_counts.lastPushAt ?? '-'}')),
+            title: Text(l.ordersLastAccepted(whenIsoText(l, _counts.lastPushAt))),
+          ),
+          ListTile(
+            dense: true,
+            title: Text(
+                l.ordersLastAttempt(whenText(l, LocalPrefs.pushAttemptAt))),
           ),
           if (last != null && lastAt != null)
             ListTile(
@@ -87,7 +102,7 @@ class _OfflineOrdersPanelState extends State<OfflineOrdersPanel> {
                 color: isProblem(last) ? Colors.red.shade700 : Colors.green,
               ),
               title: Text(l.offlineLastResult(
-                  clockTime(lastAt), sendResultText(l, last))),
+                  whenText(l, lastAt), sendResultText(l, last))),
             ),
           if (_dead.isEmpty)
             ListTile(dense: true, title: Text(l.ordersNoFailed))

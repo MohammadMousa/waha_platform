@@ -9,6 +9,60 @@ class AppLocalizationsAr extends AppLocalizations {
   AppLocalizationsAr([String locale = 'ar']) : super(locale);
 
   @override
+  String get timeJustNow => 'الآن';
+
+  @override
+  String timeAgo(String t) {
+    return 'منذ $t';
+  }
+
+  @override
+  String timeDays(String n) {
+    return '$n ي';
+  }
+
+  @override
+  String timeHours(String n) {
+    return '$n س';
+  }
+
+  @override
+  String timeMinutes(String n) {
+    return '$n د';
+  }
+
+  @override
+  String timeSeconds(String n) {
+    return '$n ث';
+  }
+
+  @override
+  String get timeAm => 'ص';
+
+  @override
+  String get timePm => 'م';
+
+  @override
+  String offlineLastAttempt(String when) {
+    return 'آخر محاولة: $when';
+  }
+
+  @override
+  String ordersLastAttempt(String when) {
+    return 'آخر محاولة إرسال: $when';
+  }
+
+  @override
+  String offlineLastPull(String when) {
+    return 'آخر تحميل ناجح: $when';
+  }
+
+  @override
+  String ordersLastAccepted(String when) {
+    return 'آخر قبول من الخادم: $when';
+  }
+
+  @override
   String get appTitle => 'Waha';
 
   @override
@@ -186,11 +240,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String offlineLastPull(String at) {
-    return 'آخر تحميل $at';
-  }
-
-  @override
   String offlineErrorLine(String error) {
     return 'خطأ: $error';
   }
@@ -246,11 +295,6 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get ordersAuthStoppedHint =>
       'الطلبات محفوظة وسيتم إرسالها بعد تسجيل دخول الجهاز من جديد.';
-
-  @override
-  String ordersLastAccepted(String at) {
-    return 'آخر قبول من الخادم: $at';
-  }
 
   @override
   String get ordersNoFailed => 'لا توجد طلبات فاشلة.';

@@ -227,6 +227,7 @@ class SyncService extends ChangeNotifier {
       _running = false;
       _manualRun = false;
       lastResultAt = DateTime.now();
+      unawaited(LocalPrefs.setPullAttemptAt(lastResultAt!));
       notifyListeners();
       unawaited(reportStatus());
       unawaited(_cleanup());

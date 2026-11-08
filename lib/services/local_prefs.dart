@@ -378,6 +378,30 @@ class LocalPrefs {
   static Future<void> setPricesExcludeVat(bool value) =>
       _p.setBool(_kPricesExcludeVat, value);
 
+  // When the last pull / send was tried (even one that found nothing new or
+  // failed), as milliseconds since 1970. The offline panels show it next to
+  // the "last successful" time, so a quiet pull never looks stale. Kept in
+  // the small settings store on purpose (not the database): one value for
+  // the whole run, no migration needed.
+  static const _kPullAttemptAt = 'waha.pull_attempt_at';
+  static const _kPushAttemptAt = 'waha.push_attempt_at';
+  static DateTime? _ms(String k) {
+    final v = _prefs?.getInt(k);
+    return v == null ? null : DateTime.fromMillisecondsSinceEpoch(v);
+  }
+
+  static DateTime? get pullAttemptAt => _ms(_kPullAttemptAt);
+  static DateTime? get pushAttemptAt => _ms(_kPushAttemptAt);
+  // Safe before the preferences are loaded (tests, early start): then the
+  // time is simply not saved.
+  static Future<void> setPullAttemptAt(DateTime t) async {
+    await _prefs?.setInt(_kPullAttemptAt, t.millisecondsSinceEpoch);
+  }
+
+  static Future<void> setPushAttemptAt(DateTime t) async {
+    await _prefs?.setInt(_kPushAttemptAt, t.millisecondsSinceEpoch);
+  }
+
   // Late card approvals still to be reported to the server (a JSON list, one
   // entry per payment). Kept on disk so a restart or a lost connection does
   // not drop a charge the kiosk already knows about; see LateApprovalService.

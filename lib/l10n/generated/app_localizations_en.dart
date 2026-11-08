@@ -9,6 +9,60 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get timeJustNow => 'just now';
+
+  @override
+  String timeAgo(String t) {
+    return '$t ago';
+  }
+
+  @override
+  String timeDays(String n) {
+    return '${n}d';
+  }
+
+  @override
+  String timeHours(String n) {
+    return '${n}h';
+  }
+
+  @override
+  String timeMinutes(String n) {
+    return '${n}m';
+  }
+
+  @override
+  String timeSeconds(String n) {
+    return '${n}s';
+  }
+
+  @override
+  String get timeAm => 'AM';
+
+  @override
+  String get timePm => 'PM';
+
+  @override
+  String offlineLastAttempt(String when) {
+    return 'Last attempt: $when';
+  }
+
+  @override
+  String ordersLastAttempt(String when) {
+    return 'Last send attempt: $when';
+  }
+
+  @override
+  String offlineLastPull(String when) {
+    return 'Last successful pull: $when';
+  }
+
+  @override
+  String ordersLastAccepted(String when) {
+    return 'Last accepted by the server: $when';
+  }
+
+  @override
   String get appTitle => 'Waha';
 
   @override
@@ -189,11 +243,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String offlineLastPull(String at) {
-    return 'last pull $at';
-  }
-
-  @override
   String offlineErrorLine(String error) {
     return 'error: $error';
   }
@@ -250,11 +299,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ordersAuthStoppedHint =>
       'The orders are kept and will be sent once the device is signed in again.';
-
-  @override
-  String ordersLastAccepted(String at) {
-    return 'Last accepted by the server: $at';
-  }
 
   @override
   String get ordersNoFailed => 'No failed orders.';

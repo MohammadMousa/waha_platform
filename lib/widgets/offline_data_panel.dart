@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 
 import '../data/db/app_database.dart';
 import '../data/sync/feeds.dart';
 import '../l10n/generated/app_localizations.dart';
+import '../services/local_prefs.dart';
+import '../utils/time_text.dart';
 import 'run_result_text.dart';
 import '../data/sync/sync_service.dart';
 
@@ -21,16 +25,22 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
   final _svc = SyncService.instance;
   Map<String, int> _counts = {};
   Map<String, SyncStateData> _state = {};
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
     _svc.addListener(_load);
     _load();
+    // Redraw every 30 s so the "ago" texts keep moving.
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _tick?.cancel();
     _svc.removeListener(_load);
     super.dispose();
   }
@@ -82,10 +92,15 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
                   '${_state[f]?.fullPullDone == true ? l.offlineFullDone : l.offlineNotComplete}'),
               subtitle: Text(
                 '${l.offlineCursor('${_state[f]?.since ?? '-'}', '${_state[f]?.afterId ?? 0}')}'
-                '\n${l.offlineLastPull('${_state[f]?.lastPullAt ?? '-'}')}'
+                '\n${l.offlineLastPull(whenIsoText(l, _state[f]?.lastPullAt))}'
                 '${_state[f]?.lastError != null ? '\n${l.offlineErrorLine(_state[f]!.lastError!)}' : ''}',
               ),
             ),
+          ListTile(
+            dense: true,
+            title: Text(
+                l.offlineLastAttempt(whenText(l, LocalPrefs.pullAttemptAt))),
+          ),
           if (last != null && lastAt != null)
             ListTile(
               dense: true,
@@ -96,7 +111,7 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
                 color: isProblem(last) ? Colors.red.shade700 : Colors.green,
               ),
               title: Text(l.offlineLastResult(
-                  clockTime(lastAt), pullResultText(l, last))),
+                  whenText(l, lastAt), pullResultText(l, last))),
             ),
           Padding(
             padding: const EdgeInsets.all(12),
