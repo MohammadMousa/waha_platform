@@ -54,6 +54,30 @@ class WahaOrder {
     this.invoiceOffer,
   });
 
+  /// The same order with another status (a server order that was paid while
+  /// the server could not be told keeps its own lines and numbers).
+  WahaOrder withStatus(String newStatus) => WahaOrder(
+        orderId: orderId,
+        wasCreated: wasCreated,
+        status: newStatus,
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
+        taxRate: taxRate,
+        currency: currency,
+        paymentReference: paymentReference,
+        paymentMethod: paymentMethod,
+        username: username,
+        invoiceUrl: invoiceUrl,
+        displayId: displayId,
+        orderReference: orderReference,
+        storeId: storeId,
+        createdAt: createdAt,
+        items: items,
+        discountAmount: discountAmount,
+        invoiceOffer: invoiceOffer,
+      );
+
   factory WahaOrder.fromJson(Map<String, dynamic> json) => WahaOrder(
         orderId: json['orderId'] as String,
         wasCreated: json['wasCreated'] as bool?,

@@ -7,6 +7,7 @@ import '../db/app_database.dart';
 import '../sync/device_settings.dart';
 import '../../config/app_config.dart';
 import '../../models/order.dart';
+import '../../models/terminal_session.dart';
 import '../../models/quote.dart';
 import 'decimal.dart';
 import 'order_reference.dart';
@@ -172,12 +173,86 @@ class LocalOrderService {
         status: const Value('PAID'),
         paidAt: Value(order.paidAt ?? now),
         // A dead-lettered order stays dead; everything else is ready to push.
-        syncState: Value(order.syncState == 'SYNCED' || order.syncState == 'DEAD'
-            ? order.syncState
-            : 'PENDING'),
+        // A dead-lettered order stays dead. An order the server already
+        // holds gets this new payment sent on its own (payment only). Anything
+        // else is ready to push as a whole order.
+        syncState: Value(switch (order.syncState) {
+          'DEAD' => 'DEAD',
+          'PAY_PENDING' => 'PAY_PENDING',
+          'SYNCED' => 'PAY_PENDING',
+          _ => 'PENDING',
+        }),
       ));
     });
   }
+
+  /// Caching mode: the order was made ON the server and the card was approved,
+  /// but the server could not be told. Keeps a record of the order (just
+  /// enough to send the payment later, no lines) and the approved payment, in
+  /// one transaction, marked to send as a payment only. Calling it again for
+  /// the same payment changes nothing.
+  Future<void> keepPaymentOfServerOrder({
+    required String orderId,
+    required PaidPayment pay,
+    required String paymentId,
+    WahaOrder? order,
+    TerminalSession? session,
+  }) async {
+    final settings = await readDeviceSettings(db);
+    final now = _iso();
+    final total = order?.total ?? session?.amount ?? 0;
+    final existing = await findOrder(orderId);
+    if (existing == null) {
+      await db.into(db.localOrders).insert(LocalOrdersCompanion.insert(
+            orderId: orderId,
+            orderReference: order?.orderReference ??
+                (order?.displayId != null ? '#${order!.displayId}' : orderId),
+            displayId: Value(order?.displayId),
+            storeId: order?.storeId ?? settings?.storeId ?? 0,
+            username: Value(order?.username),
+            status: 'CREATED',
+            currency: order?.currency ?? session?.currency ?? settings?.currency ?? '',
+            taxRate: order?.taxRate?.toString() ?? settings?.vatRate ?? '0',
+            subtotalAmount: (order?.subtotal ?? total).toStringAsFixed(2),
+            taxAmount: (order?.tax ?? 0).toStringAsFixed(2),
+            totalAmount: total.toStringAsFixed(2),
+            createdAt: order?.createdAt ?? now,
+            syncState: const Value('PAY_PENDING'),
+          ));
+    }
+    await markPaid(orderId, pay, paymentId: paymentId);
+    // The order is on the server already: a payment-only send is enough.
+    await (db.update(db.localOrders)
+          ..where((t) => t.orderId.equals(orderId) & t.syncState.equals('LOCAL')))
+        .write(const LocalOrdersCompanion(syncState: Value('PAY_PENDING')));
+  }
+
+  /// Body of the payment-only send: only the payments the server has not
+  /// accepted yet. The lines are not part of it.
+  Future<Map<String, dynamic>> buildPaymentPushBody(String orderId) async {
+    final o = await (db.select(db.localOrders)..where((t) => t.orderId.equals(orderId)))
+        .getSingle();
+    final pays = await (db.select(db.localPayments)
+          ..where((t) =>
+              t.orderId.equals(orderId) & t.outcome.equals('PAID') & t.syncedAt.isNull())
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    return {
+      'totalAmount': num.parse(o.totalAmount),
+      'payments': [for (final p in pays) _paymentJson(p)],
+    };
+  }
+
+  Map<String, dynamic> _paymentJson(LocalPayment p) => {
+        'paymentId': p.paymentId,
+        'provider': p.provider,
+        'outcome': p.outcome,
+        if (p.providerReference != null) 'providerReference': p.providerReference,
+        'createdAt': p.createdAt,
+        if (p.authCode != null) 'authCode': p.authCode,
+        if (p.notesJson != null) 'notes': jsonDecode(p.notesJson!),
+        'lateApproval': p.lateApproval,
+      };
 
   Future<LocalOrder?> findOrder(String orderId) =>
       (db.select(db.localOrders)..where((t) => t.orderId.equals(orderId)))
@@ -266,19 +341,7 @@ class LocalOrderService {
             'unitPrice': n(i.unitPrice),
           }
       ],
-      'payments': [
-        for (final p in pays)
-          {
-            'paymentId': p.paymentId,
-            'provider': p.provider,
-            'outcome': p.outcome,
-            if (p.providerReference != null) 'providerReference': p.providerReference,
-            'createdAt': p.createdAt,
-            if (p.authCode != null) 'authCode': p.authCode,
-            if (p.notesJson != null) 'notes': jsonDecode(p.notesJson!),
-            'lateApproval': p.lateApproval,
-          }
-      ],
+      'payments': [for (final p in pays) _paymentJson(p)],
     };
   }
 }

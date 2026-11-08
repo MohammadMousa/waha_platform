@@ -96,7 +96,8 @@ Future<OrderCounts> orderCounts(AppDatabase db) async {
 
   final m = db.localOrders.syncedAt.max();
   final last = await (db.selectOnly(db.localOrders)..addColumns([m])).getSingle();
-  return OrderCounts(await count('PENDING'), await count('DEAD'), last.read(m));
+  return OrderCounts(await count('PENDING') + await count('PAY_PENDING'),
+      await count('DEAD'), last.read(m));
 }
 
 /// Sends paid local orders to the server. Runs on its own timer and is never
@@ -238,6 +239,46 @@ class OrderPushService extends ChangeNotifier {
         }
         notifyListeners();
       }
+      // Orders the server already holds whose payment it has not heard of:
+      // send the payment only (the lines are not compared).
+      final payDue = await (db.select(db.localOrders)
+            ..where((t) =>
+                t.syncState.equals('PAY_PENDING') &
+                (t.nextAttemptAt.isNull() |
+                    t.nextAttemptAt.isSmallerOrEqualValue(nowIso) |
+                    t.nextAttemptAt.isBiggerThanValue(farIso)))
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+      for (final o in payDue) {
+        attempted = true;
+        final outcome = await _sendPayments(
+            token, o.orderId, await svc.buildPaymentPushBody(o.orderId));
+        switch (outcome) {
+          case PushAccepted():
+            authBlocked = false;
+            await _markSynced(db, o.orderId, outcome.displayId);
+            sent++;
+            TraceLog.log('Push: payment of ${o.orderReference} ${outcome.result}');
+          case PushRejected():
+            // ORDER_NOT_FOUND included: there are no lines here to send the
+            // whole order with, so it waits in the failed list for a person.
+            await _markDead(db, o.orderId, outcome.code, outcome.message);
+            rejected++;
+            TraceLog.log('Push: payment of ${o.orderReference} rejected ${outcome.code}');
+          case PushRetry():
+            await _markRetry(db, o, outcome.message, outcome.retryAfter);
+            TraceLog.log('Push: payment of ${o.orderReference} will retry: ${outcome.message}');
+            notifyListeners();
+            return lastResult = RunResult(RunKind.failed,
+                count: sent, rejected: rejected, detail: _short(outcome.message));
+          case PushAuthStop():
+            authBlocked = true;
+            notifyListeners();
+            return lastResult = RunResult(RunKind.authStopped,
+                count: sent, rejected: rejected);
+        }
+        notifyListeners();
+      }
       return lastResult =
           RunResult(RunKind.done, count: sent, rejected: rejected);
     } finally {
@@ -273,17 +314,48 @@ class OrderPushService extends ChangeNotifier {
     }
   }
 
-  Future<void> _markSynced(AppDatabase db, String id, int? displayId) =>
-      (db.update(db.localOrders)..where((t) => t.orderId.equals(id))).write(
-        LocalOrdersCompanion(
-          syncState: const Value('SYNCED'),
-          displayId: Value(displayId),
-          syncedAt: Value(_now().toIso8601String()),
-          nextAttemptAt: const Value(null),
-          lastErrorCode: const Value(null),
-          lastError: const Value(null),
-        ),
-      );
+  Future<PushOutcome> _sendPayments(
+      String token, String orderId, Map<String, dynamic> body) async {
+    try {
+      final resp = await (_client ?? http.Client())
+          .post(
+            Uri.parse('$_base/api/sync/orders/$orderId/payments'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(_settings().pushTimeout);
+      _onNetwork?.call(true);
+      return classifyPushResponse(resp.statusCode, resp.body,
+          retryAfter: SyncSchedule.parseRetryAfter(resp.headers['retry-after'], now: _now()));
+    } catch (e) {
+      _onNetwork?.call(false);
+      return PushRetry('network: $e');
+    }
+  }
+
+  /// The server has the order (and, with it, every payment sent): the order
+  /// and each of its payments are marked as sent.
+  Future<void> _markSynced(AppDatabase db, String id, int? displayId) async {
+    final at = _now().toIso8601String();
+    await (db.update(db.localPayments)
+          ..where((t) => t.orderId.equals(id) & t.syncedAt.isNull()))
+        .write(LocalPaymentsCompanion(syncedAt: Value(at)));
+    await (db.update(db.localOrders)..where((t) => t.orderId.equals(id))).write(
+      LocalOrdersCompanion(
+        syncState: const Value('SYNCED'),
+        // A payment-only answer carries the server's number too; keep ours
+        // when it sends none.
+        displayId: displayId == null ? const Value.absent() : Value(displayId),
+        syncedAt: Value(at),
+        nextAttemptAt: const Value(null),
+        lastErrorCode: const Value(null),
+        lastError: const Value(null),
+      ),
+    );
+  }
 
   Future<void> _markDead(AppDatabase db, String id, String code, String msg) =>
       (db.update(db.localOrders)..where((t) => t.orderId.equals(id))).write(
@@ -325,13 +397,20 @@ class OrderPushService extends ChangeNotifier {
   /// Puts a dead-lettered order back in the queue (the Retry button).
   Future<void> retryDead(String orderId) async {
     final db = _db!;
+    // A record without lines (a server order whose payment was kept) can only
+    // be sent as a payment, never as a whole order.
+    final hasLines = (await (db.select(db.localOrderItems)
+                  ..where((t) => t.orderId.equals(orderId))
+                  ..limit(1))
+                .get())
+            .isNotEmpty;
     await (db.update(db.localOrders)..where((t) => t.orderId.equals(orderId))).write(
-      const LocalOrdersCompanion(
-        syncState: Value('PENDING'),
-        attempts: Value(0),
-        nextAttemptAt: Value(null),
-        lastErrorCode: Value(null),
-        lastError: Value(null),
+      LocalOrdersCompanion(
+        syncState: Value(hasLines ? 'PENDING' : 'PAY_PENDING'),
+        attempts: const Value(0),
+        nextAttemptAt: const Value(null),
+        lastErrorCode: const Value(null),
+        lastError: const Value(null),
       ),
     );
     notifyListeners();

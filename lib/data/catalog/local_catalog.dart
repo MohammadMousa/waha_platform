@@ -223,7 +223,8 @@ class LocalCatalog {
   Future<List<NewOrderLine>> orderLines(List<CartItem> cart,
       {required bool scanDisabledAllowed}) async {
     await requireReady();
-    final settings = (await readDeviceSettings(db))!;
+    final settings = await readDeviceSettings(db);
+    if (settings == null) throw OfflineNotReadyException();
     final ids = [for (final c in cart) c.productId];
     final rows = await (db.select(db.localProducts)..where((t) => t.id.isIn(ids))).get();
     final byId = {for (final r in rows) r.id: r};
@@ -253,7 +254,8 @@ class LocalCatalog {
   /// net + tax of the line.
   Future<Quote> quote(List<CartItem> cart, {required bool scanDisabledAllowed}) async {
     await requireReady();
-    final settings = (await readDeviceSettings(db))!;
+    final settings = await readDeviceSettings(db);
+    if (settings == null) throw OfflineNotReadyException();
     final ids = [for (final c in cart) c.productId];
     final rows = await (db.select(db.localProducts)..where((t) => t.id.isIn(ids))).get();
     final byId = {for (final r in rows) r.id: r};

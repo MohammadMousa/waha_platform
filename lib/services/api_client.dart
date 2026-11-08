@@ -586,24 +586,56 @@ class ApiClient {
       return OfflineMode.catalog!
           .quote(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed);
     }
-    final resp = await _send(
-      () => _http.post(
-        _uri('/api/orders/quote'),
-        headers: _headers(token: token),
-        body: jsonEncode({
-          if (storeId != null) 'storeId': storeId,
-          'items': items.map((e) => e.toOrderLine()).toList(),
-          if (couponCode != null) 'couponCode': couponCode,
-        }),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      return Quote.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+    return _orderThrough(couponCode, () async {
+      final resp = await _send(
+        () => _http.post(
+          _uri('/api/orders/quote'),
+          headers: _headers(token: token),
+          body: jsonEncode({
+            if (storeId != null) 'storeId': storeId,
+            'items': items.map((e) => e.toOrderLine()).toList(),
+            if (couponCode != null) 'couponCode': couponCode,
+          }),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        return Quote.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+      }
+      final msg = _extractMessage(resp);
+      _throwIfCouponRejected(resp, msg);
+      if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
+      throw UnknownApiException(resp.statusCode, msg);
+    }, () => OfflineMode.catalog!
+        .quote(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed));
+  }
+
+  /// `caching` mode for a quote or an order: the server first; only when it
+  /// cannot be reached (no connection, timeout, 5xx) the order or price is
+  /// made locally. A 4xx is the server's answer and is never replaced.
+  /// A cart with a coupon never falls back: offers and coupons exist only on
+  /// the server, so a local price would silently drop the discount the
+  /// customer was shown; the kiosk says it is not connected instead. The same
+  /// when the device cannot price locally (no saved device settings yet, or a
+  /// product it has never saved): the original connection error is raised.
+  Future<T> _orderThrough<T>(String? couponCode, Future<T> Function() online,
+      Future<T> Function() local) async {
+    if (!OfflineMode.caching || couponCode != null) return online();
+    try {
+      return await online();
+    } on NetworkException catch (e) {
+      return _localOr(e, local);
+    } on UnknownApiException catch (e) {
+      if (e.statusCode < 500) rethrow;
+      return _localOr(e, local);
     }
-    final msg = _extractMessage(resp);
-    _throwIfCouponRejected(resp, msg);
-    if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
-    throw UnknownApiException(resp.statusCode, msg);
+  }
+
+  Future<T> _localOr<T>(Object original, Future<T> Function() local) async {
+    try {
+      return await local();
+    } catch (_) {
+      throw original;
+    }
   }
 
   // POST /api/orders
@@ -625,31 +657,49 @@ class ApiClient {
       );
       return (await OfflineMode.orders!.toWahaOrder(orderId))!;
     }
-    final resp = await _send(
-      () => _http.post(
-        _uri('/api/orders'),
-        headers: _headers(token: token),
-        body: jsonEncode({
-          if (storeId != null) 'storeId': storeId,
-          'orderId': orderId,
-          if (username != null) 'username': username,
-          'items': items.map((e) => e.toOrderLine()).toList(),
-          if (couponCode != null) 'couponCode': couponCode,
-        }),
-      ),
-    );
-    if (resp.statusCode == 200) {
-      return WahaOrder.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
-    }
-    final msg = _extractMessage(resp);
-    _throwIfCouponRejected(resp, msg);
-    if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
-    throw UnknownApiException(resp.statusCode, msg);
+    return _orderThrough(couponCode, () async {
+      final resp = await _send(
+        () => _http.post(
+          _uri('/api/orders'),
+          headers: _headers(token: token),
+          body: jsonEncode({
+            if (storeId != null) 'storeId': storeId,
+            'orderId': orderId,
+            if (username != null) 'username': username,
+            'items': items.map((e) => e.toOrderLine()).toList(),
+            if (couponCode != null) 'couponCode': couponCode,
+          }),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        final order =
+            WahaOrder.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+        if (OfflineMode.caching) {
+          OfflineMode.remember(OfflineMode.serverOrders, order.orderId, order);
+        }
+        return order;
+      }
+      final msg = _extractMessage(resp);
+      _throwIfCouponRejected(resp, msg);
+      if (resp.statusCode == 409) throw ProductNotSellableException(409, msg);
+      throw UnknownApiException(resp.statusCode, msg);
+    }, () async {
+      // Same order id as the server attempt: if that attempt did reach the
+      // server, the later push finds the order and creates no duplicate.
+      final lines = await OfflineMode.catalog!
+          .orderLines(items, scanDisabledAllowed: OfflineMode.scanDisabledAllowed);
+      await OfflineMode.orders!.createOrder(
+        lines: lines,
+        username: username ?? OfflineMode.username(),
+        orderId: orderId,
+      );
+      return (await OfflineMode.orders!.toWahaOrder(orderId))!;
+    });
   }
 
   // POST /api/orders/{id}/pay — Kiosk simulated
   Future<PayResult> pay(String orderId, {String? simulateOutcome}) async {
-    if (OfflineMode.active && await OfflineMode.orders!.findOrder(orderId) != null) {
+    if (OfflineMode.localOrders && await OfflineMode.orders!.findOrder(orderId) != null) {
       final orders = OfflineMode.orders!;
       final declined = simulateOutcome != null && simulateOutcome.toUpperCase() != 'SUCCESS';
       if (!declined) {
@@ -715,7 +765,7 @@ class ApiClient {
 
   Future<TerminalSession> createTerminalSession(String orderId,
       {String? token}) async {
-    if (OfflineMode.active) {
+    if (OfflineMode.localOrders) {
       final o = await OfflineMode.orders!.findOrder(orderId);
       if (o != null) {
         if (o.status == 'PAID') {
@@ -737,8 +787,12 @@ class ApiClient {
           headers: _headers(token: token)),
     );
     if (resp.statusCode == 200) {
-      return TerminalSession.fromJson(
+      final session = TerminalSession.fromJson(
           jsonDecode(resp.body) as Map<String, dynamic>);
+      if (OfflineMode.caching) {
+        OfflineMode.remember(OfflineMode.serverSessions, session.id, session);
+      }
+      return session;
     }
     final msg = _extractMessage(resp);
     if (resp.statusCode == 404) throw OrderNotFoundException(404, msg);
@@ -771,15 +825,59 @@ class ApiClient {
       unawaited(OrderPushService.instance.pushPending());
       return;
     }
-    final resp = await _send(
-      () => _http.post(
-        _uri('/api/terminal-sessions/$sessionId/confirm'),
-        headers: _headers(token: token),
-        body: jsonEncode({'authCode': authCode, 'notes': notes}),
-      ),
-    );
-    if (resp.statusCode == 200) return;
-    throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    try {
+      final resp = await _send(
+        () => _http.post(
+          _uri('/api/terminal-sessions/$sessionId/confirm'),
+          headers: _headers(token: token),
+          body: jsonEncode({'authCode': authCode, 'notes': notes}),
+        ),
+      );
+      if (resp.statusCode == 200) {
+        OfflineMode.serverSessions.remove(sessionId);
+        return;
+      }
+      throw UnknownApiException(resp.statusCode, _extractMessage(resp));
+    } on NetworkException {
+      if (!await _keepApprovedPayment(sessionId, authCode, notes)) rethrow;
+    } on UnknownApiException catch (e) {
+      if (e.statusCode < 500 || !await _keepApprovedPayment(sessionId, authCode, notes)) {
+        rethrow;
+      }
+    }
+  }
+
+  /// Caching mode: the card was approved but the server could not be told
+  /// (no connection, timeout, 5xx). The customer has paid, so the payment is
+  /// kept on the device FIRST and sent later as a payment only (the order is
+  /// already on the server). A 4xx is the server's real answer and is not
+  /// handled here. Returns false when this does not apply, so the original
+  /// error is raised as before.
+  Future<bool> _keepApprovedPayment(
+      String sessionId, String authCode, Map<String, dynamic> notes) async {
+    if (!OfflineMode.caching) return false;
+    final session = OfflineMode.serverSessions[sessionId];
+    if (session == null) return false;
+    final rrn = notes['rrn'] as String?;
+    try {
+      await OfflineMode.orders!.keepPaymentOfServerOrder(
+        orderId: session.orderId,
+        paymentId: sessionId,
+        order: OfflineMode.serverOrders[session.orderId],
+        session: session,
+        pay: PaidPayment(
+          provider: 'terminal',
+          providerReference: (rrn == null || rrn.isEmpty) ? null : rrn,
+          authCode: authCode,
+          notes: notes,
+        ),
+      );
+    } catch (_) {
+      return false; // could not even save it: report the failure as before
+    }
+    OfflineMode.serverSessions.remove(sessionId);
+    unawaited(OrderPushService.instance.pushPending());
+    return true;
   }
 
   // Declined/error/gave up. Closes the PENDING record; does not preserve a
@@ -805,7 +903,7 @@ class ApiClient {
     String? terminalId,
     String? token,
   }) async {
-    if (OfflineMode.active && await OfflineMode.orders!.findOrder(orderId) != null) {
+    if (OfflineMode.localOrders && await OfflineMode.orders!.findOrder(orderId) != null) {
       // The card was charged after the kiosk gave up: the order is paid as
       // soon as the transaction arrives (same rule as the owner decided).
       await OfflineMode.orders!.markPaid(
@@ -860,9 +958,14 @@ class ApiClient {
 
   // GET /api/orders/{id}
   Future<WahaOrder> getOrder(String orderId) async {
-    if (OfflineMode.active) {
+    if (OfflineMode.localOrders) {
       final local = await OfflineMode.orders!.toWahaOrder(orderId);
-      if (local != null) return local;
+      if (local != null) {
+        // A server order paid while the server could not be told: show its
+        // own lines and number, with the status of the local record.
+        final server = OfflineMode.serverOrders[orderId];
+        return server == null ? local : server.withStatus(local.status);
+      }
     }
     final resp = await _send(() => _http.get(_uri('/api/orders/$orderId')));
     if (resp.statusCode == 200) {

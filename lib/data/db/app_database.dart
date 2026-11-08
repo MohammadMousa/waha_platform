@@ -136,6 +136,10 @@ class DeviceSettings extends Table {
 // An order made on the device. Money is exact decimal text, never a double.
 // syncState: LOCAL (not paid, stays here) -> PENDING (paid, waiting to push)
 // -> SYNCED, or DEAD (permanent push error, kept for the dead-letter list).
+// PAY_PENDING: the order was made ON the server (caching mode) and the card
+// was approved, but the server could not be told; only the payment still has
+// to be sent. These rows have no lines of their own, so they are never sent
+// as a whole order.
 @TableIndex(name: 'idx_orders_sync', columns: {#syncState, #nextAttemptAt})
 class LocalOrders extends Table {
   TextColumn get orderId => text()(); // UUID v7, made on the device
@@ -193,6 +197,10 @@ class LocalPayments extends Table {
   TextColumn get notesJson => text().nullable()();
   BoolColumn get lateApproval => boolean().withDefault(const Constant(false))();
   TextColumn get createdAt => text()();
+  // When the server accepted this payment (null = not sent yet). Together
+  // with the order's own sync state it decides what to send: order not sent
+  // -> the whole order; order on the server but payment not -> payment only.
+  TextColumn get syncedAt => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {paymentId};
@@ -228,7 +236,7 @@ class AppDatabase extends _$AppDatabase {
   // Bump this for every schema change and add a step in [migration].
   // Never edit an old step: devices in the field run them in order.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -268,6 +276,18 @@ class AppDatabase extends _$AppDatabase {
             if (from >= 2) {
               await m.addColumn(deviceSettings, deviceSettings.invoiceBaseUrl);
             }
+          }
+          if (from < 5) {
+            // Tables created in this same upgrade (from < 3) already have the
+            // column; older ones get it now. Payments of orders the server
+            // already holds count as sent.
+            if (from >= 3) {
+              await m.addColumn(localPayments, localPayments.syncedAt);
+            }
+            await customStatement(
+                'UPDATE local_payments SET synced_at = (SELECT synced_at FROM local_orders '
+                "WHERE local_orders.order_id = local_payments.order_id AND local_orders.sync_state = 'SYNCED') "
+                'WHERE synced_at IS NULL');
           }
         },
         beforeOpen: (details) async {

@@ -191,6 +191,10 @@ class SyncService extends ChangeNotifier {
       // switch to `full` is noticed); only the Pull now button still pulls.
       if (!manual && _settings.offlineLevel == OfflineLevel.caching) {
         TraceLog.log('Sync: caching mode, no scheduled pull');
+        // Still keep the device settings (store, device number, VAT, order
+        // numbering): an order made locally while the server is down needs them.
+        final t = authService.token;
+        if (t != null) await _refreshDeviceConfig(t);
         return lastResult = const RunResult(RunKind.done, count: 0);
       }
       final token = authService.token;
