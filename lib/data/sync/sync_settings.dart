@@ -1,3 +1,5 @@
+import '../catalog/offline_level.dart';
+
 /// Timings for the background pull. Defaults are the backend contract's
 /// (offline.md section 1). The backend's /api/config will override them once
 /// it sends the sync_* properties; until then the defaults apply.
@@ -11,7 +13,10 @@ class SyncSettings {
   final Duration pushInterval;
   final Duration pushTimeout;
   final Duration pushRetryMaxDelay;
-  final bool offlineMode;
+  final OfflineLevel offlineLevel;
+
+  /// True only for `full` (the local-first, pulled-catalog mode).
+  bool get offlineMode => offlineLevel == OfflineLevel.full;
   final int staggerSeconds; // 30..3600
   // Clean-up of old local orders (server-controlled, off by default).
   final bool unpaidCleanup;
@@ -27,7 +32,7 @@ class SyncSettings {
     this.pushInterval = const Duration(minutes: 3),
     this.pushTimeout = const Duration(seconds: 60),
     this.pushRetryMaxDelay = const Duration(minutes: 15),
-    this.offlineMode = false,
+    this.offlineLevel = OfflineLevel.off,
     this.staggerSeconds = 180,
     this.unpaidCleanup = false,
     this.cleanupDays = 15,
@@ -46,7 +51,7 @@ class SyncSettings {
       pushTimeout: Duration(seconds: n('sync_push_timeout_seconds', 60)),
       pushRetryMaxDelay:
           Duration(minutes: n('sync_push_retry_max_delay_minutes', 15)),
-      offlineMode: (c['offline_mode'] ?? 'false').toLowerCase() == 'true',
+      offlineLevel: OfflineLevel.parse(c['offline_mode']),
       staggerSeconds: n('sync_stagger_seconds', 180).clamp(30, 3600),
       unpaidCleanup: (c['offline_unpaid_cleanup_enabled'] ?? 'false').toLowerCase() == 'true',
       cleanupDays: n('offline_unpaid_cleanup_days_offset', 15).clamp(1, 365),

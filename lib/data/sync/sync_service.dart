@@ -13,6 +13,7 @@ import '../db/app_database.dart';
 import 'activity_gate.dart';
 import '../../services/local_prefs.dart';
 import '../catalog/local_catalog.dart';
+import '../catalog/offline_level.dart';
 import '../catalog/offline_mode.dart';
 import '../orders/local_order_service.dart';
 import '../orders/order_cleanup.dart';
@@ -39,6 +40,10 @@ class SyncService extends ChangeNotifier {
   bool _manualRun = false;
   StreamSubscription<void>? _activitySub;
   SyncSettings _settings = const SyncSettings();
+  // True once settings came from a real answer or from the saved copy.
+  bool _settingsLoaded = false;
+  OfflineLevel? _lastLevel;
+  bool _pullSoon = false;
 
   bool get running => _running;
 
@@ -138,13 +143,29 @@ class SyncService extends ChangeNotifier {
       // that switch offline mode off or reset the timings: keep the last ones.
       if (c.isEmpty) {
         noteNetwork(false);
+        // First look after a start with no server: use the saved copy of the
+        // last config instead of the built-in defaults.
+        if (!_settingsLoaded) {
+          final saved = LocalPrefs.savedConfig;
+          if (saved.isNotEmpty) {
+            _settings = SyncSettings.fromConfig(saved);
+            _lastLevel = _settings.offlineLevel;
+          }
+          _settingsLoaded = true;
+        }
         return;
       }
       noteNetwork(true);
       _settings = SyncSettings.fromConfig(c);
-      await LocalPrefs.setOfflineMode(_settings.offlineMode);
-      await LocalPrefs.setScanDisabledProducts(
-          (c['scan_disabled_products'] ?? 'false').toLowerCase() == 'true');
+      // The whole answer is already saved by getConfig; the mode, the VAT
+      // label and scan_disabled_products are read back from that copy.
+      _settingsLoaded = true;
+      final was = _lastLevel;
+      _lastLevel = _settings.offlineLevel;
+      // caching -> full starts the pull (after the usual random wait).
+      if (was != null && was != OfflineLevel.full && _lastLevel == OfflineLevel.full) {
+        _pullSoon = true;
+      }
     } catch (_) {/* keep the last settings */}
   }
 
@@ -165,6 +186,13 @@ class SyncService extends ChangeNotifier {
     var rows = 0;
     try {
       await refreshSettings();
+      // `caching`: no scheduled pull and no first download — reads fill the
+      // local copy as they happen. The settings were refreshed above (so a
+      // switch to `full` is noticed); only the Pull now button still pulls.
+      if (!manual && _settings.offlineLevel == OfflineLevel.caching) {
+        TraceLog.log('Sync: caching mode, no scheduled pull');
+        return lastResult = const RunResult(RunKind.done, count: 0);
+      }
       final token = authService.token;
       if (token == null) {
         TraceLog.log('Sync: no session, skipping this cycle');
@@ -233,7 +261,10 @@ class SyncService extends ChangeNotifier {
       unawaited(_cleanup());
       final wait = _retryAfterOverride;
       _retryAfterOverride = null;
+      final soon = _pullSoon;
+      _pullSoon = false;
       _schedule(wait ??
+          (soon ? SyncSchedule.reconnectDelay(_random) : null) ??
           _settings.interval + Duration(milliseconds: (_settings.interval.inMilliseconds * _intervalJitter).round()));
     }
   }

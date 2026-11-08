@@ -1,3 +1,5 @@
+import 'dart:convert';
+import '../data/catalog/offline_level.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/connection_settings.dart' show CustomConnection;
@@ -233,14 +235,62 @@ class LocalPrefs {
   // Remove alongside the rest of the trace-logging system once no longer needed.
   // Last values of the offline properties from /api/config, so the kiosk
   // knows how to behave on start even when the server cannot be reached.
-  static const _kOfflineMode = 'waha.offline_mode';
-  static bool get offlineMode => _p.getBool(_kOfflineMode) ?? false;
+  //
+  // The whole /api/config answer is saved after every good fetch (see
+  // [saveConfig]); the three properties below read from that saved copy first
+  // and fall back to the older single values, so a device saved before the
+  // full copy existed still behaves the same.
+  static const _kOfflineMode = 'waha.offline_mode'; // legacy true/false
+  static const _kOfflineLevel = 'waha.offline_level';
+
+  /// The last known `offline_mode` (off / caching / full).
+  static OfflineLevel get offlineLevel {
+    final saved = savedConfig;
+    if (saved.isNotEmpty) return OfflineLevel.parse(saved['offline_mode']);
+    final v = _p.getString(_kOfflineLevel);
+    if (v != null) return OfflineLevel.parse(v);
+    return (_p.get(_kOfflineMode) == true) ? OfflineLevel.full : OfflineLevel.off;
+  }
+
+  static Future<void> setOfflineLevel(OfflineLevel v) =>
+      _p.setString(_kOfflineLevel, v.name);
+
+  /// True only for `full`.
+  static bool get offlineMode => offlineLevel == OfflineLevel.full;
   static Future<void> setOfflineMode(bool value) =>
-      _p.setBool(_kOfflineMode, value);
+      setOfflineLevel(value ? OfflineLevel.full : OfflineLevel.off);
+
+  // The last /api/config answer in full, as JSON. It is the ONE place every
+  // property (sync timings, staggering, clean-up, offline mode, VAT label, ...)
+  // can be read from when the server cannot be reached. Never overwritten by
+  // an empty or failed answer.
+  static const _kConfigCache = 'waha.config_cache';
+  static Map<String, String> get savedConfig {
+    try {
+      final raw = _prefs?.getString(_kConfigCache);
+      if (raw == null) return const {};
+      return (jsonDecode(raw) as Map<String, dynamic>)
+          .map((k, v) => MapEntry(k, v.toString()));
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Saves a config the server actually returned (never an empty one).
+  static Future<void> saveConfig(Map<String, String> config) async {
+    if (config.isEmpty) return;
+    await _prefs?.setString(_kConfigCache, jsonEncode(config));
+  }
 
   static const _kScanDisabledProducts = 'waha.scan_disabled_products';
-  static bool get scanDisabledProducts =>
-      _p.getBool(_kScanDisabledProducts) ?? false;
+  static bool get scanDisabledProducts {
+    final saved = savedConfig;
+    if (saved.isNotEmpty) {
+      return (saved['scan_disabled_products'] ?? 'false').toLowerCase() == 'true';
+    }
+    return _p.getBool(_kScanDisabledProducts) ?? false;
+  }
+
   static Future<void> setScanDisabledProducts(bool value) =>
       _p.setBool(_kScanDisabledProducts, value);
 
@@ -373,8 +423,14 @@ class LocalPrefs {
   // (`pricesIncludeVat`, the opposite). Only values the server actually
   // returned are kept; reads are safe before the preferences are loaded.
   static const _kPricesExcludeVat = 'waha.prices_exclude_vat';
-  static bool get pricesExcludeVat =>
-      _prefs?.getBool(_kPricesExcludeVat) ?? false;
+  static bool get pricesExcludeVat {
+    final saved = savedConfig;
+    // A missing key in a saved config is the default: VAT included.
+    if (saved.isNotEmpty) {
+      return (saved['prices_exclude_vat'] ?? 'false').toLowerCase() == 'true';
+    }
+    return _prefs?.getBool(_kPricesExcludeVat) ?? false;
+  }
   static Future<void> setPricesExcludeVat(bool value) =>
       _p.setBool(_kPricesExcludeVat, value);
 

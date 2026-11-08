@@ -16,6 +16,7 @@ import '../models/store.dart';
 import '../models/terminal_session.dart';
 import 'package:uuid/uuid.dart';
 import '../data/catalog/offline_mode.dart';
+import 'local_prefs.dart';
 import '../data/orders/local_order_service.dart';
 import '../data/orders/order_push_service.dart';
 import 'api_exceptions.dart';
@@ -282,7 +283,15 @@ class ApiClient {
       final resp = await _http.get(uri).timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final raw = jsonDecode(resp.body) as Map<String, dynamic>;
-        return raw.map((k, v) => MapEntry(k, v.toString()));
+        final config = raw.map((k, v) => MapEntry(k, v.toString()));
+        // Keep the whole answer for when the server cannot be reached. The
+        // organization's own answer always replaces the saved copy; the
+        // public one (no organization yet, before sign-in) only fills it when
+        // nothing is saved, so it never overwrites an organization's values.
+        if (orgId != null || LocalPrefs.savedConfig.isEmpty) {
+          await LocalPrefs.saveConfig(config);
+        }
+        return config;
       }
     } catch (_) {}
     return {};

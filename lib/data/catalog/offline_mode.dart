@@ -1,4 +1,5 @@
 import '../../services/local_prefs.dart';
+import 'offline_level.dart';
 import '../orders/local_order_service.dart';
 import 'local_catalog.dart';
 
@@ -24,6 +25,11 @@ class OfflineMode {
 
   /// The last `offline_mode` value from /api/config (kept across restarts).
   static bool get active => catalog != null && LocalPrefs.offlineMode;
+
+  /// `caching`: server first, saved copy only when the server cannot be
+  /// reached (built in the next steps; today it changes nothing for reads).
+  static bool get caching =>
+      catalog != null && LocalPrefs.offlineLevel == OfflineLevel.caching;
 
   /// The `scan_disabled_products` rule: an inactive product is refused on
   /// scan and in the cart unless this is true.
