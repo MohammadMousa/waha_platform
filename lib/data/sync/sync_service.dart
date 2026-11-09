@@ -20,6 +20,7 @@ import '../orders/local_order_service.dart';
 import '../orders/order_cleanup.dart';
 import '../orders/order_push_service.dart';
 import 'device_settings.dart';
+import 'removals.dart';
 import 'sync_schedule.dart';
 import 'sync_settings.dart';
 import 'feeds.dart';
@@ -215,6 +216,11 @@ class SyncService extends ChangeNotifier {
             _fetch(token, feed,
                 since: since, afterId: afterId, size: size, abort: abort),
       );
+      // Rows the server deleted for good, before the tables are pulled (the
+      // very first time this also takes the starting position, which must be
+      // before the first full pull).
+      final stop = await _applyRemovals(token, manual);
+      if (stop != null) return lastResult = stop;
       for (final feed in kSyncFeeds) {
         // Wait for the screen to be idle; a customer present means we stop
         // this cycle and try again at the next interval.
@@ -368,6 +374,89 @@ class SyncService extends ChangeNotifier {
       }
     } catch (e) {
       TraceLog.log('Sync: status report failed: $e');
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Runs the removals step. Returns a result only when the cycle must stop
+  /// (not signed in, asked to wait, customer came back); an old server that
+  /// does not have the call is simply skipped, and any other failure is
+  /// logged without blocking the pull (which would fail the same way if the
+  /// server were really down).
+  Future<RunResult?> _applyRemovals(String token, bool manual) async {
+    _abort = Completer<void>();
+    try {
+      await Removals.apply(
+        db,
+        ({afterId, required size, required abort}) =>
+            _fetchRemovals(token, afterId: afterId, size: size, abort: abort),
+        abort: _abort!.future,
+        pageSize: _settings.pageSize,
+        beforeEachPage: () async {
+          if (!manual && ActivityGate.instance.idleFor < _settings.idleNeeded) {
+            throw const PullCancelled();
+          }
+        },
+      );
+    } on PullCancelled {
+      TraceLog.log('Sync: removals cancelled (customer active)');
+      return const RunResult(RunKind.customerActive);
+    } on PullRetryAfter catch (r) {
+      _retryAfterOverride = r.delay;
+      return RunResult(RunKind.serverBusy, waitSeconds: r.delay.inSeconds);
+    } on PullUnauthorized {
+      TraceLog.log('Sync: 401 on removals, stopping the pull');
+      return const RunResult(RunKind.authStopped);
+    } on PullHttpError catch (e) {
+      TraceLog.log('Sync: removals answered ${e.status}, skipped');
+    } catch (e) {
+      TraceLog.log('Sync: removals failed: $e');
+    } finally {
+      _abort = null;
+    }
+    return null;
+  }
+
+  Future<RemovalsPage> _fetchRemovals(
+    String token, {
+    int? afterId,
+    required int size,
+    required Future<void> abort,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/sync/removals').replace(
+      queryParameters: {
+        if (afterId != null) 'afterId': '$afterId',
+        'size': '$size',
+      },
+    );
+    final client = http.Client();
+    try {
+      final req = http.AbortableRequest('GET', uri, abortTrigger: abort)
+        ..headers['Authorization'] = 'Bearer $token';
+      final streamed = await client.send(req).timeout(_settings.requestTimeout);
+      final resp = await http.Response.fromStream(streamed)
+          .timeout(_settings.requestTimeout);
+      if (resp.statusCode == 401) throw const PullUnauthorized();
+      if (resp.statusCode == 429 || resp.statusCode == 503) {
+        final wait = SyncSchedule.parseRetryAfter(resp.headers['retry-after']);
+        if (wait != null) throw PullRetryAfter(wait);
+      }
+      if (resp.statusCode != 200) throw PullHttpError(resp.statusCode);
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      final next = body['next'] as Map<String, dynamic>?;
+      return RemovalsPage(
+        items: [
+          for (final i in (body['items'] as List<dynamic>? ?? []))
+            ((i as Map<String, dynamic>)['table'] as String,
+                (i['rowId'] as num).toInt()),
+        ],
+        last: body['last'] as bool? ?? true,
+        nextAfterId: (next?['afterId'] as num?)?.toInt() ?? afterId ?? 0,
+        resetRequired: body['resetRequired'] as bool? ?? false,
+      );
+    } on http.RequestAbortedException {
+      throw const PullCancelled();
     } finally {
       client.close();
     }
