@@ -145,4 +145,34 @@ void main() {
     await engine.pullFeed('payment-methods', abort: Completer<void>().future);
     expect(await engine.readyForOrders(), true);
   });
+
+  test('the count is rows new or changed, so a repeat pull of the same rows is 0',
+      () async {
+    // Rows the server sends again because they sit inside the 10 s overlap.
+    List<Map<String, dynamic>> rows(String t2) => [
+          product(1, '2026-11-06T10:00:00Z'),
+          product(2, t2),
+        ];
+    var current = rows('2026-11-06T10:00:05Z');
+    SyncEngine make() => SyncEngine(
+          db: db,
+          fetch: (feed, {since, required afterId, required size, required abort}) async =>
+              PullPage(
+                  items: current,
+                  last: true,
+                  nextSince: '2026-11-06T10:00:05Z',
+                  nextAfterId: 2),
+        );
+    Future<int> pull() =>
+        make().pullFeed('products', abort: Completer<void>().future);
+
+    expect(await pull(), 2); // first pull: both are new
+    expect(await pull(), 0); // the same rows again: nothing changed
+    expect(await pull(), 0);
+    current = rows('2026-11-06T10:00:09Z'); // one row really changed
+    expect(await pull(), 1);
+    current = [...rows('2026-11-06T10:00:09Z'), product(3, '2026-11-06T10:00:10Z')];
+    expect(await pull(), 1); // one new row
+    expect(await productCount(), 3);
+  });
 }

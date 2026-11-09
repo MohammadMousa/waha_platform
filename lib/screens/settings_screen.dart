@@ -1035,6 +1035,7 @@ String sessionInfoText() {
           '${(view.physicalSize.height / view.devicePixelRatio).round()} dp';
   return 'user:    $username\n'
       'store:   $storeSlug\n'
+      'offline: ${LocalPrefs.offlineLevel.name}\n'
       'host:    $host\n'
       'mode:    kiosk\n'
       'screen:  $screen\n'

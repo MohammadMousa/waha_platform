@@ -72,7 +72,8 @@ class SyncEngine {
   });
 
   /// Pulls one feed until the server says `last`. Returns the number of rows
-  /// written. Throws [PullCancelled] / [PullUnauthorized] / other errors
+  /// that were new or changed (not the rows received: the overlap sends some
+  /// again every time). Throws [PullCancelled] / [PullUnauthorized] / other errors
   /// without changing the saved cursor of the failed page.
   Future<int> pullFeed(
     String feed, {
@@ -99,7 +100,7 @@ class SyncEngine {
       final page = await fetch(feed,
           since: since, afterId: afterId, size: pageSize, abort: abort);
       await db.transaction(() async {
-        await upsertPage(db, feed, page.items);
+        written += await upsertPage(db, feed, page.items);
         final nowIso = DateTime.now().toUtc().toIso8601String();
         final prev = await (db.select(db.syncState)
               ..where((t) => t.feed.equals(feed)))
@@ -118,7 +119,6 @@ class SyncEngine {
               ),
             );
       });
-      written += page.items.length;
       if (page.last) return written;
       since = page.nextSince;
       afterId = page.nextAfterId;

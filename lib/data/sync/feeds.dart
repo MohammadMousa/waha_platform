@@ -23,10 +23,43 @@ int? _i(Object? v) => v == null ? null : (v as num).toInt();
 // Names arrive as JSON objects; keep them as compact JSON text.
 String? _json(Object? v) => v == null ? null : jsonEncode(v);
 
+const Map<String, String> _tableOf = {
+  'products': 'local_products',
+  'barcodes': 'local_barcodes',
+  'categories': 'local_categories',
+  'payment-methods': 'local_payment_methods',
+  'store-payment-methods': 'local_store_payment_methods',
+  'product-images': 'local_product_images',
+};
+
 /// Writes one page of items into its table with upsert. Runs inside the
 /// caller's transaction, together with the cursor update.
-Future<void> upsertPage(
+///
+/// Returns how many rows were NEW or CHANGED (a different updatedAt than the
+/// row already held). The server sends rows again for the 10 seconds before
+/// the saved position, and a whole group saved in the same second always sits
+/// inside that window, so the number of rows RECEIVED is never 0 even when
+/// nothing changed. This number is what is shown to the person.
+Future<int> upsertPage(
     AppDatabase db, String feed, List<Map<String, dynamic>> items) async {
+  final table = _tableOf[feed];
+  if (table == null) throw ArgumentError('Unknown feed: $feed');
+  var changed = 0;
+  if (items.isNotEmpty) {
+    final ids = [for (final m in items) _i(m['id'])!];
+    final held = {
+      for (final r in await db
+          .customSelect(
+              'SELECT id, updated_at FROM $table WHERE id IN (${List.filled(ids.length, '?').join(',')})',
+              variables: [for (final id in ids) Variable<int>(id)])
+          .get())
+        r.read<int>('id'): r.read<String>('updated_at'),
+    };
+    for (final m in items) {
+      final before = held[_i(m['id'])!];
+      if (before == null || before != (_s(m['updatedAt']) ?? '')) changed++;
+    }
+  }
   await db.batch((b) {
     for (final m in items) {
       switch (feed) {
@@ -116,4 +149,5 @@ Future<void> upsertPage(
       }
     }
   });
+  return changed;
 }

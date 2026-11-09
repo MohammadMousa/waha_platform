@@ -342,6 +342,7 @@ class _SessionInfoFooterState extends State<_SessionInfoFooter> {
     final storeSlug = storeConfigService.storeSlug ?? '—';
     final host = AppConfig.apiBaseUrlLabel;
     final text = 'user:$username  ver:${AppInfo.version}  store:$storeSlug  '
+        'offline:${LocalPrefs.offlineLevel.name}  '
         'host:$host  build:${AppInfo.buildNumber}  mode:kiosk';
 
     return GestureDetector(
