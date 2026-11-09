@@ -74,6 +74,34 @@ void main() {
     expect(await position(), 43);
   });
 
+  test('deleted products and categories are removed too, other rows stay', () async {
+    await upsertPage(db, 'products', [
+      {'id': 10, 'barcode': 'A', 'sku': null, 'name': {'en': 'x'}, 'description': null,
+       'price': '1', 'priceWithVat': '1.15', 'active': true, 'public': true,
+       'categoryId': 7, 'imageResourceId': null, 'updatedAt': 'x'},
+      {'id': 11, 'barcode': 'C', 'sku': null, 'name': {'en': 'y'}, 'description': null,
+       'price': '1', 'priceWithVat': '1.15', 'active': true, 'public': true,
+       'categoryId': 7, 'imageResourceId': null, 'updatedAt': 'x'},
+    ]);
+    await upsertPage(db, 'categories', [
+      {'id': 7, 'name': {'en': 'c'}, 'key': 'c', 'public': true, 'active': true,
+       'sortOrder': 1, 'imageResourceId': null, 'updatedAt': 'x'},
+      {'id': 8, 'name': {'en': 'd'}, 'key': 'd', 'public': true, 'active': true,
+       'sortOrder': 2, 'imageResourceId': null, 'updatedAt': 'x'},
+    ]);
+    await run(serve([const RemovalsPage(items: [], last: true, nextAfterId: 1)]));
+    final n = await run(serve([
+      const RemovalsPage(
+          items: [('products', 10), ('barcodes', 1), ('barcodes', 2), ('categories', 8)],
+          last: true,
+          nextAfterId: 2),
+    ]));
+    expect(n, 4);
+    expect((await db.select(db.localProducts).get()).map((p) => p.id), [11]);
+    expect((await db.select(db.localCategories).get()).map((c) => c.id), [7]);
+    expect(await barcodes(), 1);
+  });
+
   test('several pages are read in one run; a row we do not hold or an unknown table is harmless',
       () async {
     await run(serve([const RemovalsPage(items: [], last: true, nextAfterId: 1)]));

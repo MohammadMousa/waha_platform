@@ -11,6 +11,7 @@ class PaymentMethod {
   final bool offlineCapable;
   final int sortOrder;
   final String? paymentUrl; // only set for PAYMENT_URL provider
+  final int? iconResourceId; // picture from the resource cache; null = fixed local icon
 
   const PaymentMethod({
     required this.id,
@@ -20,6 +21,7 @@ class PaymentMethod {
     required this.offlineCapable,
     required this.sortOrder,
     this.paymentUrl,
+    this.iconResourceId,
   });
 
   bool get isQrLink => provider == 'QR_LINK';
@@ -33,5 +35,6 @@ class PaymentMethod {
         offlineCapable: json['offlineCapable'] as bool? ?? false,
         sortOrder: json['sortOrder'] as int? ?? 0,
         paymentUrl: json['paymentUrl'] as String?,
+        iconResourceId: (json['iconResourceId'] as num?)?.toInt(),
       );
 }

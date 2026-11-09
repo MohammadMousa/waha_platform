@@ -211,6 +211,7 @@ class LocalCatalog {
           offlineCapable: true,
           sortOrder: sort,
           paymentUrl: m.paymentUrl,
+          iconResourceId: m.iconResourceId,
         )
       ));
     }

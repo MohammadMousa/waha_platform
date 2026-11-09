@@ -152,6 +152,30 @@ abstract class AppLocalizations {
   /// **'Last attempt: {when}'**
   String offlineLastAttempt(String when);
 
+  /// No description provided for @offlineRemovals.
+  ///
+  /// In en, this message translates to:
+  /// **'Removals: {last} in the last check, {total} in total'**
+  String offlineRemovals(String last, String total);
+
+  /// No description provided for @offlineRemovalsChecked.
+  ///
+  /// In en, this message translates to:
+  /// **'Last removals check: {when}'**
+  String offlineRemovalsChecked(String when);
+
+  /// No description provided for @offlineRemovalsNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Removals: not checked yet'**
+  String get offlineRemovalsNever;
+
+  /// No description provided for @offlineRemovalsUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Removals: not supported by the server'**
+  String get offlineRemovalsUnsupported;
+
   /// No description provided for @ordersLastAttempt.
   ///
   /// In en, this message translates to:

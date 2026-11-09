@@ -75,6 +75,32 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
     showResultToast(pullResultText(l, r), problem: isProblem(r));
   }
 
+  /// Rows the server deleted that this device removed too (products,
+  /// categories, barcodes, gallery images).
+  Widget _removalsTile(AppLocalizations l) {
+    final at = LocalPrefs.removalsAt;
+    final problem = LocalPrefs.removalsProblem;
+    if (at == null) {
+      return ListTile(dense: true, title: Text(l.offlineRemovalsNever));
+    }
+    if (problem == 'unsupported') {
+      return ListTile(
+        dense: true,
+        title: Text(l.offlineRemovalsUnsupported),
+        subtitle: Text(l.offlineRemovalsChecked(whenText(l, at))),
+      );
+    }
+    return ListTile(
+      dense: true,
+      title: Text(l.offlineRemovals(
+          '${LocalPrefs.removalsLast}', '${LocalPrefs.removalsTotal}')),
+      subtitle: Text(
+        l.offlineRemovalsChecked(whenText(l, at)) +
+            (problem.isNotEmpty ? '\n${l.offlineErrorLine(problem)}' : ''),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
@@ -96,6 +122,7 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
                 '${_state[f]?.lastError != null ? '\n${l.offlineErrorLine(_state[f]!.lastError!)}' : ''}',
               ),
             ),
+          _removalsTile(l),
           ListTile(
             dense: true,
             title: Text(

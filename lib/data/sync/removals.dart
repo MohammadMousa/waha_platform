@@ -6,8 +6,8 @@ import '../db/app_database.dart';
 
 /// One page of GET /api/sync/removals.
 class RemovalsPage {
-  /// (table, rowId): table is "barcodes" or "product-images"; rowId is the id
-  /// the device holds locally.
+  /// (table, rowId): table is "barcodes", "product-images", "products" or
+  /// "categories"; rowId is the id the device holds locally.
   final List<(String, int)> items;
   final bool last;
   final int nextAfterId;
@@ -97,6 +97,12 @@ class Removals {
         return (db.delete(db.localBarcodes)..where((t) => t.id.equals(id))).go();
       case 'product-images':
         return (db.delete(db.localProductImages)..where((t) => t.id.equals(id))).go();
+      // Deleting a product also lists its barcodes and gallery images, so
+      // only the row itself goes here.
+      case 'products':
+        return (db.delete(db.localProducts)..where((t) => t.id.equals(id))).go();
+      case 'categories':
+        return (db.delete(db.localCategories)..where((t) => t.id.equals(id))).go();
       default:
         return Future.value(0); // a table this version does not hold
     }

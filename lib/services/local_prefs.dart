@@ -455,6 +455,32 @@ class LocalPrefs {
     await _prefs?.setInt(_kPullAttemptAt, t.millisecondsSinceEpoch);
   }
 
+  // Removals step of the pull (rows the server deleted): what the last check
+  // removed, the running total, when it ran, and how it ended ('' = fine,
+  // 'unsupported' = the server has no such call, anything else = the error).
+  static const _kRemovalsLast = 'waha.removals_last';
+  static const _kRemovalsTotal = 'waha.removals_total';
+  static const _kRemovalsAt = 'waha.removals_at';
+  static const _kRemovalsProblem = 'waha.removals_problem';
+  static int get removalsLast => _prefs?.getInt(_kRemovalsLast) ?? 0;
+  static int get removalsTotal => _prefs?.getInt(_kRemovalsTotal) ?? 0;
+  static DateTime? get removalsAt => _ms(_kRemovalsAt);
+  static String get removalsProblem => _prefs?.getString(_kRemovalsProblem) ?? '';
+
+  static Future<void> recordRemovals(int removed, {DateTime? at}) async {
+    await _prefs?.setInt(_kRemovalsLast, removed);
+    await _prefs?.setInt(_kRemovalsTotal, removalsTotal + removed);
+    await _prefs?.setInt(
+        _kRemovalsAt, (at ?? DateTime.now()).millisecondsSinceEpoch);
+    await _prefs?.setString(_kRemovalsProblem, '');
+  }
+
+  static Future<void> recordRemovalsProblem(String problem, {DateTime? at}) async {
+    await _prefs?.setInt(
+        _kRemovalsAt, (at ?? DateTime.now()).millisecondsSinceEpoch);
+    await _prefs?.setString(_kRemovalsProblem, problem);
+  }
+
   static Future<void> setPushAttemptAt(DateTime t) async {
     await _prefs?.setInt(_kPushAttemptAt, t.millisecondsSinceEpoch);
   }

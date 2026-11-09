@@ -48,6 +48,22 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String offlineRemovals(String last, String total) {
+    return 'المحذوفات: $last في آخر فحص، $total في المجموع';
+  }
+
+  @override
+  String offlineRemovalsChecked(String when) {
+    return 'آخر فحص للمحذوفات: $when';
+  }
+
+  @override
+  String get offlineRemovalsNever => 'المحذوفات: لم يتم الفحص بعد';
+
+  @override
+  String get offlineRemovalsUnsupported => 'المحذوفات: غير مدعومة من الخادم';
+
+  @override
   String ordersLastAttempt(String when) {
     return 'آخر محاولة إرسال: $when';
   }

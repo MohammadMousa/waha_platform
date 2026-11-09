@@ -163,6 +163,21 @@ void main() {
     expect(keys, ['sim', 'terminal']); // sim's store sortOrder 1 beats terminal's 5
   });
 
+  test('a payment method carries its icon resource id; none keeps the fixed icon', () async {
+    await load();
+    await upsertPage(db, 'payment-methods', [
+      {'id': 1, 'key': 'terminal', 'displayName': {'en': 't'}, 'provider': 'TERMINAL',
+       'availableModes': 'KIOSK', 'offlineCapable': true, 'active': true,
+       'sortOrder': 1, 'iconResourceId': 42, 'updatedAt': 'x'},
+      {'id': 2, 'key': 'sim', 'displayName': {'en': 's'}, 'provider': 'SIMULATED',
+       'availableModes': 'KIOSK', 'offlineCapable': true, 'active': true,
+       'sortOrder': 2, 'updatedAt': 'x'},
+    ]);
+    final byKey = {for (final m in await cat.offlinePaymentMethods()) m.key: m};
+    expect(byKey['terminal']!.iconResourceId, 42);
+    expect(byKey['sim']!.iconResourceId, isNull);
+  });
+
   group('ApiClient uses the local data only when offline mode is on', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});

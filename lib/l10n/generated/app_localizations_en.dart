@@ -48,6 +48,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String offlineRemovals(String last, String total) {
+    return 'Removals: $last in the last check, $total in total';
+  }
+
+  @override
+  String offlineRemovalsChecked(String when) {
+    return 'Last removals check: $when';
+  }
+
+  @override
+  String get offlineRemovalsNever => 'Removals: not checked yet';
+
+  @override
+  String get offlineRemovalsUnsupported =>
+      'Removals: not supported by the server';
+
+  @override
   String ordersLastAttempt(String when) {
     return 'Last send attempt: $when';
   }

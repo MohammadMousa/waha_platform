@@ -119,6 +119,7 @@ Future<int> upsertPage(
                 active: (m['active'] as bool?) ?? true,
                 sortOrder: _i(m['sortOrder']) ?? 0,
                 paymentUrl: Value(_s(m['paymentUrl'])),
+                iconResourceId: Value(_i(m['iconResourceId'])),
                 updatedAt: _s(m['updatedAt']) ?? '',
               ),
               mode: InsertMode.insertOrReplace);

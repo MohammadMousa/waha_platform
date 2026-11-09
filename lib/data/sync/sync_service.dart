@@ -387,7 +387,7 @@ class SyncService extends ChangeNotifier {
   Future<RunResult?> _applyRemovals(String token, bool manual) async {
     _abort = Completer<void>();
     try {
-      await Removals.apply(
+      final removed = await Removals.apply(
         db,
         ({afterId, required size, required abort}) =>
             _fetchRemovals(token, afterId: afterId, size: size, abort: abort),
@@ -399,6 +399,7 @@ class SyncService extends ChangeNotifier {
           }
         },
       );
+      await LocalPrefs.recordRemovals(removed);
     } on PullCancelled {
       TraceLog.log('Sync: removals cancelled (customer active)');
       return const RunResult(RunKind.customerActive);
@@ -410,8 +411,11 @@ class SyncService extends ChangeNotifier {
       return const RunResult(RunKind.authStopped);
     } on PullHttpError catch (e) {
       TraceLog.log('Sync: removals answered ${e.status}, skipped');
+      await LocalPrefs.recordRemovalsProblem(
+          (e.status == 404 || e.status == 501) ? 'unsupported' : 'HTTP ${e.status}');
     } catch (e) {
       TraceLog.log('Sync: removals failed: $e');
+      await LocalPrefs.recordRemovalsProblem('$e');
     } finally {
       _abort = null;
     }

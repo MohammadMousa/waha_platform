@@ -21,6 +21,7 @@ import '../state/order_flow_controller.dart';
 import '../services/trace_log.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
+import '../widgets/payment_method_icon.dart';
 import '../widgets/timer_footer_sheet.dart';
 import 'qr_payment_screen.dart';
 
@@ -511,8 +512,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             CircleAvatar(
               radius: 28,
               backgroundColor: scheme.primaryContainer,
-              child: Icon(_iconForMethod(method),
-                  color: scheme.onPrimaryContainer, size: 28),
+              child: PaymentMethodIcon(
+                  resourceId: method.iconResourceId,
+                  fallback: _iconForMethod(method),
+                  color: scheme.onPrimaryContainer),
             ),
             const SizedBox(height: 12),
             Text(label,
@@ -1438,7 +1441,10 @@ class _PayMethodChip extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: scheme.onPrimaryContainer, size: 28),
+              PaymentMethodIcon(
+                  resourceId: method.iconResourceId,
+                  fallback: icon,
+                  color: scheme.onPrimaryContainer),
               const SizedBox(height: 6),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),

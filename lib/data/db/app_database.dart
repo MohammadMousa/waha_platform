@@ -66,6 +66,8 @@ class LocalPaymentMethods extends Table {
   BoolColumn get active => boolean()();
   IntColumn get sortOrder => integer()();
   TextColumn get paymentUrl => text().nullable()();
+  // Resource id of the method's picture; null keeps the fixed local icon.
+  IntColumn get iconResourceId => integer().nullable()();
   TextColumn get updatedAt => text()();
 
   @override
@@ -257,7 +259,7 @@ class AppDatabase extends _$AppDatabase {
   // Bump this for every schema change and add a step in [migration].
   // Never edit an old step: devices in the field run them in order.
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -312,6 +314,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 6) {
             await m.createTable(cachedResources);
+          }
+          if (from < 7) {
+            await m.addColumn(localPaymentMethods, localPaymentMethods.iconResourceId);
           }
         },
         beforeOpen: (details) async {
