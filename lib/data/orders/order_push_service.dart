@@ -100,6 +100,18 @@ Future<OrderCounts> orderCounts(AppDatabase db) async {
       await count('DEAD'), last.read(m));
 }
 
+/// How [OrderPushService.sendUnpaidNow] ended.
+enum UnpaidSendResult {
+  /// The server holds the order now (sent just now, or it already did).
+  onServer,
+
+  /// The server could not be reached, or is busy: nothing changed.
+  noConnection,
+
+  /// The server refused the order, or the device is not signed in.
+  refused,
+}
+
 /// Sends paid local orders to the server. Runs on its own timer and is never
 /// paused by customer activity. A rejected order goes to the dead-letter list
 /// (kept in the database) and the others keep going.
@@ -177,6 +189,49 @@ class OrderPushService extends ChangeNotifier {
       await pushPending();
       _schedule();
     });
+  }
+
+  /// Sends ONE unpaid local order to the server right now, before a payment
+  /// that the server itself takes (a QR link): the server must know the order
+  /// to make the link. Not part of the scheduled pass: a failure changes
+  /// nothing here (no retry time, no failed list); the caller tells the
+  /// customer and nothing is charged. On success the order is marked as
+  /// sent, so a later card payment sends its payment only.
+  Future<UnpaidSendResult> sendUnpaidNow(String orderId) async {
+    final db = _db;
+    if (db == null) return UnpaidSendResult.refused;
+    final svc = LocalOrderService(db);
+    final o = await svc.findOrder(orderId);
+    if (o == null) return UnpaidSendResult.onServer; // made on the server
+    switch (o.syncState) {
+      case 'SYNCED' || 'PAY_PENDING':
+        return UnpaidSendResult.onServer; // the server holds it already
+      case 'LOCAL':
+        break;
+      default:
+        return UnpaidSendResult.refused; // paid or failed: not for this path
+    }
+    final token = _token();
+    if (token == null) return UnpaidSendResult.refused;
+    final outcome = await _send(token, await svc.buildPushBody(orderId));
+    switch (outcome) {
+      case PushAccepted():
+        authBlocked = false;
+        await _markSynced(db, orderId, outcome.displayId);
+        TraceLog.log('Push: ${o.orderReference} sent before the QR payment (${outcome.result})');
+        notifyListeners();
+        return UnpaidSendResult.onServer;
+      case PushRetry():
+        TraceLog.log('Push: ${o.orderReference} could not be sent before the QR payment: ${outcome.message}');
+        return UnpaidSendResult.noConnection;
+      case PushRejected():
+        TraceLog.log('Push: ${o.orderReference} refused before the QR payment: ${outcome.code}');
+        return UnpaidSendResult.refused;
+      case PushAuthStop():
+        authBlocked = true;
+        notifyListeners();
+        return UnpaidSendResult.refused;
+    }
   }
 
   /// One pass over every paid order that is waiting and due. Safe to call at

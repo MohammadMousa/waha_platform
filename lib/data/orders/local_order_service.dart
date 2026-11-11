@@ -186,6 +186,21 @@ class LocalOrderService {
     });
   }
 
+  /// A payment the SERVER took (a QR link): the server holds the payment, so
+  /// this device creates none and sends nothing more. Only the local copy is
+  /// brought up to date (status, paid time, the server's order number). The
+  /// sync state is left alone: an order that was sent unpaid stays SYNCED.
+  Future<void> markPaidOnServer(String orderId, {int? displayId}) async {
+    final o = await findOrder(orderId);
+    if (o == null || o.status == 'PAID') return;
+    await (db.update(db.localOrders)..where((t) => t.orderId.equals(orderId)))
+        .write(LocalOrdersCompanion(
+      status: const Value('PAID'),
+      paidAt: Value(o.paidAt ?? _iso()),
+      displayId: displayId == null ? const Value.absent() : Value(displayId),
+    ));
+  }
+
   /// Caching mode: the order was made ON the server and the card was approved,
   /// but the server could not be told. Keeps a record of the order (just
   /// enough to send the payment later, no lines) and the approved payment, in

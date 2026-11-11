@@ -206,7 +206,6 @@
   "payConfirm": "Confirm Payment",
   "payWaiting": "Waiting for payment confirmation…",
   "payCheckNow": "I've paid — Check Now",
-  "payOpenedBrowser": "Complete payment in the browser tab that just opened.",
 
   "language": "Language",
 
@@ -301,9 +300,11 @@
   "qrPayWaiting": "Waiting for payment…",
   "qrPayExpired": "Payment link expired",
   "qrPayExpiredBody": "The QR code has expired. Please go back and try again.",
-  "qrPayConfirmed": "Payment confirmed",
   "qrPayCancel": "Cancel",
   "qrPayGoBack": "Go Back",
+  "qrNeedsConnectionTitle": "No connection",
+  "qrNeedsConnectionBody": "This payment method needs the internet. Check the connection and try again, or choose another payment method.",
+  "qrOrderRefusedBody": "The order could not be sent to the server. Please choose another payment method or ask staff.",
   "qrPayCancelConfirm": "Cancel this payment and go back?",
   "qrPayCancelContinue": "Keep Waiting",
   "qrPayExpiresIn": "Expires in {minutes}:{seconds}",

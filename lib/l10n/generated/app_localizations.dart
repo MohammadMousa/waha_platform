@@ -980,12 +980,6 @@ abstract class AppLocalizations {
   /// **'I\'ve paid — Check Now'**
   String get payCheckNow;
 
-  /// No description provided for @payOpenedBrowser.
-  ///
-  /// In en, this message translates to:
-  /// **'Complete payment in the browser tab that just opened.'**
-  String get payOpenedBrowser;
-
   /// No description provided for @language.
   ///
   /// In en, this message translates to:
@@ -1226,12 +1220,6 @@ abstract class AppLocalizations {
   /// **'The QR code has expired. Please go back and try again.'**
   String get qrPayExpiredBody;
 
-  /// No description provided for @qrPayConfirmed.
-  ///
-  /// In en, this message translates to:
-  /// **'Payment confirmed'**
-  String get qrPayConfirmed;
-
   /// No description provided for @qrPayCancel.
   ///
   /// In en, this message translates to:
@@ -1243,6 +1231,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Go Back'**
   String get qrPayGoBack;
+
+  /// No description provided for @qrNeedsConnectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection'**
+  String get qrNeedsConnectionTitle;
+
+  /// No description provided for @qrNeedsConnectionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This payment method needs the internet. Check the connection and try again, or choose another payment method.'**
+  String get qrNeedsConnectionBody;
+
+  /// No description provided for @qrOrderRefusedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The order could not be sent to the server. Please choose another payment method or ask staff.'**
+  String get qrOrderRefusedBody;
 
   /// No description provided for @qrPayCancelConfirm.
   ///

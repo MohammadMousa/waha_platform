@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../data/catalog/offline_mode.dart';
 import '../models/cart_item.dart';
 import '../models/order.dart';
 import '../models/pay_result.dart';
@@ -310,6 +311,23 @@ class OrderFlowController extends ChangeNotifier {
     order = await _api.getOrder(orderId!);
     notifyListeners();
     return order!;
+  }
+
+  /// Like [refreshOrder] but always asks the server: for a payment the server
+  /// takes (a QR link) the local copy of the order never changes by itself.
+  /// When the server says paid, a local copy of the order is brought up to
+  /// date too.
+  Future<WahaOrder> refreshOrderFromServer() async {
+    if (orderId == null) {
+      throw StateError('refreshOrderFromServer() called before checkout()');
+    }
+    final fresh = await _api.getOrderFromServer(orderId!);
+    if (fresh.status == 'PAID') {
+      await OfflineMode.orders?.markPaidOnServer(orderId!, displayId: fresh.displayId);
+    }
+    order = fresh;
+    notifyListeners();
+    return fresh;
   }
 
   /// Pushes an order this controller didn't fetch itself into `order` —

@@ -136,6 +136,81 @@ void main() {
       expect(saved.orderReference, 'WH-01-0001'); // what the customer saw stays
     });
 
+    group('sending one unpaid order before a QR payment', () {
+      Future<LocalOrder> unpaid(LocalOrderService svc) => svc.createOrder(lines: const [
+            NewOrderLine(productId: 11, quantity: 2, unitPrice: '5.00'),
+          ]);
+
+      test('is sent once as unpaid with no payments, then marked sent', () async {
+        final svc = LocalOrderService(db, now: () => clock);
+        final o = await unpaid(svc);
+        final push = makeService();
+        expect(await push.sendUnpaidNow(o.orderId), UnpaidSendResult.onServer);
+        final body = jsonDecode(sent.single.body) as Map<String, dynamic>;
+        expect(body['status'], 'CREATED');
+        expect(body['payments'], isEmpty);
+        final saved = await byId(o.orderId);
+        expect(saved.syncState, 'SYNCED');
+        expect(saved.displayId, 96073);
+        // Asking again, or the normal pass, never sends it a second time.
+        expect(await push.sendUnpaidNow(o.orderId), UnpaidSendResult.onServer);
+        await push.pushPending();
+        expect(sent.length, 1);
+      });
+
+      test('no connection: nothing changes and the customer can be told', () async {
+        final svc = LocalOrderService(db, now: () => clock);
+        final o = await unpaid(svc);
+        respond = (r) => throw http.ClientException('no route to host');
+        expect(await makeService().sendUnpaidNow(o.orderId), UnpaidSendResult.noConnection);
+        final saved = await byId(o.orderId);
+        expect(saved.syncState, 'LOCAL'); // not failed, no retry time
+        expect(saved.nextAttemptAt, isNull);
+      });
+
+      test('a server refusal is reported and does not dead-letter the unpaid order', () async {
+        final svc = LocalOrderService(db, now: () => clock);
+        final o = await unpaid(svc);
+        respond = (r) => json(422, {'error': 'PRODUCT_NOT_FOUND', 'message': 'm', 'retryable': false});
+        expect(await makeService().sendUnpaidNow(o.orderId), UnpaidSendResult.refused);
+        expect((await byId(o.orderId)).syncState, 'LOCAL');
+      });
+
+      test('an order made on the server (no local copy) needs nothing', () async {
+        expect(await makeService().sendUnpaidNow('not-here'), UnpaidSendResult.onServer);
+        expect(sent, isEmpty);
+      });
+
+      test('after a QR payment the local copy is paid and nothing more is sent', () async {
+        final svc = LocalOrderService(db, now: () => clock);
+        final o = await unpaid(svc);
+        final push = makeService();
+        await push.sendUnpaidNow(o.orderId);
+        await svc.markPaidOnServer(o.orderId, displayId: 96074);
+        final saved = await byId(o.orderId);
+        expect(saved.status, 'PAID');
+        expect(saved.paidAt, isNotNull);
+        expect(saved.syncState, 'SYNCED');
+        expect(saved.displayId, 96074);
+        expect(await db.select(db.localPayments).get(), isEmpty); // the server holds the payment
+        await push.pushPending();
+        expect(sent.length, 1);
+      });
+
+      test('a card payment on an order sent unpaid sends the payment only', () async {
+        final svc = LocalOrderService(db, now: () => clock);
+        final o = await unpaid(svc);
+        final push = makeService();
+        await push.sendUnpaidNow(o.orderId);
+        await svc.markPaid(
+            o.orderId, const PaidPayment(provider: 'terminal', authCode: '1', providerReference: 'r'),
+            paymentId: 'p1');
+        expect((await byId(o.orderId)).syncState, 'PAY_PENDING');
+        await push.pushPending();
+        expect(sent.last.url.path, '/api/sync/orders/${o.orderId}/payments');
+      });
+    });
+
     test('unpaid orders are never sent', () async {
       final svc = LocalOrderService(db, now: () => clock);
       await svc.createOrder(lines: const [

@@ -971,6 +971,12 @@ class ApiClient {
         return server == null ? local : server.withStatus(local.status);
       }
     }
+    return getOrderFromServer(orderId);
+  }
+
+  /// The server's own copy of the order, never the local one. A payment the
+  /// server takes (a QR link) is only ever visible here.
+  Future<WahaOrder> getOrderFromServer(String orderId) async {
     final resp = await _send(() => _http.get(_uri('/api/orders/$orderId')));
     if (resp.statusCode == 200) {
       return WahaOrder.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);

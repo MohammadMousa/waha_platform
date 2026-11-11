@@ -187,7 +187,6 @@
   "payConfirm": "تأكيد الدفع",
   "payWaiting": "في انتظار تأكيد الدفع...",
   "payCheckNow": "دفعت — تحقق الآن",
-  "payOpenedBrowser": "أكمل الدفع في التبويب الذي فُتح.",
 
   "language": "اللغة",
 
@@ -282,9 +281,11 @@
   "qrPayWaiting": "في انتظار الدفع…",
   "qrPayExpired": "انتهت صلاحية رابط الدفع",
   "qrPayExpiredBody": "انتهت صلاحية رمز الاستجابة السريعة. يرجى العودة والمحاولة مرة أخرى.",
-  "qrPayConfirmed": "تم تأكيد الدفع",
   "qrPayCancel": "إلغاء",
   "qrPayGoBack": "العودة",
+  "qrNeedsConnectionTitle": "لا يوجد اتصال",
+  "qrNeedsConnectionBody": "طريقة الدفع هذه تحتاج إلى الإنترنت. تحقق من الاتصال وحاول مرة أخرى، أو اختر طريقة دفع أخرى.",
+  "qrOrderRefusedBody": "تعذر إرسال الطلب إلى الخادم. الرجاء اختيار طريقة دفع أخرى أو طلب مساعدة الموظف.",
   "qrPayCancelConfirm": "إلغاء هذه العملية والعودة؟",
   "qrPayCancelContinue": "الاستمرار في الانتظار",
   "qrPayExpiresIn": "تنتهي خلال {minutes}:{seconds}",

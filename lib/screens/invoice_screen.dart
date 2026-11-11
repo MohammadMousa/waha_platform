@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../data/catalog/offline_mode.dart';
+import '../data/orders/order_push_service.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/order.dart';
 import '../models/payment_method.dart';
@@ -155,7 +156,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         if (mounted) setState(() => _phase = _Phase.cancelled);
       } else if (order.status == 'PENDING') {
         // Payment session already started in a previous screen visit — resume
-        // polling. Same suspension as _payWithRedirect's own poll start —
+        // polling. Same suspension as the QR payment's own wait —
         // cart's still-alive KioskIdleGuard needs to stay suspended for this
         // resumed wait too, cleared in _pollOnce/_cancelWaiting same as before.
         if (mounted) {
@@ -194,7 +195,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     // Every payment path funnels through here — the single choke point to
     // keep OrderFlowController.order in sync, which KioskIdleGuard reads to
     // suspend its own timer once paid. pay()/refreshOrder() already do this
-    // for simulated/redirect/QR flows; terminal payment resolves its own
+    // for simulated/QR flows; terminal payment resolves its own
     // paid order locally and never touches the controller otherwise.
     context.read<OrderFlowController>().setOrder(order);
     setState(() => _phase = _Phase.paid);
@@ -255,9 +256,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     }
   }
 
-  // ── Redirect / QR payment ────────────────────────────────────────────────────
+  // ── QR payment ────────────────────────────────────────────────────
 
-  Future<void> _payWithRedirect(PaymentMethod method) async {
+  Future<void> _payWithQrLink(PaymentMethod method) async {
     // Guard against double-tap: the onTap closure captures _launchingSession at
     // build time, so a second tap before the rebuild sees the old false value.
     // Reading the live field here (single-threaded Dart) catches it.
@@ -268,6 +269,15 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     });
     final flow = context.read<OrderFlowController>();
     try {
+      // The server makes the payment link, so it must know the order first.
+      // An order made on this device is sent now, before the link is asked
+      // for; if that cannot be done nothing is started.
+      final onServer = await _sendOrderBeforeQr(flow);
+      if (!mounted) return;
+      if (!onServer) {
+        setState(() => _launchingSession = false);
+        return;
+      }
       final session = await flow.createPaymentSession(
           provider: method.key, providerMode: method.provider);
 
@@ -297,7 +307,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                 qrCodeDataUri: session.qrCodeDataUri!,
                 expiresAt: session.expiresAt!,
                 methodLabel: methodLabel,
-                onRefreshOrder: flow.refreshOrder,
+                onRefreshOrder: flow.refreshOrderFromServer,
               ),
             ),
           );
@@ -309,35 +319,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         return;
       }
 
-      // PAYMENT_URL: no backend session needed — QR is the invoice URL.
-      // Should not reach here since _handlePaymentUrl is called directly,
-      // but guard for safety.
-      if (method.isPaymentUrl) {
-        setState(() => _launchingSession = false);
-        return;
-      }
-
-      // Standard browser redirect flow (REDIRECT provider)
-      final launched = await launchUrl(
-          Uri.parse(session.redirectUrl),
-          mode: LaunchMode.externalApplication);
-      if (!launched) throw Exception('launch failed');
-      if (!mounted) return;
-      setState(() {
-        _launchingSession = false;
-        _phase = _Phase.waiting;
-      });
-      _pollAttempts = 0;
-      // Can poll for up to _maxPollAttempts * 2s (~5 min) waiting on a
-      // customer's external browser/app — see _handleTerminal's identical
-      // comment for why cart's still-alive KioskIdleGuard needs suspending
-      // for the whole span, not just this function call. Cleared in every
-      // place polling can end: _pollOnce's paid/exhausted branches and
-      // _cancelWaiting, not here — this call starts it, it doesn't own
-      // when it ends.
-      flow.setPaymentInProgress(true);
-      _pollTimer =
-          Timer.periodic(const Duration(seconds: 2), (_) => _pollOnce());
+      // Only QR_LINK reaches here (see _handleMethod and the method chips).
+      setState(() => _launchingSession = false);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -346,6 +329,43 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         });
       }
     }
+  }
+
+  /// True when the server holds the order, so a payment link can be made.
+  /// Orders made on the server are there already. A device-made order is sent
+  /// now; when that fails the customer is told and nothing else happens.
+  Future<bool> _sendOrderBeforeQr(OrderFlowController flow) async {
+    final orderId = flow.orderId;
+    if (orderId == null || OfflineMode.orders == null) return true;
+    final result = await OrderPushService.instance.sendUnpaidNow(orderId);
+    if (result == UnpaidSendResult.onServer) return true;
+    if (!mounted) return false;
+    final l10n = AppLocalizations.of(context)!;
+    // Same reason as the payment dialogs: keep the idle guard from acting
+    // while a dialog is open.
+    flow.setPaymentInProgress(true);
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.wifi_off_outlined),
+          title: Text(result == UnpaidSendResult.noConnection
+              ? l10n.qrNeedsConnectionTitle
+              : l10n.terminalPaymentFailedTitle),
+          content: Text(result == UnpaidSendResult.noConnection
+              ? l10n.qrNeedsConnectionBody
+              : l10n.qrOrderRefusedBody),
+          actions: [
+            FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(l10n.commonOk)),
+          ],
+        ),
+      );
+    } finally {
+      flow.setPaymentInProgress(false);
+    }
+    return false;
   }
 
   Future<void> _pollOnce() async {
@@ -394,8 +414,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       future = _handleTerminal(method);
     } else if (method.isPaymentUrl) {
       future = _handlePaymentUrl(method);
+    } else if (method.isQrLink) {
+      future = _payWithQrLink(method);
     } else {
-      future = _payWithRedirect(method);
+      TraceLog.log('Invoice: payment method ${method.key} (${method.provider}) is not supported on the kiosk');
+      return;
     }
     future.whenComplete(() => _methodHandling = false);
   }
@@ -523,14 +546,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                     .textTheme
                     .titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
-            if (method.provider == 'REDIRECT') ...[
-              const SizedBox(height: 8),
-              Text(
-                l10n.payOpenedBrowser,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.outline, fontSize: 13),
-              ),
-            ],
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -564,7 +579,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       'simulated' => Icons.phone_android_outlined,
       'stripe' => Icons.credit_card,
       'myfatoorah' => Icons.account_balance_outlined,
-      _ => (method.provider == 'REDIRECT' || method.provider == 'QR_LINK')
+      _ => method.provider == 'QR_LINK'
           ? Icons.qr_code_outlined
           : Icons.payment_outlined,
     };
@@ -763,9 +778,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                                 _handlePaymentUrl(method);
                               } else if (method.provider == 'TERMINAL') {
                                 _handleTerminal(method);
-                              } else if (method.provider == 'REDIRECT' ||
-                                  method.provider == 'QR_LINK') {
-                                _payWithRedirect(method);
+                              } else if (method.isQrLink) {
+                                _payWithQrLink(method);
                               } else {
                                 _showPaymentSheet(method);
                               }
@@ -794,7 +808,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   }
 
   Widget _buildWaiting(AppLocalizations l10n) {
-    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -804,12 +817,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             const CircularProgressIndicator(),
             const SizedBox(height: 20),
             Text(l10n.payWaiting, textAlign: TextAlign.center),
-            const SizedBox(height: 4),
-            Text(
-              l10n.payOpenedBrowser,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.outline),
-            ),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: _pollOnce,
@@ -1575,7 +1582,7 @@ class _MobilePaymentScreen extends StatefulWidget {
 class _MobilePaymentScreenState extends State<_MobilePaymentScreen> {
   Timer? _pollTimer;
 
-  // Same overall cap as the redirect flow's polling (~5 min, see
+  // Same overall cap as the resumed-payment polling (~5 min, see
   // _maxPollAttempts): without one this dialog waits forever on a customer
   // who walked away, and the payment-in-progress flag it holds keeps the idle
   // guard suspended for good.

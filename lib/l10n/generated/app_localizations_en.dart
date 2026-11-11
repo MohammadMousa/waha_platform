@@ -533,10 +533,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get payCheckNow => 'I\'ve paid — Check Now';
 
   @override
-  String get payOpenedBrowser =>
-      'Complete payment in the browser tab that just opened.';
-
-  @override
   String get language => 'Language';
 
   @override
@@ -680,13 +676,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'The QR code has expired. Please go back and try again.';
 
   @override
-  String get qrPayConfirmed => 'Payment confirmed';
-
-  @override
   String get qrPayCancel => 'Cancel';
 
   @override
   String get qrPayGoBack => 'Go Back';
+
+  @override
+  String get qrNeedsConnectionTitle => 'No connection';
+
+  @override
+  String get qrNeedsConnectionBody =>
+      'This payment method needs the internet. Check the connection and try again, or choose another payment method.';
+
+  @override
+  String get qrOrderRefusedBody =>
+      'The order could not be sent to the server. Please choose another payment method or ask staff.';
 
   @override
   String get qrPayCancelConfirm => 'Cancel this payment and go back?';

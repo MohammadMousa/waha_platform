@@ -19,6 +19,13 @@ class QrPaymentScreen extends StatefulWidget {
   final String methodLabel;
   final Future<WahaOrder> Function() onRefreshOrder;
 
+  /// How often the order is asked for while the QR is up (the live
+  /// connection is only a fast path; this is what always works).
+  final Duration pollInterval;
+
+  /// For tests: supplies the HTTP client used for the live connection.
+  final http.Client Function()? clientFactory;
+
   const QrPaymentScreen({
     super.key,
     required this.orderId,
@@ -26,13 +33,15 @@ class QrPaymentScreen extends StatefulWidget {
     required this.expiresAt,
     required this.methodLabel,
     required this.onRefreshOrder,
+    this.pollInterval = const Duration(seconds: 3),
+    this.clientFactory,
   });
 
   @override
   State<QrPaymentScreen> createState() => _QrPaymentScreenState();
 }
 
-enum _QrPhase { waiting, confirmed, expired }
+enum _QrPhase { waiting, expired }
 
 class _QrPaymentScreenState extends State<QrPaymentScreen> {
   _QrPhase _phase = _QrPhase.waiting;
@@ -53,6 +62,16 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   http.Client? _sseClient;
   StreamSubscription<String>? _sseSub;
 
+  // The live connection (SSE) is only the fast path: a proxy or the network
+  // can cut it silently, and nothing then tells the kiosk. So the order is
+  // also asked for every few seconds for as long as the QR is up.
+  Timer? _pollTimer;
+  bool _polling = false;
+  bool _askAgain = false;
+  // Set once the payment is confirmed: the screen is closed exactly once, no
+  // matter how many of the checks / events report "paid".
+  bool _done = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +82,31 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
     } else {
       _startCountdown();
       _subscribeToSse();
+      _pollTimer = Timer.periodic(widget.pollInterval, (_) => _poll());
+    }
+  }
+
+  /// Asks the server for the order. Never two at once; a request made while
+  /// one is running (the live connection just said "paid") runs again as
+  /// soon as that one ends, so it is not left waiting for the next tick.
+  Future<void> _poll() async {
+    if (_done || !mounted || _phase != _QrPhase.waiting) return;
+    if (_polling) {
+      _askAgain = true;
+      return;
+    }
+    _polling = true;
+    try {
+      final order = await widget.onRefreshOrder();
+      if (order.status == 'PAID' && mounted) _onPaymentConfirmedWithOrder(order);
+    } catch (_) {
+      // The server cannot be reached right now: the next check tries again.
+    } finally {
+      _polling = false;
+      if (_askAgain && mounted && !_done) {
+        _askAgain = false;
+        unawaited(_poll());
+      }
     }
   }
 
@@ -72,6 +116,7 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
       if (!mounted) return;
       if (rem.isNegative) {
         _countdownTimer?.cancel();
+        _pollTimer?.cancel();
         if (_phase == _QrPhase.waiting) {
           setState(() => _phase = _QrPhase.expired);
           _scheduleExpiredClose();
@@ -83,7 +128,7 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   }
 
   void _subscribeToSse() {
-    final client = http.Client();
+    final client = (widget.clientFactory ?? http.Client.new)();
     _sseClient = client;
     final uri = Uri.parse(
         '${AppConfig.apiBaseUrl}/api/orders/${widget.orderId}/payment-events');
@@ -104,40 +149,23 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   }
 
   void _onSseLine(String line) {
-    if (line.startsWith('data:') && line.contains('PAID')) {
-      _onPaymentConfirmed();
-    }
+    if (line.startsWith('data:') && line.contains('PAID')) _poll();
   }
 
-  void _handleSseError() {
-    widget.onRefreshOrder().then((order) {
-      if (order.status == 'PAID' && mounted) _onPaymentConfirmedWithOrder(order);
-    }).catchError((_) {});
-  }
-
-  void _handleSseDone() {
-    if (_phase == _QrPhase.waiting) {
-      widget.onRefreshOrder().then((order) {
-        if (order.status == 'PAID' && mounted) _onPaymentConfirmedWithOrder(order);
-      }).catchError((_) {});
-    }
-  }
-
-  void _onPaymentConfirmed() {
-    widget.onRefreshOrder().then((order) {
-      if (mounted) _onPaymentConfirmedWithOrder(order);
-    }).catchError((_) {
-      if (mounted) setState(() => _phase = _QrPhase.confirmed);
-    });
-  }
+  // The connection ended or failed: one check right away; the regular checks
+  // carry on by themselves.
+  void _handleSseError() => _poll();
+  void _handleSseDone() => _poll();
 
   void _onPaymentConfirmedWithOrder(WahaOrder order) {
+    if (_done) return;
+    _done = true;
     _cancelSse();
     _countdownTimer?.cancel();
-    setState(() => _phase = _QrPhase.confirmed);
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) Navigator.of(context).pop(order);
-    });
+    _pollTimer?.cancel();
+    // No "confirmed" step here: the paid screen that opens next is the
+    // confirmation.
+    Navigator.of(context).pop(order);
   }
 
   void _cancelSse() {
@@ -150,6 +178,7 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _pollTimer?.cancel();
     _expiredCloseTimer?.cancel();
     _cancelSse();
     super.dispose();
@@ -209,7 +238,6 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
   Widget _body(AppLocalizations l10n, ColorScheme scheme) {
     return switch (_phase) {
       _QrPhase.waiting => _waitingBody(l10n, scheme),
-      _QrPhase.confirmed => _confirmedBody(l10n, scheme),
       _QrPhase.expired => _expiredBody(l10n),
     };
   }
@@ -271,21 +299,6 @@ class _QrPaymentScreenState extends State<QrPaymentScreen> {
             onPressed: _showCancelConfirm,
             child: Text(l10n.qrPayCancel),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _confirmedBody(AppLocalizations l10n, ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_outline, size: 64, color: scheme.primary),
-          const SizedBox(height: 12),
-          Text(l10n.qrPayConfirmed,
-              style: Theme.of(context).textTheme.titleLarge),
         ],
       ),
     );

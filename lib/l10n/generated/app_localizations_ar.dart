@@ -528,9 +528,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get payCheckNow => 'دفعت — تحقق الآن';
 
   @override
-  String get payOpenedBrowser => 'أكمل الدفع في التبويب الذي فُتح.';
-
-  @override
   String get language => 'اللغة';
 
   @override
@@ -673,13 +670,21 @@ class AppLocalizationsAr extends AppLocalizations {
       'انتهت صلاحية رمز الاستجابة السريعة. يرجى العودة والمحاولة مرة أخرى.';
 
   @override
-  String get qrPayConfirmed => 'تم تأكيد الدفع';
-
-  @override
   String get qrPayCancel => 'إلغاء';
 
   @override
   String get qrPayGoBack => 'العودة';
+
+  @override
+  String get qrNeedsConnectionTitle => 'لا يوجد اتصال';
+
+  @override
+  String get qrNeedsConnectionBody =>
+      'طريقة الدفع هذه تحتاج إلى الإنترنت. تحقق من الاتصال وحاول مرة أخرى، أو اختر طريقة دفع أخرى.';
+
+  @override
+  String get qrOrderRefusedBody =>
+      'تعذر إرسال الطلب إلى الخادم. الرجاء اختيار طريقة دفع أخرى أو طلب مساعدة الموظف.';
 
   @override
   String get qrPayCancelConfirm => 'إلغاء هذه العملية والعودة؟';
