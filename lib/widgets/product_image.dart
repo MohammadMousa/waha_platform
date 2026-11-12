@@ -66,8 +66,14 @@ class _ProductImageState extends State<ProductImage> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final w = width  ?? (constraints.hasBoundedWidth  ? constraints.maxWidth  : 80.0);
-        final h = height ?? (constraints.hasBoundedHeight ? constraints.maxHeight : 80.0);
+        // "Fill" (double.infinity) means the space the layout gives, which is
+        // a real number; an infinite size cannot be used to size the decode.
+        double pick(double? asked, bool bounded, double max) =>
+            (asked != null && asked.isFinite)
+                ? asked
+                : (bounded ? max : 80.0);
+        final w = pick(width, constraints.hasBoundedWidth, constraints.maxWidth);
+        final h = pick(height, constraints.hasBoundedHeight, constraints.maxHeight);
         return _build(context, w, h);
       },
     );

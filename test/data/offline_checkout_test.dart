@@ -96,7 +96,7 @@ void main() {
     expect(o.status, 'CREATED');
     expect(o.orderReference, 'WH-01-0233');
     expect(o.displayId, isNull);
-    expect(o.displayNumber, 'WH-01-0233'); // shown instead of a number the server has not given yet
+    expect(o.displayNumber, '\u2066WH-01-0233\u2069'); // shown instead of a number the server has not given yet
     expect(o.total, 4.03);
     expect(o.subtotal, 3.50);
     expect(o.tax, 0.53);

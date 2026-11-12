@@ -29,8 +29,13 @@ class WahaOrder {
 
   /// The number to show: the server's order number when there is one, else
   /// the order reference.
-  String? get displayNumber =>
-      displayId != null ? '#$displayId' : orderReference;
+  ///
+  /// Wrapped in a left-to-right isolate so a reference like 5-01-0040 keeps
+  /// its order inside Arabic text instead of showing as 0040-01-5.
+  String? get displayNumber {
+    final text = displayId != null ? '#$displayId' : orderReference;
+    return text == null ? null : '\u2066$text\u2069';
+  }
 
   const WahaOrder({
     required this.orderId,

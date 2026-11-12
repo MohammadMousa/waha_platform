@@ -128,4 +128,24 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     await shutdown(tester);
   });
+
+  testWidgets('asked to fill the width (as the grid and the sheet do): still shown',
+      (tester) async {
+    await boot(tester);
+    await show(
+        tester,
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 200,
+              height: 200,
+              child: ProductImage(imageResourceId: 7, width: double.infinity),
+            ),
+          ),
+        ));
+    await settle(tester, expectImage: true);
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Image), findsOneWidget);
+    await shutdown(tester);
+  });
 }
