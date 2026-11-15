@@ -8,10 +8,12 @@ import '../state/order_flow_controller.dart';
 import 'coupon_text.dart';
 import 'scan_actions.dart' show showUnpaidOrderBlockedDialog;
 
-import '../screens/settings_screen.dart' show showCopyableTextDialog;
+import '../screens/settings_screen.dart'
+    show showCopyableTextDialog, showSessionInfoDialog;
 import '../services/geidea_terminal_bridge.dart';
 import '../widgets/device_pin_dialog.dart';
 import '../widgets/profile_sheet.dart';
+import '../widgets/sync_progress_dialog.dart';
 
 /// THE single place every scan passes through before it is treated as a
 /// product barcode: hardware scanner, camera AND the on-screen simulator all
@@ -41,6 +43,8 @@ class ScannerManager {
   final Map<String, Future<void> Function(BuildContext)> _commands = {
     'upload-logs': _uploadLogs,
     'profile': _profile,
+    'sync-pull': _syncPull,
+    'build-info': _buildInfo,
   };
 
   static const _couponPrefix = 'coupon=';
@@ -131,6 +135,17 @@ class ScannerManager {
       builder: (_) => const ProfileSheet(),
     );
   }
+
+  /// `cmd=build-info`: the same dialog as Settings' "Session info" (version,
+  /// build, store, host, offline mode). Closes with its button, by a tap
+  /// outside, or by itself after a minute if it is left on the screen.
+  static Future<void> _buildInfo(BuildContext context) =>
+      showSessionInfoDialog(context, autoClose: const Duration(minutes: 1));
+
+  /// `cmd=sync-pull`: pulls the product and settings updates now and shows the
+  /// progress. It only downloads data, so it needs no PIN.
+  static Future<void> _syncPull(BuildContext context) =>
+      showSyncProgressDialog(context);
 
   static Future<void> _uploadLogs(BuildContext context) async {
     final result = await GeideaTerminalBridge.instance.uploadLog();

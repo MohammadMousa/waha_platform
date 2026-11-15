@@ -41,8 +41,23 @@ class OfflineMode {
   /// dialog confirms or cancels by session id only.
   static final Map<String, String> sessionOrder = {};
 
-  /// The last `offline_mode` value from /api/config (kept across restarts).
-  static bool get active => catalog != null && LocalPrefs.offlineMode;
+  /// True once the local copy is complete (every required table pulled once
+  /// and the device settings saved). Until then a `full` device behaves like
+  /// `caching`: the server answers first and what it answers is saved, so
+  /// selling never waits for the first download. Refreshed by
+  /// [refreshReady] after every pull.
+  static bool catalogReady = false;
+
+  static Future<void> refreshReady() async {
+    final c = catalog;
+    catalogReady = c != null && await c.isReady();
+  }
+
+  /// `full` mode with a complete local copy: answers come from the local
+  /// database (the last `offline_mode` value from /api/config is kept across
+  /// restarts).
+  static bool get active =>
+      catalog != null && LocalPrefs.offlineMode && catalogReady;
 
   /// Orders made on this device live in the local database in `full` AND
   /// `caching` mode (in caching only when the server could not be reached at
@@ -57,7 +72,9 @@ class OfflineMode {
   /// `caching`: server first, saved copy only when the server cannot be
   /// reached (built in the next steps; today it changes nothing for reads).
   static bool get caching =>
-      catalog != null && LocalPrefs.offlineLevel == OfflineLevel.caching;
+      catalog != null &&
+      (LocalPrefs.offlineLevel == OfflineLevel.caching ||
+          (LocalPrefs.offlineLevel == OfflineLevel.full && !catalogReady));
 
   /// The `scan_disabled_products` rule: an inactive product is refused on
   /// scan and in the cart unless this is true.

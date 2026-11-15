@@ -260,6 +260,11 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Saves the session details (see [_saveSnapshot]) after the connection
+  /// switch, which only stores the token: without them the next start with
+  /// the server unreachable cannot open from the saved session.
+  Future<void> saveSessionDetails() => _saveSnapshot();
+
   Future<void> _saveSnapshot() async {
     if (token == null) return;
     try {

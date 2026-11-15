@@ -184,8 +184,12 @@ void main() {
       await LocalPrefs.init();
       await load();
       OfflineMode.catalog = cat;
+      await OfflineMode.refreshReady();
     });
-    tearDown(() => OfflineMode.catalog = null);
+    tearDown(() {
+      OfflineMode.catalog = null;
+      OfflineMode.catalogReady = false;
+    });
 
     test('on: scan, browse, quote come from the database; unknown and inactive are refused',
         () async {

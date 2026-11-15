@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -1045,15 +1047,31 @@ String sessionInfoText() {
       'built:   ${AppInfo.buildTime}';
 }
 
-Future<void> showSessionInfoDialog(BuildContext context) =>
-    showCopyableTextDialog(context, 'Session info', sessionInfoText());
+Future<void> showSessionInfoDialog(BuildContext context,
+        {Duration? autoClose}) =>
+    showCopyableTextDialog(context, 'Session info', sessionInfoText(),
+        autoClose: autoClose);
 
+/// A tap outside the dialog closes it. With [autoClose] it also closes by
+/// itself after that time (a dialog an admin forgot on a customer screen).
 Future<void> showCopyableTextDialog(
-    BuildContext context, String title, String text) async {
+    BuildContext context, String title, String text,
+    {Duration? autoClose}) async {
   var copied = false;
+  Timer? timer;
   await showDialog<void>(
     context: context,
-    builder: (ctx) => StatefulBuilder(
+    barrierDismissible: true,
+    builder: (ctx) {
+      if (autoClose != null && timer == null) {
+        // Only while this dialog is still on screen: a dialog already closed
+        // by hand has an unmounted context, so the timer never pops another
+        // route by mistake.
+        timer = Timer(autoClose, () {
+          if (ctx.mounted) Navigator.of(ctx).pop();
+        });
+      }
+      return StatefulBuilder(
       builder: (ctx, setDialogState) => AlertDialog(
         title: Text(title),
         content: SingleChildScrollView(
@@ -1077,8 +1095,10 @@ Future<void> showCopyableTextDialog(
           ),
         ],
       ),
-    ),
+    );
+    },
   );
+  timer?.cancel();
 }
 
 class _SecondsField extends StatelessWidget {

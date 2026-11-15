@@ -10,7 +10,7 @@ import '../../models/product_page.dart';
 import '../../models/quote.dart';
 import '../../services/api_exceptions.dart';
 import '../../services/local_prefs.dart';
-import 'offline_level.dart';
+import 'offline_mode.dart';
 import '../db/app_database.dart';
 import '../orders/decimal.dart';
 import '../orders/local_order_service.dart';
@@ -39,7 +39,7 @@ class LocalCatalog {
   Future<void> requireReady() async {
     // `caching` has no first download: the copy is whatever earlier reads
     // saved, so there is nothing to wait for.
-    if (LocalPrefs.offlineLevel == OfflineLevel.caching) return;
+    if (OfflineMode.caching) return; // includes a `full` device still downloading
     if (!await isReady()) throw OfflineNotReadyException();
   }
 

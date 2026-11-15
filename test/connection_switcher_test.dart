@@ -123,4 +123,26 @@ void main() {
     await AppConfig.connection.setEnabled(false);
     expect(AppConfig.connection.custom, custom);
   });
+
+  test('success: the app can open offline right after (saved session)',
+      () async {
+    final server = await fakeServer(pin: '123456');
+    addTearDown(() => server.close(force: true));
+    final r = await ConnectionSwitcher.apply(
+      customEnabled: true,
+      custom: CustomConnection(host: '127.0.0.1', port: server.port),
+      activeApi: api,
+      order: order,
+      credentials: const SwitchCredentials('dev', '123456'),
+    );
+    expect(r.ok, isTrue, reason: r.message);
+    // A restart with the server unreachable: memory is gone, only what was
+    // saved on disk is left.
+    authService.token = null;
+    authService.deviceId = null;
+    expect(LocalPrefs.sessionSnapshot, isNotNull);
+    expect(await authService.restoreSavedSession(), isTrue);
+    expect(authService.token, 'NEW-TOKEN');
+    expect(authService.deviceId, 7);
+  });
 }

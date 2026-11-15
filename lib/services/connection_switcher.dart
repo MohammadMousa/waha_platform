@@ -134,6 +134,9 @@ class ConnectionSwitcher {
     final config = await activeApi.getConfig();
     authService.applyConfig(config);
     await authService.resolveDefaultStore(activeApi);
+    // So the app can also open offline on this server (a normal login saves
+    // these; the switch only had the token).
+    await authService.saveSessionDetails();
 
     return SwitchResult.success(customEnabled
         ? 'Connected to $targetUrl'

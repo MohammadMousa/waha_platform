@@ -64,6 +64,7 @@ void main() {
   });
   tearDown(() async {
     OfflineMode.catalog = null;
+    OfflineMode.catalogReady = false;
     await server.close(force: true);
     await db.close();
   });
@@ -219,6 +220,46 @@ void main() {
     expect(await db.select(db.localProducts).get(), isEmpty);
   });
 
+  group('full mode before the first download has finished (empty database)', () {
+    setUp(() async {
+      await LocalPrefs.saveConfig({'offline_mode': 'full'});
+      await OfflineMode.refreshReady();
+    });
+
+    test('is not ready, and a scan is answered by the server and saved', () async {
+      expect(OfflineMode.catalogReady, isFalse);
+      body = fullProduct(30);
+      expect((await api.getProductByBarcode('B30', 5)).id, 30);
+      expect(seen, isNotEmpty);
+      // saved: found with the server down, and no "still loading" refusal
+      await serverDown();
+      expect((await api.getProductByBarcode('ALT-30', 5)).id, 30);
+    });
+
+    test('empty and the server down: not found, never "products are still loading"',
+        () async {
+      await serverDown();
+      await expectLater(api.getProductByBarcode('B31', 5),
+          throwsA(isA<ProductNotFoundException>()));
+    });
+
+    test('once every table is pulled it answers from the local copy', () async {
+      for (final f in kRequiredFeeds) {
+        await db.into(db.syncState).insertOnConflictUpdate(
+            SyncStateCompanion(feed: Value(f), fullPullDone: const Value(true)));
+      }
+      await saveDeviceConfig(db, {
+        'deviceId': 3, 'deviceNo': 1, 'storeId': 5, 'organizationId': 1,
+        'currency': 'SAR', 'vatRate': 0.15, 'pricesIncludeVat': true,
+        'shortCode': null, 'lastReferenceSerial': null,
+      });
+      await OfflineMode.refreshReady();
+      expect(OfflineMode.catalogReady, isTrue);
+      expect(OfflineMode.active, isTrue);
+      expect(OfflineMode.caching, isFalse);
+    });
+  });
+
   group('full mode: a product missing locally is asked for and saved', () {
     setUp(() async {
       await LocalPrefs.saveConfig({'offline_mode': 'full'});
@@ -231,6 +272,7 @@ void main() {
         'currency': 'SAR', 'vatRate': 0.15, 'pricesIncludeVat': true,
         'shortCode': null, 'lastReferenceSerial': null,
       });
+      await OfflineMode.refreshReady();
     });
 
     test('found on the server: returned, saved, and found with the server down',

@@ -49,7 +49,7 @@ android {
         // Geidea's 1.3.1 (the version used now) builds this PendingIntent with
         // an explicit intent, so the pin can be lifted — but only after a test
         // with a real terminal on the Android 14 tablet.
-        targetSdk = 33
+        targetSdk = 34 // TEST BUILD: lifted from 33, not yet tried with a real terminal on Android 14 (see above)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

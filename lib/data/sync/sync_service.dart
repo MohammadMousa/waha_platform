@@ -49,6 +49,11 @@ class SyncService extends ChangeNotifier {
 
   bool get running => _running;
 
+  /// Where a running pull is (steps done out of all steps and the table being
+  /// pulled), for the progress bar of the sync-pull scan command. Null when
+  /// no pull is running.
+  final ValueNotifier<SyncProgress?> progress = ValueNotifier(null);
+
   /// The latest timings from /api/config (contract defaults until it loads).
   SyncSettings get settings => _settings;
 
@@ -61,6 +66,7 @@ class SyncService extends ChangeNotifier {
     });
     unawaited(ResourceCacheHolder.start(db, canReach: () => serverReachable));
     OfflineMode.catalog = LocalCatalog(db);
+    unawaited(OfflineMode.refreshReady());
     OfflineMode.orders = LocalOrderService(db);
     OfflineMode.username = () => authService.username;
     OrderPushService.instance.start(
@@ -219,9 +225,13 @@ class SyncService extends ChangeNotifier {
       // Rows the server deleted for good, before the tables are pulled (the
       // very first time this also takes the starting position, which must be
       // before the first full pull).
+      final totalSteps = kSyncFeeds.length + 1;
+      progress.value = SyncProgress(0, totalSteps, 'removals');
       final stop = await _applyRemovals(token, manual);
       if (stop != null) return lastResult = stop;
+      var stepNo = 0;
       for (final feed in kSyncFeeds) {
+        progress.value = SyncProgress(++stepNo, totalSteps, feed);
         // Wait for the screen to be idle; a customer present means we stop
         // this cycle and try again at the next interval.
         if (!manual && ActivityGate.instance.idleFor < _settings.idleNeeded) {
@@ -269,6 +279,8 @@ class SyncService extends ChangeNotifier {
     } finally {
       _running = false;
       _manualRun = false;
+      progress.value = null;
+      await OfflineMode.refreshReady();
       lastResultAt = DateTime.now();
       unawaited(LocalPrefs.setPullAttemptAt(lastResultAt!));
       notifyListeners();
@@ -278,11 +290,19 @@ class SyncService extends ChangeNotifier {
       _retryAfterOverride = null;
       final soon = _pullSoon;
       _pullSoon = false;
+      // The first download must not wait a whole interval after a customer
+      // stopped it: try again at the next quiet moment. Once the local copy
+      // is complete the normal interval applies again.
+      final firstDownloadStopped = !OfflineMode.catalogReady &&
+          lastResult?.kind == RunKind.customerActive;
       _schedule(wait ??
+          (firstDownloadStopped ? _firstDownloadRetry : null) ??
           (soon ? SyncSchedule.reconnectDelay(_random) : null) ??
           _settings.interval + Duration(milliseconds: (_settings.interval.inMilliseconds * _intervalJitter).round()));
     }
   }
+
+  static const _firstDownloadRetry = Duration(seconds: 60);
 
   /// The latest outcome of a pull, for the Settings panel.
   RunResult? lastResult;
@@ -511,4 +531,12 @@ class SyncService extends ChangeNotifier {
       client.close();
     }
   }
+}
+
+/// Progress of a running pull: [done] steps of [total], now on [step].
+class SyncProgress {
+  final int done;
+  final int total;
+  final String step;
+  const SyncProgress(this.done, this.total, this.step);
 }

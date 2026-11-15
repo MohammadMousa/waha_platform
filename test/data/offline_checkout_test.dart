@@ -69,6 +69,7 @@ void main() {
       'invoiceBaseUrl': 'http://192.168.1.42:8081',
     });
     OfflineMode.catalog = LocalCatalog(db);
+    await OfflineMode.refreshReady();
     OfflineMode.orders = LocalOrderService(db);
     OfflineMode.sessionOrder.clear();
     api = ApiClient(baseUrl: 'http://127.0.0.1:1'); // unreachable: must never be used
@@ -77,6 +78,7 @@ void main() {
 
   tearDown(() async {
     OfflineMode.catalog = null;
+    OfflineMode.catalogReady = false;
     OfflineMode.orders = null;
     await db.close();
   });
