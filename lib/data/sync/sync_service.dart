@@ -21,6 +21,8 @@ import '../orders/order_cleanup.dart';
 import '../orders/order_push_service.dart';
 import 'device_settings.dart';
 import 'removals.dart';
+import '../../services/perf_stats.dart';
+import 'sync_log_rules.dart';
 import 'sync_schedule.dart';
 import 'sync_settings.dart';
 import 'feeds.dart';
@@ -102,7 +104,9 @@ class SyncService extends ChangeNotifier {
       staggerSeconds: _settings.staggerSeconds,
       random: _random,
     );
-    TraceLog.log('Sync: first pull in ${delay.inSeconds}s (stagger ${_settings.staggerSeconds}s)');
+    if (LocalPrefs.detailedLogging) {
+      TraceLog.log('Sync: first pull in ${delay.inSeconds}s (stagger ${_settings.staggerSeconds}s)');
+    }
     _schedule(delay);
   }
 
@@ -196,6 +200,8 @@ class SyncService extends ChangeNotifier {
     _manualRun = manual;
     notifyListeners();
     var rows = 0;
+    final took = Stopwatch()..start();
+    var isPull = false; // false for the early returns that pulled nothing
     try {
       await refreshSettings();
       // `caching`: no scheduled pull and no first download — reads fill the
@@ -214,6 +220,7 @@ class SyncService extends ChangeNotifier {
         TraceLog.log('Sync: no session, skipping this cycle');
         return lastResult = const RunResult(RunKind.noSession);
       }
+      isPull = true;
       await _refreshDeviceConfig(token);
       final engine = SyncEngine(
         db: db,
@@ -235,7 +242,7 @@ class SyncService extends ChangeNotifier {
         // Wait for the screen to be idle; a customer present means we stop
         // this cycle and try again at the next interval.
         if (!manual && ActivityGate.instance.idleFor < _settings.idleNeeded) {
-          TraceLog.log('Sync: customer active, pausing before $feed');
+          if (LocalPrefs.detailedLogging) TraceLog.log('Sync: customer active, pausing before $feed');
           return lastResult = const RunResult(RunKind.customerActive);
         }
         _abort = Completer<void>();
@@ -251,9 +258,11 @@ class SyncService extends ChangeNotifier {
             },
           );
           rows += n;
-          TraceLog.log('Sync: $feed up to date ($n rows)');
+          if (SyncLogRules.logFeed(detailed: LocalPrefs.detailedLogging, rows: n)) {
+            TraceLog.log('Sync: $feed up to date ($n rows)');
+          }
         } on PullCancelled {
-          TraceLog.log('Sync: $feed pull cancelled (customer active)');
+          if (LocalPrefs.detailedLogging) TraceLog.log('Sync: $feed pull cancelled (customer active)');
           return lastResult = const RunResult(RunKind.customerActive);
         } on PullRetryAfter catch (r) {
           TraceLog.log('Sync: $feed server asked to wait ${r.delay.inSeconds}s');
@@ -277,6 +286,7 @@ class SyncService extends ChangeNotifier {
       }
       return lastResult = RunResult(RunKind.done, count: rows);
     } finally {
+      if (isPull) _noteFinished(took.elapsed, rows);
       _running = false;
       _manualRun = false;
       progress.value = null;
@@ -303,6 +313,28 @@ class SyncService extends ChangeNotifier {
   }
 
   static const _firstDownloadRetry = Duration(seconds: 60);
+
+  bool _firstOkLogged = false;
+
+  /// Counters and the summary line for one finished pull (see [SyncLogRules]).
+  void _noteFinished(Duration took, int rows) {
+    final kind = lastResult?.kind;
+    final paused = kind == RunKind.customerActive;
+    final failed = kind == RunKind.failed ||
+        kind == RunKind.authStopped ||
+        kind == RunKind.serverBusy;
+    PerfStats.instance.recordPull(took: took, rows: rows, paused: paused, failed: failed);
+    final done = kind == RunKind.done;
+    final first = done && !_firstOkLogged;
+    if (first) _firstOkLogged = true;
+    if (SyncLogRules.logPullSummary(
+        detailed: LocalPrefs.detailedLogging, rows: rows, failed: failed, firstOkSinceStart: first)) {
+      TraceLog.log('Sync: pull ${paused ? "stopped (customer active)" : failed ? "failed" : "finished"}: '
+          '$rows rows in ${(took.inMilliseconds / 1000).toStringAsFixed(1)}s'
+          '${first ? " (first successful pull since start)" : ""}');
+    }
+    unawaited(PerfStats.instance.push());
+  }
 
   /// The latest outcome of a pull, for the Settings panel.
   RunResult? lastResult;
@@ -421,7 +453,7 @@ class SyncService extends ChangeNotifier {
       );
       await LocalPrefs.recordRemovals(removed);
     } on PullCancelled {
-      TraceLog.log('Sync: removals cancelled (customer active)');
+      if (LocalPrefs.detailedLogging) TraceLog.log('Sync: removals cancelled (customer active)');
       return const RunResult(RunKind.customerActive);
     } on PullRetryAfter catch (r) {
       _retryAfterOverride = r.delay;

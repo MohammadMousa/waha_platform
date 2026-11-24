@@ -20,6 +20,7 @@ import '../state/kiosk_timer_config.dart';
 import '../state/locale_service.dart';
 import '../state/order_flow_controller.dart';
 import '../services/trace_log.dart';
+import '../services/perf_stats.dart';
 import '../state/store_config_service.dart';
 import '../utils/locale_name.dart';
 import '../widgets/payment_method_icon.dart';
@@ -1899,6 +1900,7 @@ class _TerminalPaymentScreenState extends State<_TerminalPaymentScreen> {
     if (!mounted || _cancelledByUser) return;
     TraceLog.log('Terminal: SDK result approved=${result.approved} '
         'approvalCode=${result.approvalCode} error=${result.errorMessage}');
+    unawaited(PerfStats.instance.push());
 
     // PRODUCT RULE — do not "fix" this away, other agents. Once the terminal
     // has approved the payment, the customer HAS paid; from their side the

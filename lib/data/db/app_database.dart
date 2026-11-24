@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'db_timing.dart';
+
 part 'app_database.g.dart';
 
 // One local database for everything the kiosk keeps offline. Row shapes follow
@@ -254,7 +256,7 @@ class ReferenceCounter extends Table {
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-      : super(executor ?? driftDatabase(name: 'waha_kiosk'));
+      : super((executor ?? driftDatabase(name: 'waha_kiosk')).interceptWith(DbTimingInterceptor()));
 
   // Bump this for every schema change and add a step in [migration].
   // Never edit an old step: devices in the field run them in order.

@@ -11,6 +11,7 @@ import '../widgets/timer_footer_sheet.dart';
 import 'geidea_terminal_bridge.dart';
 import 'local_prefs.dart';
 import 'trace_log.dart';
+import 'perf_stats.dart';
 
 enum RestartDecision { idle, waiting, countdown }
 
@@ -221,6 +222,7 @@ class AutoRestartService {
   }
 
   Future<void> restartNow(String reason) async {
+    await PerfStats.instance.logAtRestart();
     TraceLog.log('AUTORESTART: restarting now ($reason)');
     try {
       await _channel.invokeMethod('restartApp', {'reason': reason});

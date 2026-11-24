@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'local_prefs.dart';
+import 'perf_stats.dart';
 
 /// Diagnostic-only, temporary: forwards Dart-side trace/error text into the
 /// SAME native waha_trace.log that MainActivity.logTrace() writes to (see
@@ -70,6 +71,8 @@ class TraceLog {
   }
 
   static Future<void> setEnabled(bool enabled) async {
+    // Counters (screen, database, sync, sounds) run only while logging is on.
+    PerfStats.instance.setEnabled(enabled);
     try {
       await _channel.invokeMethod('setLoggingEnabled', {'enabled': enabled});
     } catch (_) {

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 
+import 'perf_stats.dart';
+
 /// Plays sound effects on scan events, from assets/sounds/.
 ///
 /// Uses [AudioPool] — audioplayers' own API for "extremely quick firing,
@@ -34,6 +36,7 @@ class ScanSoundService {
 
   static Future<void> playSuccess() async {
     if (kIsWeb) return;
+    PerfStats.instance.recordSound();
     try {
       await _success.play();
     } catch (e, st) {
@@ -46,6 +49,7 @@ class ScanSoundService {
 
   static Future<void> playFailure() async {
     if (kIsWeb) return;
+    PerfStats.instance.recordSound();
     try {
       await _failure.play();
     } catch (e, st) {

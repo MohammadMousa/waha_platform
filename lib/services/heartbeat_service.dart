@@ -3,6 +3,7 @@ import 'dart:async';
 import '../state/auth_service.dart';
 import 'api_client.dart';
 import 'local_prefs.dart';
+import 'perf_stats.dart';
 import 'trace_log.dart';
 
 /// Tells the server the kiosk is alive while it is otherwise idle (POST
@@ -58,6 +59,7 @@ class HeartbeatService {
     final api = _api;
     final token = authService.token;
     if (api == null || token == null || !authService.isDeviceSession) return;
+    unawaited(PerfStats.instance.push());
     try {
       await api.kioskHeartbeat(token);
       if (_down) TraceLog.log('HEARTBEAT: server reachable again');

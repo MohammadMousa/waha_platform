@@ -161,6 +161,8 @@ class MainActivity : FlutterActivity() {
     // from the previous launch onward. The one gap this can't close: a
     // brand-new install's very first-ever launch, before Dart has run even
     // once, defaults to the hardcoded `false` below.
+    private fun clockText(ms: Long): String = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(ms))
+
     private fun loggingPrefs() = getSharedPreferences("waha_diagnostics", MODE_PRIVATE)
     private fun loggingEnabled() = loggingPrefs().getBoolean("logging_enabled", false)
     private fun setLoggingEnabled(enabled: Boolean) {
@@ -215,17 +217,22 @@ class MainActivity : FlutterActivity() {
     private fun logTrace(label: String) {
         if (!loggingEnabled()) return
         if (!detailed() && isDetailLine(label)) return
-        Log.e(TAG, "TRACE: $label")
         val ts = System.currentTimeMillis()
         val ctx = applicationContext
         TraceLogWriter.writer.post {
+            // Card and receipt content never reaches the log at any level; done here, on the
+            // writer thread, so the screen thread only queues the raw text.
+            val text = LogSanitizer.line(label) ?: return@post
+            Log.e(TAG, "TRACE: $text")
             val writeStart = SystemClock.elapsedRealtime()
             LogUploader.trimIfOversized(ctx)
             val dir = ctx.getExternalFilesDir(null) ?: ctx.filesDir
             val file = File(dir, "waha_trace.log")
             val dropped = TraceLogWriter.writer.takeDropped()
             if (dropped > 0) file.appendText("$ts TRACE WRITER: $dropped lines were dropped (writer queue was full)\n")
-            file.appendText("$ts $label\n")
+            val removedNow = LogSanitizer.takeRemoved()
+            if (removedNow > 0) file.appendText("$ts SANITIZER: $removedNow card/receipt lines were left out\n")
+            file.appendText("$ts $text\n")
             val took = SystemClock.elapsedRealtime() - writeStart
             if (took >= SLOW_LOG_WRITE_MS) {
                 slowLogWrites++
@@ -384,9 +391,30 @@ class MainActivity : FlutterActivity() {
         logTrace("configureFlutterEngine start")
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
+        val geideaChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
+        // Lets an upload ask Flutter for its counters just before the report is built
+        // (see PerfCapture). Cleared in onDestroy; the upload falls back to the last snapshot.
+        PerfCapture.requester = { callback ->
+            runOnUiThread {
+                geideaChannel.invokeMethod("perfSnapshot", null, object : MethodChannel.Result {
+                    override fun success(r: Any?) = callback(r as? String)
+                    override fun error(code: String, message: String?, details: Any?) = callback(null)
+                    override fun notImplemented() = callback(null)
+                })
+            }
+        }
+        geideaChannel
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "perfPush" -> {
+                        // Flutter's counters, handed over at the end of a payment or a sync pull.
+                        call.argument<String>("text")?.let { PerfCapture.push(it) }
+                        result.success(true)
+                    }
+                    "perfNative" -> Thread {
+                        val text = PerfCapture.nativePart(applicationContext, logLevel())
+                        runOnUiThread { result.success(text) }
+                    }.start()
                     "initializeTerminal" -> {
                         initializeTerminal()
                         result.success(true)
@@ -1057,8 +1085,8 @@ class MainActivity : FlutterActivity() {
                 logTrace(
                     "startPayment: SDK CALLBACK after ${SystemClock.elapsedRealtime() - startedAt}ms " +
                         "outcome=${result.outcome} fields=${response.size} status='${response.getOrNull(0)}' " +
-                        "code/receipt='${if (detailed()) response.getOrNull(1)?.take(120) else response.getOrNull(1)?.take(40)?.takeIf { !it.contains("<") }}' " +
-                        "detailsLen=${response.getOrNull(2)?.length} buffer='${if (detailed()) response.getOrNull(3)?.take(300) else response.getOrNull(3)?.take(30)}'"
+                        "code/receipt='${LogSanitizer.field(response.getOrNull(1), if (detailed()) 120 else 40)}' " +
+                        "detailsLen=${response.getOrNull(2)?.length} buffer='${LogSanitizer.field(response.getOrNull(3), if (detailed()) 300 else 30)}'"
                 )
                 if (result.outcome == PaymentCallbackClassifier.Outcome.PROGRESS) {
                     logTrace("startPayment: progress only (ack / step codes) — still waiting for the final result")
@@ -1145,9 +1173,12 @@ class MainActivity : FlutterActivity() {
             override fun run() {
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 logTrace("startPayment: still waiting ${elapsed / 1000}s | ${TerminalDiagnostics.sdkState(terminalResponder)}")
-                if (elapsed in 4000..6999 || elapsed in 19000..21999) {
-                    TerminalDiagnostics.sdkLogFileTail(applicationContext, 3000).lines().forEach { logTrace(it) }
-                    UsbInventory.report(applicationContext).lines().forEach { logTrace("USB[payment:wait] $it") }
+                // At Info only: the SDK's new log text and the USB state at ~5 s and ~20 s.
+                // At Warn/Error just the "still waiting" line above (the payment timeline).
+                if (detailed() && (elapsed in 4000..6999 || elapsed in 19000..21999)) {
+                    TerminalDiagnostics.sdkLogFileTail(applicationContext, 3000, incremental = true).lines().forEach { logTrace(it) }
+                    RepeatCollapser.shared.offer("usb-inventory", "USB inventory", UsbInventory.report(applicationContext), System.currentTimeMillis(), ::clockText)
+                        .lines().forEach { logTrace("USB[payment:wait] $it") }
                 }
                 if (elapsed < 120000) diagHandler.postDelayed(this, 5000) else paymentInFlight = false
             }
@@ -1366,9 +1397,16 @@ class MainActivity : FlutterActivity() {
         sb.append("LADDER (since last payment start)\n").append(TerminalDiagnostics.ladder(applicationContext, paymentStartEpoch, if (paymentStartEpoch == 0L) null else lastPaymentCalledBack)).append('\n')
         sb.append("PORT EVENTS\n")
         UsbMilestones.since(0).takeLast(25).forEach { sb.append("  ${it.at % 100000000} ${it.name} ${it.detail}\n") }
-        sb.append(TerminalDiagnostics.sdkLogFileTail(applicationContext)).append('\n')
-        sb.append(SdkLogCapture.recentLines()).append('\n')
-        sb.append(UsbInventory.report(applicationContext))
+        // Written to the trace (an incident): follows the log level. Shown in Settings
+        // (logToTrace = false): the full tools view, still without card content.
+        if (!logToTrace || detailed()) {
+            sb.append(TerminalDiagnostics.sdkLogFileTail(applicationContext, incremental = logToTrace)).append('\n')
+            sb.append(SdkLogCapture.recentLines()).append('\n')
+        } else {
+            sb.append("SDK log file and captured SDK lines: not included at log level ${logLevel()} (${SdkLogCapture.count()} lines were captured)\n")
+        }
+        val usbText = UsbInventory.report(applicationContext)
+        sb.append(if (logToTrace) RepeatCollapser.shared.offer("usb-inventory", "USB inventory", usbText, System.currentTimeMillis(), ::clockText) else usbText)
         val text = sb.toString()
         if (logToTrace) text.lines().forEach { logTrace("REPORT[$reason] $it") }
         return text
@@ -1381,6 +1419,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        PerfCapture.requester = null
         stopUiStallWatchdog()
         logTrace("onDestroy isFinishing=$isFinishing changingConfigurations=$isChangingConfigurations ${processInfo()}")
         startupRetryHandler.removeCallbacksAndMessages(null)

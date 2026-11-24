@@ -20,6 +20,7 @@ import 'services/auto_restart_service.dart';
 import 'services/heartbeat_service.dart';
 import 'services/late_approval_service.dart';
 import 'services/trace_log.dart';
+import 'services/perf_stats.dart';
 import 'services/usb_diagnostics.dart';
 import 'state/auth_service.dart';
 import 'state/kiosk_timer_config.dart';
@@ -48,6 +49,7 @@ void main() {
     // Needed before touching any platform channel (SharedPreferences included)
     // pre-runApp.
     WidgetsFlutterBinding.ensureInitialized();
+    PerfStats.instance.install();
 
     FlutterError.onError = (details) {
       FlutterError.presentError(details);

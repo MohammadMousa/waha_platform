@@ -171,9 +171,19 @@ object SdkLogCapture {
 
     fun has(tag: String, since: Long): Boolean = synchronized(recent) { recent.any { it.tag == tag && it.at >= since } }
 
+    /** How many lines the buffer holds now (for the "not included at this level" note). */
+    fun count(): Int = synchronized(recent) { recent.size }
+
+    /** The buffered lines, without per-byte lines and with card content cut ([LogSanitizer]). */
     fun recentLines(): String = synchronized(recent) {
         if (recent.isEmpty()) "SDKLOG (no SDK log lines captured yet)"
-        else "SDKLOG last ${recent.size} lines:\n" + recent.joinToString("\n") { "${it.at % 100000000} [${it.tag}] ${it.msg}" }
+        else {
+            val kept = recent.mapNotNull { l ->
+                if (l.tag == "LAST BYTE") null
+                else LogSanitizer.line(l.msg)?.let { "${l.at % 100000000} [${l.tag}] $it" }
+            }
+            "SDKLOG last ${recent.size} lines (${recent.size - kept.size} per-byte or card/receipt lines left out):\n" + kept.joinToString("\n")
+        }
     }
 }
 
@@ -230,8 +240,18 @@ object TerminalDiagnostics {
     // Path taken from the SDK's logger (a.d): <filesDir>/<f>, files end in .log.
     const val SDK_LOG_SUBDIR = "za52BZx1qweDbat/az2wsxA5xZavet"
 
-    /** Directory listing plus the tail of the newest SDK log file. */
-    fun sdkLogFileTail(context: Context, maxBytes: Int = 5000): String {
+    // Where the last incremental read stopped (see SdkTailWindow).
+    private var tailName: String? = null
+    private var tailOffset = 0L
+
+    /**
+     * Directory listing plus the tail of the newest SDK log file, with card
+     * and receipt content removed ([LogSanitizer.sdkText]). With [incremental]
+     * only the bytes added since the previous incremental read are returned
+     * (never more than [maxBytes]; what the cap left out is said in the text).
+     */
+    @Synchronized
+    fun sdkLogFileTail(context: Context, maxBytes: Int = 5000, incremental: Boolean = false): String {
         val dir = File(context.filesDir, SDK_LOG_SUBDIR)
         if (!dir.isDirectory) return "SDKLOGFILE none (dir ${dir.path} does not exist — SDK file logging not started)"
         val files = dir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }.orEmpty()
@@ -243,13 +263,20 @@ object TerminalDiagnostics {
         val newest = files.first()
         try {
             val len = newest.length()
+            val range = if (incremental) SdkTailWindow.next(newest.name, len, tailName, tailOffset, maxBytes.toLong())
+            else SdkTailWindow.Range(maxOf(0L, len - maxBytes), len, 0L)
             java.io.RandomAccessFile(newest, "r").use { raf ->
-                val start = maxOf(0L, len - maxBytes)
-                raf.seek(start)
-                val buf = ByteArray((len - start).toInt())
+                raf.seek(range.start)
+                val buf = ByteArray((range.end - range.start).toInt())
                 raf.readFully(buf)
-                sb.append("SDKLOGFILE tail of ${newest.name}:\n")
-                sb.append(String(buf, Charsets.UTF_8).trimEnd())
+                sb.append("SDKLOGFILE ${if (incremental) "new text of" else "tail of"} ${newest.name}")
+                if (range.skipped > 0) sb.append(" (tail bytes skipped: ${range.skipped})")
+                sb.append(":\n")
+                sb.append(LogSanitizer.sdkText(String(buf, Charsets.UTF_8).trimEnd()))
+            }
+            if (incremental) {
+                tailName = newest.name
+                tailOffset = len
             }
         } catch (e: Throwable) {
             sb.append("SDKLOGFILE read failed: ${e.javaClass.simpleName}: ${e.message}")

@@ -48,6 +48,10 @@ object LogUploader {
     fun loggingEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("logging_enabled", false)
 
+    /** Server property Log_Level as pushed by Dart: "info", "warn" (default) or "error". */
+    fun logLevel(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("log_level", "warn") ?: "warn"
+
     const val LOGGING_OFF_MESSAGE = "Logging is off — turn it on in Settings or with the dashboard property enable_logging."
 
     fun setBaseUrl(context: Context, url: String) {
@@ -88,6 +92,8 @@ object LogUploader {
             val before = file.length()
             val (kept, _) = tail(file, TRIM_KEEP_BYTES)
             file.writeText(kept)
+            // What the file said about repeated blocks may be gone now.
+            RepeatCollapser.shared.reset()
             // Counters for the LOG FILE HEALTH block of the next report.
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             prefs.edit()
@@ -116,6 +122,8 @@ object LogUploader {
         }
     }
 
+    private fun clockText(ms: Long): String = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(ms))
+
     /** Everything worth reading, in one text file. */
     fun buildReport(context: Context, maxTraceBytes: Int = 1_000_000): String {
         val sb = StringBuilder()
@@ -128,6 +136,8 @@ object LogUploader {
         sb.append("time=").append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(Date())).append('\n')
         sb.append("device=${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} android=${android.os.Build.VERSION.RELEASE} (api ${android.os.Build.VERSION.SDK_INT})\n")
         sb.append("app=${context.packageName} version=$version server=${baseUrl(context)}\n\n")
+        // Taken before the report is built; the upload waits for it (bounded, see PerfCapture).
+        sb.append(PerfCapture.block(context, logLevel(context))).append('\n')
         // Lines are written by a background thread — let it catch up so the
         // report holds the latest events (bounded wait; never blocks long).
         TraceLogWriter.writer.flush(1000)
@@ -149,11 +159,17 @@ object LogUploader {
             writerDroppedLines = TraceLogWriter.writer.droppedCount(),
         )))
         sb.append("=== TRACE LOG (last ${minOf(total, maxTraceBytes.toLong())} of $total bytes) ===\n").append(trace).append("\n\n")
-        sb.append("=== SDK LOG FILE ===\n").append(TerminalDiagnostics.sdkLogFileTail(context, 60000)).append("\n\n")
-        sb.append("=== SDK LOG LINES CAPTURED THIS RUN ===\n").append(SdkLogCapture.recentLines()).append("\n\n")
+        val level = logLevel(context)
+        if (level == "info") {
+            // Only the text added since the last report, cut of card and receipt content.
+            sb.append("=== SDK LOG FILE ===\n").append(TerminalDiagnostics.sdkLogFileTail(context, 60000, incremental = true)).append("\n\n")
+            sb.append("=== SDK LOG LINES CAPTURED THIS RUN ===\n").append(SdkLogCapture.recentLines()).append("\n\n")
+        } else {
+            sb.append("=== SDK LOG FILE / CAPTURED SDK LINES ===\nnot included at log level $level (${SdkLogCapture.count()} SDK lines were captured); set Log_Level to Info to include them\n\n")
+        }
         sb.append("=== USB INVENTORY NOW ===\n").append(
             try {
-                UsbInventory.report(context)
+                RepeatCollapser.shared.offer("usb-inventory", "USB inventory", UsbInventory.report(context), System.currentTimeMillis(), ::clockText)
             } catch (t: Throwable) {
                 "failed: ${t.message}"
             },
@@ -201,6 +217,7 @@ object LogUploader {
             try {
                 val clearedBytes = traceFile(context).length()
                 traceFile(context).delete()
+                RepeatCollapser.shared.reset()
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                     .putLong("last_clear_at", System.currentTimeMillis())
                     .putLong("last_clear_bytes", clearedBytes)
