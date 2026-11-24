@@ -8,6 +8,9 @@ class SyncSettings {
   final Duration interval;
   final int pageSize;
   final Duration requestTimeout;
+  // New-connection limit and number of tries for one pull request.
+  final Duration connectTimeout;
+  final int connectAttempts;
   final Duration idleNeeded;
   // Order push (offline.md section 1).
   final Duration pushInterval;
@@ -28,6 +31,8 @@ class SyncSettings {
     this.interval = const Duration(minutes: 60),
     this.pageSize = 200,
     this.requestTimeout = const Duration(seconds: 30),
+    this.connectTimeout = const Duration(seconds: 5),
+    this.connectAttempts = 3,
     this.idleNeeded = const Duration(seconds: 10),
     this.pushInterval = const Duration(minutes: 3),
     this.pushTimeout = const Duration(seconds: 60),
@@ -46,6 +51,8 @@ class SyncSettings {
       interval: Duration(minutes: n('sync_pull_interval_minutes', 60)),
       pageSize: n('sync_pull_patch_size', 200),
       requestTimeout: Duration(seconds: n('sync_pull_timeout_seconds', 30)),
+      connectTimeout: Duration(seconds: n('sync_connect_timeout_seconds', 5).clamp(2, 30)),
+      connectAttempts: n('sync_connect_retries', 3).clamp(1, 5),
       idleNeeded: Duration(seconds: n('sync_idle_seconds', 10)),
       pushInterval: Duration(minutes: n('sync_push_interval_minutes', 3)),
       pushTimeout: Duration(seconds: n('sync_push_timeout_seconds', 60)),

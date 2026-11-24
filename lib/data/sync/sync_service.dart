@@ -28,6 +28,7 @@ import 'sync_settings.dart';
 import 'feeds.dart';
 import 'run_result.dart';
 import 'sync_engine.dart';
+import 'pull_http.dart';
 
 /// Runs the pull in the background: waits for the start delay, then repeats.
 /// Only works while the screen is idle, and cancels the request in flight the
@@ -48,6 +49,21 @@ class SyncService extends ChangeNotifier {
   bool _settingsLoaded = false;
   OfflineLevel? _lastLevel;
   bool _pullSoon = false;
+  PullHttp? _http;
+
+  /// The one connection holder of the running pull (created on first use,
+  /// closed when the pull ends).
+  PullHttp _pullHttp() => _http ??= PullHttp(
+        requestTimeout: _settings.requestTimeout,
+        attempts: _settings.connectAttempts,
+        connectTimeout: _settings.connectTimeout,
+        onRetry: (label, attempt, attempts, error) {
+          PerfStats.instance.recordPullRetry();
+          if (LocalPrefs.detailedLogging) {
+            TraceLog.log('Sync: retry $attempt/$attempts $label (${_short(error)})');
+          }
+        },
+      );
 
   bool get running => _running;
 
@@ -286,6 +302,12 @@ class SyncService extends ChangeNotifier {
       }
       return lastResult = RunResult(RunKind.done, count: rows);
     } finally {
+      final h = _http;
+      _http = null;
+      if (h != null) {
+        if (h.retries > 0) TraceLog.log('Sync: ${h.retries} connection retries in this pull');
+        h.close();
+      }
       if (isPull) _noteFinished(took.elapsed, rows);
       _running = false;
       _manualRun = false;
@@ -348,12 +370,12 @@ class SyncService extends ChangeNotifier {
   /// Keeps the cached device settings fresh. A failure never matters here:
   /// the last saved copy stays in use.
   Future<void> _refreshDeviceConfig(String token) async {
-    final client = http.Client();
     try {
-      final resp = await client
-          .get(Uri.parse('${AppConfig.apiBaseUrl}/api/sync/device-config'),
-              headers: {'Authorization': 'Bearer $token'})
-          .timeout(_settings.requestTimeout);
+      final resp = await _pullHttp().get(
+          Uri.parse('${AppConfig.apiBaseUrl}/api/sync/device-config'),
+          headers: {'Authorization': 'Bearer $token'},
+          abort: Completer<void>().future,
+          label: 'device-config');
       if (resp.statusCode == 200) {
         final cfg = jsonDecode(resp.body) as Map<String, dynamic>;
         await saveDeviceConfig(db, cfg);
@@ -366,8 +388,6 @@ class SyncService extends ChangeNotifier {
       }
     } catch (e) {
       TraceLog.log('Sync: device-config failed: $e');
-    } finally {
-      client.close();
     }
   }
 
@@ -486,13 +506,11 @@ class SyncService extends ChangeNotifier {
         'size': '$size',
       },
     );
-    final client = http.Client();
     try {
-      final req = http.AbortableRequest('GET', uri, abortTrigger: abort)
-        ..headers['Authorization'] = 'Bearer $token';
-      final streamed = await client.send(req).timeout(_settings.requestTimeout);
-      final resp = await http.Response.fromStream(streamed)
-          .timeout(_settings.requestTimeout);
+      final resp = await _pullHttp().get(uri,
+          headers: {'Authorization': 'Bearer $token'},
+          abort: abort,
+          label: 'removals');
       if (resp.statusCode == 401) throw const PullUnauthorized();
       if (resp.statusCode == 429 || resp.statusCode == 503) {
         final wait = SyncSchedule.parseRetryAfter(resp.headers['retry-after']);
@@ -513,8 +531,6 @@ class SyncService extends ChangeNotifier {
       );
     } on http.RequestAbortedException {
       throw const PullCancelled();
-    } finally {
-      client.close();
     }
   }
 
@@ -533,14 +549,11 @@ class SyncService extends ChangeNotifier {
         'size': '$size',
       },
     );
-    final client = http.Client();
     try {
-      final req = http.AbortableRequest('GET', uri, abortTrigger: abort)
-        ..headers['Authorization'] = 'Bearer $token';
-      final streamed =
-          await client.send(req).timeout(_settings.requestTimeout);
-      final resp = await http.Response.fromStream(streamed)
-          .timeout(_settings.requestTimeout);
+      final resp = await _pullHttp().get(uri,
+          headers: {'Authorization': 'Bearer $token'},
+          abort: abort,
+          label: feed);
       if (resp.statusCode == 401) throw const PullUnauthorized();
       if (resp.statusCode == 429 || resp.statusCode == 503) {
         final wait = SyncSchedule.parseRetryAfter(resp.headers['retry-after']);
@@ -559,8 +572,6 @@ class SyncService extends ChangeNotifier {
       );
     } on http.RequestAbortedException {
       throw const PullCancelled();
-    } finally {
-      client.close();
     }
   }
 }
