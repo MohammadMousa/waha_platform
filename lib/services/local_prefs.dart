@@ -283,6 +283,17 @@ class LocalPrefs {
     await _prefs?.setString(_kConfigCache, jsonEncode(config));
   }
 
+  // The server's per-table pull settings and when each table was last fully
+  // checked (combined pull). Small text copies, replaced on every answer.
+  static const _kSyncTableConfig = 'waha.sync_table_config';
+  static String? get syncTableConfig => _prefs?.getString(_kSyncTableConfig);
+  static Future<void> setSyncTableConfig(String v) =>
+      _p.setString(_kSyncTableConfig, v);
+  static const _kSyncCheckedAt = 'waha.sync_checked_at';
+  static String? get syncCheckedAt => _prefs?.getString(_kSyncCheckedAt);
+  static Future<void> setSyncCheckedAt(String v) =>
+      _p.setString(_kSyncCheckedAt, v);
+
   static const _kScanDisabledProducts = 'waha.scan_disabled_products';
   static bool get scanDisabledProducts {
     final saved = savedConfig;

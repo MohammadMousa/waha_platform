@@ -252,6 +252,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get offlineFullDone => '(full pull done)';
 
   @override
+  String get offlineRuleOff => 'Switched off on the server: not pulled';
+
+  @override
+  String offlineRuleEvery(String period) {
+    return 'Server setting: checked at most every $period';
+  }
+
+  @override
   String get offlineNotComplete => '(not complete)';
 
   @override
@@ -266,6 +274,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get offlinePullNow => 'Pull now';
+
+  @override
+  String get offlineResetStoreMethods => 'Reset store payment methods';
+
+  @override
+  String get offlineResetStoreMethodsAsk =>
+      'Delete the saved per-store payment method settings on this device and download them again for the current store?';
 
   @override
   String get offlinePulling => 'Pulling…';
@@ -291,6 +306,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pullCustomerActive =>
       'Pull skipped: the screen is in use. Try again when it is idle.';
+
+  @override
+  String get pullModeSkipped =>
+      'No scheduled pull: pulling runs only in full offline mode';
 
   @override
   String get pullBusy => 'A pull is already running…';

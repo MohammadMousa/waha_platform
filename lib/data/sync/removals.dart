@@ -74,22 +74,47 @@ class Removals {
     while (true) {
       if (beforeEachPage != null) await beforeEachPage();
       final page = await fetch(afterId: position, size: pageSize, abort: abort);
-      await db.transaction(() async {
-        if (page.resetRequired) {
-          await (db.update(db.syncState)..where((t) => t.feed.equals(feed).not()))
-              .write(const SyncStateCompanion(
-                  since: Value(null), afterId: Value(0)));
-        } else {
-          for (final (table, id) in page.items) {
-            removed += await _delete(db, table, id);
-          }
-        }
-        await _savePosition(db, page.nextAfterId);
-      });
+      removed += await applyPage(db, page);
       position = page.nextAfterId;
       if (page.last || page.resetRequired) return removed;
     }
   }
+
+  /// Applies one page I already hold (the per-table pull fetches it itself,
+  /// the combined pull gets it inside its answer): deletes the listed rows, or
+  /// on a reset clears the cursors of the pulled tables, and saves the new
+  /// position, all in ONE transaction. Returns how many local rows went.
+  static Future<int> applyPage(AppDatabase db, RemovalsPage page) {
+    return db.transaction(() async {
+      var removed = 0;
+      if (page.resetRequired) {
+        await resetTableCursors(db);
+      } else {
+        for (final (table, id) in page.items) {
+          removed += await _delete(db, table, id);
+        }
+      }
+      await _savePosition(db, page.nextAfterId);
+      return removed;
+    });
+  }
+
+  /// Every pulled table starts again from the beginning; the data stays
+  /// usable until the new pull replaces it.
+  static Future<void> resetTableCursors(AppDatabase db) =>
+      (db.update(db.syncState)..where((t) => t.feed.equals(feed).not()))
+          .write(const SyncStateCompanion(since: Value(null), afterId: Value(0)));
+
+  /// The saved position, or null when none was ever taken.
+  static Future<int?> savedPosition(AppDatabase db) async {
+    final s = await (db.select(db.syncState)..where((t) => t.feed.equals(feed)))
+        .getSingleOrNull();
+    return s?.afterId;
+  }
+
+  /// Takes the starting position (nothing listed).
+  static Future<void> saveStartingPosition(AppDatabase db, int afterId) =>
+      _savePosition(db, afterId);
 
   static Future<int> _delete(AppDatabase db, String table, int id) {
     switch (table) {

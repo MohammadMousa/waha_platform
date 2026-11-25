@@ -494,6 +494,18 @@ abstract class AppLocalizations {
   /// **'(full pull done)'**
   String get offlineFullDone;
 
+  /// No description provided for @offlineRuleOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Switched off on the server: not pulled'**
+  String get offlineRuleOff;
+
+  /// No description provided for @offlineRuleEvery.
+  ///
+  /// In en, this message translates to:
+  /// **'Server setting: checked at most every {period}'**
+  String offlineRuleEvery(String period);
+
   /// No description provided for @offlineNotComplete.
   ///
   /// In en, this message translates to:
@@ -517,6 +529,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pull now'**
   String get offlinePullNow;
+
+  /// No description provided for @offlineResetStoreMethods.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset store payment methods'**
+  String get offlineResetStoreMethods;
+
+  /// No description provided for @offlineResetStoreMethodsAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the saved per-store payment method settings on this device and download them again for the current store?'**
+  String get offlineResetStoreMethodsAsk;
 
   /// No description provided for @offlinePulling.
   ///
@@ -553,6 +577,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pull skipped: the screen is in use. Try again when it is idle.'**
   String get pullCustomerActive;
+
+  /// No description provided for @pullModeSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'No scheduled pull: pulling runs only in full offline mode'**
+  String get pullModeSkipped;
 
   /// No description provided for @pullBusy.
   ///

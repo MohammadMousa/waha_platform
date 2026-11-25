@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../data/db/app_database.dart';
 import '../data/sync/feeds.dart';
+import '../data/sync/table_freshness.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../services/local_prefs.dart';
 import '../utils/time_text.dart';
@@ -75,13 +76,41 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
     showResultToast(pullResultText(l, r), problem: isProblem(r));
   }
 
+  Future<void> _resetStoreMethods(AppLocalizations l) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text(l.offlineResetStoreMethodsAsk),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l.commonCancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l.commonOk)),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (!await _svc.resetStorePaymentMethods()) {
+      showResultToast(l.pullBusy, problem: true);
+      return;
+    }
+    await _pull(l);
+  }
+
   /// Rows the server deleted that this device removed too (products,
   /// categories, barcodes, gallery images).
   Widget _removalsTile(AppLocalizations l) {
     final at = LocalPrefs.removalsAt;
     final problem = LocalPrefs.removalsProblem;
+    final rule = _ruleLine(l, 'removals');
     if (at == null) {
-      return ListTile(dense: true, title: Text(l.offlineRemovalsNever));
+      return ListTile(
+        dense: true,
+        title: Text(l.offlineRemovalsNever),
+        subtitle: rule.isEmpty ? null : Text(rule.trim()),
+      );
     }
     if (problem == 'unsupported') {
       return ListTile(
@@ -96,9 +125,28 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
           '${LocalPrefs.removalsLast}', '${LocalPrefs.removalsTotal}')),
       subtitle: Text(
         l.offlineRemovalsChecked(whenText(l, at)) +
-            (problem.isNotEmpty ? '\n${l.offlineErrorLine(problem)}' : ''),
+            (problem.isNotEmpty ? '\n${l.offlineErrorLine(problem)}' : '') +
+            rule,
       ),
     );
+  }
+
+  /// What the server set for this table (combined pull): off, or checked at
+  /// most every so often. Nothing is shown when the server set nothing.
+  String _ruleLine(AppLocalizations l, String feed) {
+    final r = TableFreshness.fromPrefs().rule(feed);
+    if (r == null) return '';
+    if (!r.active) return '\n${l.offlineRuleOff}';
+    if (r.ttlSeconds <= 0) return '';
+    final s = r.ttlSeconds;
+    final period = s % 86400 == 0
+        ? '${s ~/ 86400}d'
+        : s % 3600 == 0
+            ? '${s ~/ 3600}h'
+            : s % 60 == 0
+                ? '${s ~/ 60}m'
+                : '${s}s';
+    return '\n${l.offlineRuleEvery(period)}';
   }
 
   @override
@@ -119,7 +167,8 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
               subtitle: Text(
                 '${l.offlineCursor('${_state[f]?.since ?? '-'}', '${_state[f]?.afterId ?? 0}')}'
                 '\n${l.offlineLastPull(whenIsoText(l, _state[f]?.lastPullAt))}'
-                '${_state[f]?.lastError != null ? '\n${l.offlineErrorLine(_state[f]!.lastError!)}' : ''}',
+                '${_state[f]?.lastError != null ? '\n${l.offlineErrorLine(_state[f]!.lastError!)}' : ''}'
+                '${_ruleLine(l, f)}',
               ),
             ),
           _removalsTile(l),
@@ -144,9 +193,21 @@ class _OfflineDataPanelState extends State<OfflineDataPanel> {
             padding: const EdgeInsets.all(12),
             child: Align(
               alignment: AlignmentDirectional.centerStart,
-              child: FilledButton(
-                onPressed: _svc.running ? null : () => _pull(l),
-                child: Text(_svc.running ? l.offlinePulling : l.offlinePullNow),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
+                    onPressed: _svc.running ? null : () => _pull(l),
+                    child:
+                        Text(_svc.running ? l.offlinePulling : l.offlinePullNow),
+                  ),
+                  OutlinedButton(
+                    onPressed:
+                        _svc.running ? null : () => _resetStoreMethods(l),
+                    child: Text(l.offlineResetStoreMethods),
+                  ),
+                ],
               ),
             ),
           ),

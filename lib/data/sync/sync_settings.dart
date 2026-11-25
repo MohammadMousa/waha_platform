@@ -11,6 +11,10 @@ class SyncSettings {
   // New-connection limit and number of tries for one pull request.
   final Duration connectTimeout;
   final int connectAttempts;
+  // Combined pull (one request per pull): the server's api_level and the
+  // kill switch property sync_combined_pull.
+  final int apiLevel;
+  final bool combinedPull;
   final Duration idleNeeded;
   // Order push (offline.md section 1).
   final Duration pushInterval;
@@ -33,6 +37,8 @@ class SyncSettings {
     this.requestTimeout = const Duration(seconds: 30),
     this.connectTimeout = const Duration(seconds: 5),
     this.connectAttempts = 3,
+    this.apiLevel = 0,
+    this.combinedPull = true,
     this.idleNeeded = const Duration(seconds: 10),
     this.pushInterval = const Duration(minutes: 3),
     this.pushTimeout = const Duration(seconds: 60),
@@ -53,6 +59,8 @@ class SyncSettings {
       requestTimeout: Duration(seconds: n('sync_pull_timeout_seconds', 30)),
       connectTimeout: Duration(seconds: n('sync_connect_timeout_seconds', 5).clamp(2, 30)),
       connectAttempts: n('sync_connect_retries', 3).clamp(1, 5),
+      apiLevel: n('api_level', 0),
+      combinedPull: (c['sync_combined_pull'] ?? 'true').toLowerCase() != 'false',
       idleNeeded: Duration(seconds: n('sync_idle_seconds', 10)),
       pushInterval: Duration(minutes: n('sync_push_interval_minutes', 3)),
       pushTimeout: Duration(seconds: n('sync_push_timeout_seconds', 60)),

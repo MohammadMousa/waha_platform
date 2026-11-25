@@ -29,6 +29,8 @@ import 'feeds.dart';
 import 'run_result.dart';
 import 'sync_engine.dart';
 import 'pull_http.dart';
+import 'pull_combined.dart';
+import 'table_freshness.dart';
 
 /// Runs the pull in the background: waits for the start delay, then repeats.
 /// Only works while the screen is idle, and cancels the request in flight the
@@ -50,6 +52,14 @@ class SyncService extends ChangeNotifier {
   OfflineLevel? _lastLevel;
   bool _pullSoon = false;
   PullHttp? _http;
+  TableFreshness? _freshness;
+  TableFreshness get _fresh => _freshness ??= TableFreshness.fromPrefs();
+  // Set when the server has no combined call (404): the per-table way for the
+  // rest of this app run.
+  bool _combinedBroken = false;
+
+  bool get _useCombined =>
+      _settings.combinedPull && _settings.apiLevel >= 7 && !_combinedBroken;
 
   /// The one connection holder of the running pull (created on first use,
   /// closed when the pull ends).
@@ -206,6 +216,16 @@ class SyncService extends ChangeNotifier {
     _timer = Timer(d, () => unawaited(runOnce()));
   }
 
+  /// The Settings button "Reset store payment methods". False when a pull is
+  /// running (nothing is changed then).
+  Future<bool> resetStorePaymentMethods() async {
+    if (_running) return false;
+    await SyncEngine.clearStorePaymentMethods(db);
+    _fresh.forget('store-payment-methods');
+    notifyListeners();
+    return true;
+  }
+
   /// One full cycle over every feed. Safe to call from Settings too.
   ///
   /// [manual] is the Settings button: the person pressing it is the one using
@@ -220,16 +240,21 @@ class SyncService extends ChangeNotifier {
     var isPull = false; // false for the early returns that pulled nothing
     try {
       await refreshSettings();
-      // `caching`: no scheduled pull and no first download — reads fill the
-      // local copy as they happen. The settings were refreshed above (so a
+      // Pulling runs only in `full`. In `caching` and `off` there is no
+      // scheduled pull and no first download (in `caching`, reads fill the
+      // local copy as they happen). The settings were refreshed above (so a
       // switch to `full` is noticed); only the Pull now button still pulls.
-      if (!manual && _settings.offlineLevel == OfflineLevel.caching) {
-        TraceLog.log('Sync: caching mode, no scheduled pull');
-        // Still keep the device settings (store, device number, VAT, order
-        // numbering): an order made locally while the server is down needs them.
-        final t = authService.token;
-        if (t != null) await _refreshDeviceConfig(t);
-        return lastResult = const RunResult(RunKind.done, count: 0);
+      if (!manual && _settings.offlineLevel != OfflineLevel.full) {
+        TraceLog.log(
+            'Sync: ${_settings.offlineLevel.name} mode, no scheduled pull');
+        // `caching` still keeps the device settings (store, device number, VAT,
+        // order numbering): an order made locally while the server is down
+        // needs them.
+        if (_settings.offlineLevel == OfflineLevel.caching) {
+          final t = authService.token;
+          if (t != null) await _refreshDeviceConfig(t);
+        }
+        return lastResult = const RunResult(RunKind.modeSkipped);
       }
       final token = authService.token;
       if (token == null) {
@@ -237,6 +262,13 @@ class SyncService extends ChangeNotifier {
         return lastResult = const RunResult(RunKind.noSession);
       }
       isPull = true;
+      if (_useCombined) {
+        final (result, n) = await _runCombined(token, manual);
+        if (result != null) {
+          rows += n;
+          return lastResult = result;
+        }
+      }
       await _refreshDeviceConfig(token);
       final engine = SyncEngine(
         db: db,
@@ -367,6 +399,13 @@ class SyncService extends ChangeNotifier {
     return t.length > 140 ? '${t.substring(0, 140)}…' : t;
   }
 
+  Future<void> _applyDeviceConfig(Map<String, dynamic> cfg) async {
+    await saveDeviceConfig(db, cfg);
+    // The device settings carry the VAT choice with its default applied;
+    // it is the opposite of the online `prices_exclude_vat`.
+    await LocalPrefs.setPricesExcludeVat(!(cfg['pricesIncludeVat'] as bool? ?? true));
+  }
+
   /// Keeps the cached device settings fresh. A failure never matters here:
   /// the last saved copy stays in use.
   Future<void> _refreshDeviceConfig(String token) async {
@@ -377,17 +416,101 @@ class SyncService extends ChangeNotifier {
           abort: Completer<void>().future,
           label: 'device-config');
       if (resp.statusCode == 200) {
-        final cfg = jsonDecode(resp.body) as Map<String, dynamic>;
-        await saveDeviceConfig(db, cfg);
-        // The device settings carry the VAT choice with its default applied;
-        // it is the opposite of the online `prices_exclude_vat`.
-        await LocalPrefs.setPricesExcludeVat(
-            !(cfg['pricesIncludeVat'] as bool? ?? true));
+        await _applyDeviceConfig(jsonDecode(resp.body) as Map<String, dynamic>);
       } else {
         TraceLog.log('Sync: device-config answered ${resp.statusCode}');
       }
     } catch (e) {
       TraceLog.log('Sync: device-config failed: $e');
+    }
+  }
+
+  Future<CombinedAnswer> _fetchCombined(
+      String token, Map<String, dynamic> body, Future<void> abort) async {
+    try {
+      final resp = await _pullHttp().post(
+        Uri.parse('${AppConfig.apiBaseUrl}/api/sync/pull'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+        abort: abort,
+        label: 'pull',
+      );
+      if (resp.statusCode == 401) throw const PullUnauthorized();
+      if (resp.statusCode == 404) throw const CombinedNotSupported();
+      if (resp.statusCode == 429 || resp.statusCode == 503) {
+        final wait = SyncSchedule.parseRetryAfter(resp.headers['retry-after']);
+        if (wait != null) throw PullRetryAfter(wait);
+      }
+      if (resp.statusCode != 200) throw PullHttpError(resp.statusCode);
+      return CombinedAnswer.parse(jsonDecode(resp.body) as Map<String, dynamic>);
+    } on http.RequestAbortedException {
+      throw const PullCancelled();
+    }
+  }
+
+  /// The whole pull as one request (more only while a table has more to
+  /// send). Returns null when the server has no such call, so the caller
+  /// falls back to the per-table way.
+  Future<(RunResult?, int)> _runCombined(String token, bool manual) async {
+    _abort = Completer<void>();
+    final puller = CombinedPuller(
+      db: db,
+      freshness: _fresh,
+      pageSize: _settings.pageSize,
+      fetch: (body, abort) => _fetchCombined(token, body, abort),
+      onDeviceConfig: _applyDeviceConfig,
+      onProgress: (done, total, step) => progress.value = SyncProgress(done, total, step),
+      onCall: (n, asked, skipped, rows) {
+        PerfStats.instance.recordPullCall();
+        if (LocalPrefs.detailedLogging) {
+          TraceLog.log('Sync: call $n asked [${asked.join(', ')}]'
+              '${skipped.isEmpty ? '' : ' left out [${skipped.join(', ')}]'}, $rows rows');
+        }
+      },
+    );
+    progress.value = SyncProgress(0, kSyncFeeds.length + 1, 'removals');
+    try {
+      final r = await puller.run(
+        manual: manual,
+        abort: _abort!.future,
+        beforeEachCall: () async {
+          if (!manual && ActivityGate.instance.idleFor < _settings.idleNeeded) {
+            throw const PullCancelled();
+          }
+        },
+      );
+      // Only a real removals check moves the "last check" time and total; an
+      // answer of fresh or off leaves them as they were.
+      if (r.removalsChecked) await LocalPrefs.recordRemovals(r.removed);
+      return (RunResult(RunKind.done, count: r.rows), r.rows);
+    } on CombinedNotSupported {
+      _combinedBroken = true;
+      TraceLog.log('Sync: the server has no combined pull (404), using the per-table pull');
+      return (null, 0);
+    } on PullCancelled {
+      if (LocalPrefs.detailedLogging) TraceLog.log('Sync: pull cancelled (customer active)');
+      return (const RunResult(RunKind.customerActive), 0);
+    } on PullRetryAfter catch (r) {
+      TraceLog.log('Sync: server asked to wait ${r.delay.inSeconds}s');
+      _retryAfterOverride = r.delay;
+      return (RunResult(RunKind.serverBusy, waitSeconds: r.delay.inSeconds), 0);
+    } on PullUnauthorized {
+      TraceLog.log('Sync: 401 on the pull, stopping');
+      return (const RunResult(RunKind.authStopped), 0);
+    } catch (e) {
+      TraceLog.log('Sync: pull failed: $e');
+      if (e is! PullHttpError) noteNetwork(false); // no answer at all
+      final engine = SyncEngine(db: db, fetch: (f, {since, required afterId, required size, required abort}) =>
+          throw UnimplementedError());
+      for (final f in puller.unfinished) {
+        if (f != 'removals') await engine.recordError(f, e.toString());
+      }
+      return (RunResult(RunKind.failed, detail: _short(e)), 0);
+    } finally {
+      _abort = null;
     }
   }
 

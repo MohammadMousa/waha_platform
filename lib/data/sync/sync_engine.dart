@@ -99,30 +99,48 @@ class SyncEngine {
       if (beforeEachPage != null) await beforeEachPage();
       final page = await fetch(feed,
           since: since, afterId: afterId, size: pageSize, abort: abort);
-      await db.transaction(() async {
-        written += await upsertPage(db, feed, page.items);
-        final nowIso = DateTime.now().toUtc().toIso8601String();
-        final prev = await (db.select(db.syncState)
-              ..where((t) => t.feed.equals(feed)))
-            .getSingleOrNull();
-        await db.into(db.syncState).insertOnConflictUpdate(
-              SyncStateCompanion(
-                feed: Value(feed),
-                since: Value(page.nextSince ?? prev?.since),
-                afterId: Value(page.nextSince == null
-                    ? (prev?.afterId ?? 0)
-                    : page.nextAfterId),
-                fullPullDone:
-                    Value(page.last ? true : (prev?.fullPullDone ?? false)),
-                lastPullAt: Value(page.last ? nowIso : prev?.lastPullAt),
-                lastError: const Value(null),
-              ),
-            );
-      });
+      written += await savePage(db, feed, page);
       if (page.last) return written;
       since = page.nextSince;
       afterId = page.nextAfterId;
     }
+  }
+
+  /// Saves one page and its cursor in ONE transaction (so a dropped request
+  /// or a crash saves nothing). Returns the rows that were new or changed.
+  /// Shared by the per-table pull and the combined pull, so the cursor rules
+  /// cannot drift apart.
+  /// Manual fix: drops every local store-payment-method row and its saved
+  /// position, so the next pull brings only the rows of the store this device
+  /// is signed in to. (The local rows carry no store id, so wrong ones cannot be
+  /// picked out; a method with no store row is still offered.)
+  static Future<void> clearStorePaymentMethods(AppDatabase db) =>
+      db.transaction(() async {
+        await db.delete(db.localStorePaymentMethods).go();
+        await (db.delete(db.syncState)
+              ..where((t) => t.feed.equals('store-payment-methods')))
+            .go();
+      });
+
+  static Future<int> savePage(AppDatabase db, String feed, PullPage page) {
+    return db.transaction(() async {
+      final written = await upsertPage(db, feed, page.items);
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      final prev = await (db.select(db.syncState)..where((t) => t.feed.equals(feed)))
+          .getSingleOrNull();
+      await db.into(db.syncState).insertOnConflictUpdate(
+            SyncStateCompanion(
+              feed: Value(feed),
+              since: Value(page.nextSince ?? prev?.since),
+              afterId: Value(
+                  page.nextSince == null ? (prev?.afterId ?? 0) : page.nextAfterId),
+              fullPullDone: Value(page.last ? true : (prev?.fullPullDone ?? false)),
+              lastPullAt: Value(page.last ? nowIso : prev?.lastPullAt),
+              lastError: const Value(null),
+            ),
+          );
+      return written;
+    });
   }
 
   Future<void> recordError(String feed, String message) async {

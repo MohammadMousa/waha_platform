@@ -53,14 +53,29 @@ class PullHttp {
     Map<String, String> headers = const {},
     required Future<void> abort,
     String? label,
-  }) async {
+  }) =>
+      _send('GET', uri, headers, null, abort, label);
+
+  /// A POST that only reads (the combined pull): repeated like a GET.
+  Future<http.Response> post(
+    Uri uri, {
+    Map<String, String> headers = const {},
+    required String body,
+    required Future<void> abort,
+    String? label,
+  }) =>
+      _send('POST', uri, headers, body, abort, label);
+
+  Future<http.Response> _send(String method, Uri uri, Map<String, String> headers,
+      String? body, Future<void> abort, String? label) async {
     final name = label ?? uri.pathSegments.last;
     for (var n = 1;; n++) {
       final client = _client ??= _make();
       Object error;
       try {
-        final req = http.AbortableRequest('GET', uri, abortTrigger: abort)
+        final req = http.AbortableRequest(method, uri, abortTrigger: abort)
           ..headers.addAll(headers);
+        if (body != null) req.body = body;
         final streamed = await client.send(req).timeout(requestTimeout);
         return await http.Response.fromStream(streamed).timeout(requestTimeout);
       } on http.RequestAbortedException {

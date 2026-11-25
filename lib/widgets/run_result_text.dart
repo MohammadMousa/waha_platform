@@ -13,6 +13,7 @@ String pullResultText(AppLocalizations l, RunResult r) => switch (r.kind) {
       RunKind.busy => l.pullBusy,
       RunKind.serverBusy => l.pullServerBusy('${r.waitSeconds}'),
       RunKind.authStopped => l.pullAuthStopped,
+      RunKind.modeSkipped => l.pullModeSkipped,
     };
 
 /// Plain-language text (Arabic or English) for how a send ended.
@@ -25,7 +26,10 @@ String sendResultText(AppLocalizations l, RunResult r) => switch (r.kind) {
       RunKind.noSession => l.sendNoSession,
       RunKind.authStopped => l.sendAuthStopped,
       RunKind.busy => l.sendBusy,
-      RunKind.customerActive || RunKind.serverBusy => l.sendFailed(''),
+      RunKind.customerActive ||
+      RunKind.serverBusy ||
+      RunKind.modeSkipped =>
+        l.sendFailed(''),
     };
 
 String clockTime(DateTime t) {

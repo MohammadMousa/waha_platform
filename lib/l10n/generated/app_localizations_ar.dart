@@ -248,6 +248,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String get offlineFullDone => '(تم التحميل الكامل)';
 
   @override
+  String get offlineRuleOff => 'متوقف من الخادم: لا يتم تحميله';
+
+  @override
+  String offlineRuleEvery(String period) {
+    return 'إعداد الخادم: يُفحص كل $period على الأكثر';
+  }
+
+  @override
   String get offlineNotComplete => '(غير مكتمل)';
 
   @override
@@ -262,6 +270,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get offlinePullNow => 'تحميل الآن';
+
+  @override
+  String get offlineResetStoreMethods => 'إعادة ضبط طرق الدفع الخاصة بالفرع';
+
+  @override
+  String get offlineResetStoreMethodsAsk =>
+      'حذف إعدادات طرق الدفع الخاصة بالفرع المحفوظة على هذا الجهاز وتنزيلها من جديد للفرع الحالي؟';
 
   @override
   String get offlinePulling => 'جارٍ التحميل…';
@@ -287,6 +302,10 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get pullCustomerActive =>
       'تم التخطي: الشاشة قيد الاستخدام. حاول مرة أخرى عند الخمول.';
+
+  @override
+  String get pullModeSkipped =>
+      'لا يوجد تحميل مجدول: التحميل يعمل فقط في وضع الأوفلاين الكامل';
 
   @override
   String get pullBusy => 'هناك تحميل قيد التنفيذ…';

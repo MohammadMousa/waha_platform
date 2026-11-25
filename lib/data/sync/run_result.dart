@@ -8,6 +8,9 @@ enum RunKind {
   busy,
   serverBusy,
   authStopped,
+
+  /// The scheduled cycle did not pull because the mode is not `full`.
+  modeSkipped,
 }
 
 class RunResult {

@@ -53,6 +53,7 @@ class PerfStats {
   int pullsZeroRow = 0;
   int pullRows = 0;
   int pullRetries = 0;
+  int pullCalls = 0;
   int pullLongestMs = 0;
   DateTime? lastPullOkAt;
 
@@ -85,7 +86,7 @@ class PerfStats {
     _buildMsSum = _rasterMsSum = 0;
     dbReads = dbWrites = dbSlow = dbMaxMs = _dbMsSum = 0;
     pullsAttempted = pullsCompleted = pullsFailed = pullsPaused = pullsZeroRow = 0;
-    pullRows = pullLongestMs = pullRetries = 0;
+    pullRows = pullLongestMs = pullRetries = pullCalls = 0;
     lastPullOkAt = null;
     sounds = 0;
   }
@@ -151,6 +152,12 @@ class PerfStats {
     if (took.inMilliseconds > pullLongestMs) pullLongestMs = took.inMilliseconds;
   }
 
+  /// One request of a combined pull.
+  void recordPullCall() {
+    if (!_enabled) return;
+    pullCalls++;
+  }
+
   /// A pull request repeated on a new connection.
   void recordPullRetry() {
     if (!_enabled) return;
@@ -178,7 +185,7 @@ class PerfStats {
         'worst=${worstFrameMs}ms avgBuild=${_avg(_buildMsSum, frames)}ms avgDraw=${_avg(_rasterMsSum, frames)}ms | '
         'database: reads=$dbReads writes=$dbWrites avg=${_avg(_dbMsSum, dbN)}ms max=${dbMaxMs}ms over100ms=$dbSlow | '
         'sync: attempted=$pullsAttempted completed=$pullsCompleted failed=$pullsFailed paused=$pullsPaused '
-        'zeroRow=$pullsZeroRow rows=$pullRows retries=$pullRetries longest=${(pullLongestMs / 1000).toStringAsFixed(1)}s '
+        'zeroRow=$pullsZeroRow rows=$pullRows retries=$pullRetries calls=$pullCalls longest=${(pullLongestMs / 1000).toStringAsFixed(1)}s '
         'lastOk=${lastPullOkAt == null ? "none" : _clock(lastPullOkAt!)} | '
         'sounds=$sounds';
   }

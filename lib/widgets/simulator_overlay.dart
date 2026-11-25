@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_config.dart';
+import '../data/sync/sync_service.dart';
 import '../router/app_router.dart';
 import '../screens/camera_scan_screen.dart';
 import '../screens/settings_screen.dart';
@@ -328,9 +329,10 @@ class _SessionInfoFooterState extends State<_SessionInfoFooter> {
       child: SafeArea(
         top: false,
         // Rebuilds when the Custom Connection changes so the host shown here
-        // is never stale.
+        // is never stale, and after every sync cycle so a changed offline
+        // mode shows up.
         child: ListenableBuilder(
-          listenable: AppConfig.connection,
+          listenable: Listenable.merge([AppConfig.connection, SyncService.instance]),
           builder: (context, _) => _strip(),
         ),
       ),
