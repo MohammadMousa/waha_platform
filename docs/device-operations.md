@@ -73,7 +73,24 @@ In Android exit records, a deliberate restart can look like a killed process. Ch
 ### SDK recovery
 
 - **Lost USB service:** the SDK can destroy its service after the app has been in the background. The app re-opens it, and checks it before every payment.
-- **SDK crash:** a runtime error in an SDK background thread is contained, logged, and followed by a reconnect and a log upload. At most 3 per minute. Other crashes end the app as normal.
+- **SDK crash:** a runtime error in an SDK background thread is contained, logged, uploaded and followed by a USB repair. At most 4 per minute. Other crashes end the app as normal.
+
+### USB repair after an SDK crash
+
+The crash can leave the SDK with a broken port. **Until a port opens again, the app never closes or disconnects it**, because that can crash the app.
+
+1. It waits until the terminal is attached and USB has not changed for 3 s (up to 60 s).
+2. It connects again and waits 15 s for the port to open. At most 3 attempts in 10 minutes.
+3. A port that opens, or an approved payment, ends the repair.
+4. If the repair fails, the app asks for **one restart** and uploads the log.
+
+The repair restart does not need scheduled restarts to be on, and has no 10-minute minimum. It uses the same idle rule and 10 s countdown, checked every 5 s. "Not now" puts it off for 30 s.
+
+**Limit:** after a repair restart, another needs both an approved payment since then and 30 minutes. The limit is saved on the device and uses time since boot. A tablet restart starts the 30 minutes again. If the limit cannot be saved or read, there is no repair restart.
+
+If the port does not open within 60 s of that restart, the app logs it and uploads the log. Trace lines start with `SDK REPAIR`, including the first payment result after a repair.
+
+This does not cover a terminal that stays connected but does not answer. A USB disconnect while the port is broken can still crash the app.
 
 ---
 

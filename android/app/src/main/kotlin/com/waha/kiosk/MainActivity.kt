@@ -101,6 +101,11 @@ import org.json.JSONObject
  */
 class MainActivity : FlutterActivity() {
     private val METHOD_CHANNEL = "com.waha/geidea"
+    private val REPAIR_RESTART_REASON = "terminal USB repair failed"
+    private val REPAIR_LIMIT_KEY = "sdk_repair_restart"
+    private val USB_SETTLE_MS = 3_000L
+    private val PORT_CHECK_AFTER_RESTART_MS = 60_000L
+    private val PORT_BROKEN_REFUSAL = "Refused: the terminal port is being repaired."
     private val EVENT_CHANNEL = "com.waha/geidea/events"
     private val TAG = "GeideaBridge"
 
@@ -316,9 +321,11 @@ class MainActivity : FlutterActivity() {
             if (sdkCrashGuard.contain(isMain, throwable, SystemClock.elapsedRealtime())) {
                 // A thread inside the Geidea SDK died (seen on a USB re-attach). The
                 // thread is gone, but the app can carry on: log it, upload the log,
-                // and open the SDK's connection again from scratch. Anything that is
+                // and connect again WITHOUT closing (see SdkPortState). Anything that is
                 // not clearly the SDK's — or that repeats — still crashes as before.
-                logTrace("SDK THREAD CRASH CONTAINED (${sdkCrashGuard.recent(SystemClock.elapsedRealtime())} in the last minute) — the app keeps running; re-opening the SDK connection")
+                logTrace("SDK THREAD CRASH CONTAINED (${sdkCrashGuard.recent(SystemClock.elapsedRealtime())} in the last minute) — the app keeps running; connecting the terminal again")
+                // Before anything else: from here on nothing may close the port.
+                val startRepair = sdkPort.onSdkCrash()
                 TraceLogWriter.writer.flush(500)
                 try {
                     AutoLogUploader.trigger(applicationContext, "crash:sdk-thread") { logTrace(it) }
@@ -326,7 +333,8 @@ class MainActivity : FlutterActivity() {
                 }
                 isUsbConnected = false
                 connectGate.outcome()
-                runOnUiThread { reopenSdkService("an SDK thread crashed", force = true) }
+                logNextPaymentAfterRepair = true
+                if (startRepair) startSdkRepair()
                 return@setDefaultUncaughtExceptionHandler
             }
             // The line is queued for the writer thread; the process is about
@@ -336,6 +344,10 @@ class MainActivity : FlutterActivity() {
         }
         logTrace("onCreate start ${processInfo()} restoredState=${savedInstanceState != null}")
         loggingPrefs().getString("restart_reason", null)?.let { why ->
+            if (why == REPAIR_RESTART_REASON) {
+                logNextPaymentAfterRepair = true
+                checkPortAfterRepairRestart()
+            }
             logTrace("STARTED AFTER A DELIBERATE RESTART: $why")
             loggingPrefs().edit().remove("restart_reason").apply()
         }
@@ -427,6 +439,8 @@ class MainActivity : FlutterActivity() {
                         detectTerminal(source)
                         result.success(true)
                     }
+                    "repairRestartWanted" -> result.success(repairRestartWanted())
+                    "repairRestart" -> result.success(repairRestart())
                     "restartApp" -> {
                         restartApp(call.argument<String>("reason") ?: "restart")
                         result.success(true)
@@ -492,6 +506,7 @@ class MainActivity : FlutterActivity() {
                             stopPaymentHeartbeat()
                             if (reason == "payment:timeout") dartGaveUp = true
                             if (!lastPaymentCalledBack) {
+                                logFirstPaymentAfterRepair("no result from the terminal")
                                 logTrace("PAYMENT VERDICT (no SDK callback, $reason): " +
                                     TerminalDiagnostics.paymentVerdict(paymentStartEpoch, false, null, null, lastHandshakeOk))
                                 // A silent hang, not a disconnect: the SDK never called back at
@@ -505,12 +520,14 @@ class MainActivity : FlutterActivity() {
                     "probeChannels" -> {
                         if (paymentInFlight) {
                             result.success("Refused: a payment is waiting on the terminal.")
+                        } else if (sdkPort.broken) {
+                            result.success(PORT_BROKEN_REFUSAL)
                         } else {
                             Thread {
                                 val text = try {
                                     TerminalDiagnostics.probe(
                                         applicationContext,
-                                        disconnectSdk = { terminalResponder?.disconnectUsbSerialConnection() },
+                                        disconnectSdk = { if (!sdkPort.broken) terminalResponder?.disconnectUsbSerialConnection() },
                                         reconnectSdk = { runOnUiThread { isUsbConnected = false; tryConnect(force = true) } },
                                         trace = { logTrace(it) },
                                     ).text
@@ -602,6 +619,7 @@ class MainActivity : FlutterActivity() {
             onSdkLogLine(line)
         }
         UsbMilestones.register(this, trace = { logTrace(it) }, onEvent = { name ->
+            if (name == "PORT_OPEN_OK") onPortHealthy("the port opened")
             if (name in AutoLogUploader.USB_TRIGGER_NAMES) {
                 AutoLogUploader.trigger(applicationContext, "usb:$name") { logTrace(it) }
             }
@@ -747,7 +765,108 @@ class MainActivity : FlutterActivity() {
 
     @Volatile private var activityStarted = false
     private val reopenLimiter = ReopenLimiter(clock = { SystemClock.elapsedRealtime() })
-    private val sdkCrashGuard = SdkCrashGuard()
+    // Room for the first crash and the three reconnect attempts that may each crash.
+    private val sdkCrashGuard = SdkCrashGuard(maxPerWindow = 4)
+
+    // ---- repair of a broken USB port (see SdkPortState) ---------------------
+
+    private val sdkPort = SdkPortState(clock = { SystemClock.elapsedRealtime() })
+    @Volatile private var logNextPaymentAfterRepair = false
+    @Volatile private var lastBlockedRestartReason: String? = null
+
+    private fun startSdkRepair() {
+        val runner = SdkRepairRunner(
+            state = sdkPort,
+            usbSettled = { usbSettled() },
+            connect = { runOnUiThread { tryConnect(force = true) } },
+            log = { logTrace(it) },
+            onGaveUp = {
+                try {
+                    AutoLogUploader.trigger(applicationContext, "sdk-repair:failed") { logTrace(it) }
+                } catch (_: Throwable) {
+                }
+            },
+        )
+        Thread({ runner.run() }, "SdkRepair").apply { isDaemon = true }.start()
+    }
+
+    /** The terminal is attached and USB has not changed for a few seconds. */
+    private fun usbSettled(): Boolean = try {
+        val lastChange = UsbMilestones.last("USB_ATTACHED", "USB_DETACHED")?.at ?: 0L
+        System.currentTimeMillis() - lastChange >= USB_SETTLE_MS &&
+            TerminalDiagnostics.sdkDevice(applicationContext) != null
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun onPortHealthy(why: String) {
+        if (sdkPort.onPortHealthy()) logTrace("SDK REPAIR: port healthy ($why)")
+    }
+
+    private fun restartLimitDecision(): RepairRestartGate.Decision {
+        val d = try {
+            RepairRestartGate.decide(
+                loggingPrefs().getString(REPAIR_LIMIT_KEY, null), SystemClock.elapsedRealtime(), bootCount())
+        } catch (t: Throwable) {
+            RepairRestartGate.Decision(false, "the saved limit cannot be read")
+        }
+        d.save?.let { loggingPrefs().edit().putString(REPAIR_LIMIT_KEY, it.encode()).commit() }
+        return d
+    }
+
+    /** Whether the repair has failed and a restart for it is allowed now. */
+    private fun repairRestartWanted(): Boolean {
+        if (!sdkPort.repairFailed) {
+            lastBlockedRestartReason = null
+            return false
+        }
+        val d = restartLimitDecision()
+        if (!d.allowed && d.reason != lastBlockedRestartReason) {
+            lastBlockedRestartReason = d.reason
+            logTrace("SDK REPAIR: no restart: ${d.reason}")
+        }
+        return d.allowed
+    }
+
+    /** The one repair restart. The limit is saved first; without it there is no restart. */
+    private fun repairRestart(): Boolean {
+        if (!repairRestartWanted()) return false
+        val record = RepairRestartGate.Record(SystemClock.elapsedRealtime(), bootCount(), approvedSince = false)
+        val saved = loggingPrefs().edit().putString(REPAIR_LIMIT_KEY, record.encode()).commit()
+        if (!saved) {
+            logTrace("SDK REPAIR: no restart: the limit could not be saved")
+            return false
+        }
+        restartApp(REPAIR_RESTART_REASON)
+        return true
+    }
+
+    private fun noteApprovedPaymentForRepair() {
+        onPortHealthy("a payment was approved")
+        val stored = loggingPrefs().getString(REPAIR_LIMIT_KEY, null) ?: return
+        val record = RepairRestartGate.Record.decode(stored) ?: return
+        if (!record.approvedSince) {
+            loggingPrefs().edit().putString(REPAIR_LIMIT_KEY, record.copy(approvedSince = true).encode()).commit()
+        }
+    }
+
+    private fun logFirstPaymentAfterRepair(outcome: String) {
+        if (!logNextPaymentAfterRepair) return
+        logNextPaymentAfterRepair = false
+        logTrace("SDK REPAIR: first payment result after the repair: $outcome")
+    }
+
+    private fun checkPortAfterRepairRestart() {
+        val since = System.currentTimeMillis()
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (UsbMilestones.since(since).any { it.name == "PORT_OPEN_OK" }) {
+                logTrace("SDK REPAIR: after the restart the port opened")
+            } else {
+                logTrace("SDK REPAIR: after the restart the port did NOT open within ${PORT_CHECK_AFTER_RESTART_MS / 1000}s")
+                AutoLogUploader.trigger(applicationContext, "sdk-repair:port-closed-after-restart") { logTrace(it) }
+            }
+        }, PORT_CHECK_AFTER_RESTART_MS)
+    }
 
     /** Whether the SDK's background USB service is bound right now. */
     private fun sdkServiceBound(): Boolean = try {
@@ -780,6 +899,10 @@ class MainActivity : FlutterActivity() {
         val responder = terminalResponder
         if (responder == null) {
             initializeTerminal()
+            return
+        }
+        if (sdkPort.broken) {
+            logTrace("SDK USB service not re-opened ($reason): the port is broken and closing it would crash the app")
             return
         }
         if (!force && sdkServiceBound()) return
@@ -816,7 +939,7 @@ class MainActivity : FlutterActivity() {
      * broadcast receiver, and the manual/on-demand detectTerminal() calls.
      */
     private fun tryConnect(force: Boolean = false) {
-        if (terminalResponder != null && !sdkServiceBound()) {
+        if (terminalResponder != null && !sdkServiceBound() && !sdkPort.broken) {
             // A connect would only throw "USB Service not connected".
             reopenSdkService("connect requested")
             return
@@ -951,7 +1074,7 @@ class MainActivity : FlutterActivity() {
             runOnUiThread {
                 val ranAt = SystemClock.elapsedRealtime()
                 try {
-                    terminalResponder?.disconnectUsbSerialConnection()
+                    if (!sdkPort.broken) terminalResponder?.disconnectUsbSerialConnection()
                 } catch (t: Throwable) {
                     logTrace("prepareTerminal: disconnect threw ${t.javaClass.simpleName}: ${t.message}")
                 }
@@ -1012,7 +1135,9 @@ class MainActivity : FlutterActivity() {
         } catch (t: Throwable) {
             logTrace("RESTART: could not schedule the relaunch: ${t.javaClass.simpleName}: ${t.message}")
         }
-        finishAffinity()
+        // With a broken port the normal shutdown must not run: it closes the port
+        // and stops the SDK's service. Ending the process runs neither.
+        if (!sdkPort.broken) finishAffinity()
         Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 300)
     }
 
@@ -1110,6 +1235,8 @@ class MainActivity : FlutterActivity() {
                 stopPaymentHeartbeat()
                 lastPaymentCalledBack = true
                 val approved = result.outcome == PaymentCallbackClassifier.Outcome.APPROVED
+                logFirstPaymentAfterRepair(if (approved) "approved" else "not approved")
+                if (approved) noteApprovedPaymentForRepair()
                 logTrace("PAYMENT VERDICT: " + TerminalDiagnostics.paymentVerdict(
                     paymentStartEpoch, true,
                     if (approved) "approved" else "declined",
@@ -1317,6 +1444,10 @@ class MainActivity : FlutterActivity() {
             done("Refused: a payment is waiting on the terminal.")
             return
         }
+        if (sdkPort.broken) {
+            done(PORT_BROKEN_REFUSAL)
+            return
+        }
         Thread {
             val sb = StringBuilder()
             fun line(text: String) {
@@ -1355,7 +1486,7 @@ class MainActivity : FlutterActivity() {
                 line("[5] RAW CHANNEL PROBE (independent of the SDK; exact bytes)")
                 val probe = TerminalDiagnostics.probe(
                     applicationContext,
-                    disconnectSdk = { terminalResponder?.disconnectUsbSerialConnection() },
+                    disconnectSdk = { if (!sdkPort.broken) terminalResponder?.disconnectUsbSerialConnection() },
                     reconnectSdk = { runOnUiThread { isUsbConnected = false; tryConnect(force = true) } },
                     trace = { logTrace(it) },
                 )
@@ -1436,7 +1567,8 @@ class MainActivity : FlutterActivity() {
         // try/catch is a second layer in case the SDK fails in some other
         // way we haven't seen yet.
         try {
-            terminalResponder?.closeUsbSerialConnection()
+            if (sdkPort.broken) logTrace("onDestroy: the port is broken, not closing it")
+            else terminalResponder?.closeUsbSerialConnection()
         } catch (e: Throwable) {
             Log.e(TAG, "closeUsbSerialConnection failed", e)
         }

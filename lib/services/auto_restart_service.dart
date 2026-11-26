@@ -85,12 +85,18 @@ class AutoRestartService {
   static const minWaitMinutes = 1;
   static const maxWaitMinutes = 60;
   static const countdownSeconds = 10;
+  /// A failed terminal USB repair: how often it is checked, and how long
+  /// "Not now" puts it off. It does not use the schedule's settings.
+  static const repairCheckEvery = Duration(seconds: 5);
+  static const repairSnooze = Duration(seconds: 30);
   static const _channel = MethodChannel('com.waha/geidea');
 
   final Stopwatch _uptime = Stopwatch()..start();
   late final AutoRestartPlanner _planner =
       AutoRestartPlanner(period: _periodFromPrefs(), wait: _waitFromPrefs());
   Timer? _timer;
+  Timer? _repairTimer;
+  Duration _repairNotBefore = Duration.zero;
   bool _flowRunning = false;
   bool _loggedWaiting = false;
 
@@ -128,9 +134,46 @@ class AutoRestartService {
     instance._planner.setWait(_waitFromPrefs());
   }
 
-  /// Starts the once-every-30-seconds check. Safe to call more than once.
+  /// Starts the once-every-30-seconds check, and the faster one for a failed
+  /// terminal USB repair. Safe to call more than once.
   void start() {
     _timer ??= Timer.periodic(const Duration(seconds: 30), (_) => _tick());
+    _repairTimer ??= Timer.periodic(repairCheckEvery, (_) => _repairTick());
+  }
+
+  /// Whether to show the countdown for a repair restart. The schedule being
+  /// off, its period and the first-10-minutes rule do not apply: the native
+  /// side limits these restarts (one, until a payment is approved again and 30
+  /// minutes have passed). The idle rule is the same as for any restart.
+  static bool repairDue({
+    required bool wanted,
+    required bool canRestartNow,
+    required Duration uptime,
+    required Duration notBefore,
+  }) =>
+      wanted && canRestartNow && uptime >= notBefore;
+
+  Future<bool> _repairWanted() async {
+    try {
+      return await _channel.invokeMethod<bool>('repairRestartWanted') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _repairTick() async {
+    if (_flowRunning) return;
+    final wanted = await _repairWanted();
+    if (_flowRunning ||
+        !repairDue(
+          wanted: wanted,
+          canRestartNow: canRestartNow(),
+          uptime: _uptime.elapsed,
+          notBefore: _repairNotBefore,
+        )) {
+      return;
+    }
+    await _runFlow(test: false, repair: true);
   }
 
   /// The idle rule, as pure logic (unit-tested): the landing screen, an empty cart, no order or payment in progress and no terminal
@@ -192,12 +235,13 @@ class AutoRestartService {
     await _runFlow(test: true);
   }
 
-  Future<void> _runFlow({required bool test}) async {
+  Future<void> _runFlow({required bool test, bool repair = false}) async {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return;
     _flowRunning = true;
     try {
-      TraceLog.log('AUTORESTART: ${test ? "test button" : "due and idle"} — showing the countdown');
+      final why = test ? 'test button' : (repair ? 'terminal repair failed and idle' : 'due and idle');
+      TraceLog.log('AUTORESTART: $why — showing the countdown');
       final go = await showModalBottomSheet<bool>(
         context: ctx,
         isDismissible: false,
@@ -210,7 +254,16 @@ class AutoRestartService {
           stillIdle: test ? null : () => canRestartNow(ignoreRoute: true),
         ),
       );
-      if (go == true) {
+      if (repair) {
+        if (go == true) {
+          // The port may have recovered during the countdown.
+          if (await _repairWanted()) await _repairRestartNow();
+        } else if (canRestartNow(ignoreRoute: true)) {
+          // "Not now". If the kiosk only got busy, the next check asks again.
+          TraceLog.log('AUTORESTART: repair restart put off for ${repairSnooze.inSeconds}s');
+          _repairNotBefore = _uptime.elapsed + repairSnooze;
+        }
+      } else if (go == true) {
         await restartNow(test ? 'test button' : 'scheduled auto-restart');
       } else {
         TraceLog.log('AUTORESTART: cancelled — trying again in ${_planner.wait.inMinutes} min');
@@ -218,6 +271,18 @@ class AutoRestartService {
       }
     } finally {
       _flowRunning = false;
+    }
+  }
+
+  /// The native side saves the one-restart limit, then restarts without
+  /// closing the broken port.
+  Future<void> _repairRestartNow() async {
+    await PerfStats.instance.logAtRestart();
+    TraceLog.log('AUTORESTART: restarting now (terminal USB repair failed)');
+    try {
+      await _channel.invokeMethod('repairRestart');
+    } catch (e) {
+      TraceLog.log('AUTORESTART: the restart call failed: $e');
     }
   }
 

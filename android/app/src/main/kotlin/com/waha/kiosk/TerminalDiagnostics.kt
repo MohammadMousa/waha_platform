@@ -85,7 +85,11 @@ object UsbMilestones {
     fun register(context: Context, trace: (String) -> Unit, onEvent: (String) -> Unit = {}) {
         if (registered) return
         registered = true
-        val filter = IntentFilter().also { f -> names.keys.forEach { f.addAction(it) } }
+        // Two filters. Android's own USB broadcasts reach a private receiver. The
+        // SDK sends its broadcasts without naming a package, and with target SDK 34
+        // Android 14 delivers those only to an exported receiver (the Android 14
+        // tablet logged none of them, while the Android 11 one did).
+        val (system, fromSdk) = names.keys.partition { it.startsWith("android.") }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
                 val action = intent?.action ?: return
@@ -99,7 +103,12 @@ object UsbMilestones {
                 onEvent(name)
             }
         }
-        ContextCompat.registerReceiver(context.applicationContext, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        fun listen(actions: List<String>, flag: Int) {
+            val filter = IntentFilter().also { f -> actions.forEach { f.addAction(it) } }
+            ContextCompat.registerReceiver(context.applicationContext, receiver, filter, flag)
+        }
+        listen(system, ContextCompat.RECEIVER_NOT_EXPORTED)
+        listen(fromSdk, ContextCompat.RECEIVER_EXPORTED)
     }
 }
 

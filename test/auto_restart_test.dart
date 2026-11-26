@@ -157,4 +157,42 @@ void main() {
       expect(LocalPrefs.autoRestartWaitMinutes, 9);
     });
   });
+
+  group('restart after a failed terminal USB repair', () {
+    bool due({
+      bool wanted = true,
+      bool idle = true,
+      Duration uptime = const Duration(seconds: 20),
+      Duration notBefore = Duration.zero,
+    }) =>
+        AutoRestartService.repairDue(
+          wanted: wanted,
+          canRestartNow: idle,
+          uptime: uptime,
+          notBefore: notBefore,
+        );
+
+    test('due as soon as the kiosk is idle, even just after start', () {
+      expect(due(uptime: const Duration(seconds: 5)), isTrue);
+    });
+
+    test('not due unless the native side asks for it', () {
+      expect(due(wanted: false), isFalse);
+    });
+
+    test('waits while the kiosk is busy', () {
+      expect(due(idle: false), isFalse);
+    });
+
+    test('"Not now" puts it off for 30 seconds', () {
+      const pressedAt = Duration(minutes: 1);
+      final notBefore = pressedAt + AutoRestartService.repairSnooze;
+      expect(due(uptime: pressedAt + const Duration(seconds: 29), notBefore: notBefore), isFalse);
+      expect(due(uptime: pressedAt + const Duration(seconds: 30), notBefore: notBefore), isTrue);
+    });
+
+    test('checked every 5 seconds', () {
+      expect(AutoRestartService.repairCheckEvery, const Duration(seconds: 5));
+    });
+  });
 }
