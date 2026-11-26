@@ -15,14 +15,16 @@ flutter gen-l10n        # only if lib/l10n/generated/ is ever missing
 
 `l10n.yaml` (project root) and `generate: true` in `pubspec.yaml` produce the localisation code from `lib/l10n/app_en.arb` and `app_ar.arb`.
 
+After changing the database tables, regenerate the Drift code with `dart run build_runner build`, and add a migration step. See [docs/offline-sync.md](docs/offline-sync.md#local-database).
+
 ## Running against the backend
 
 ```bash
 # Android emulator (talks to the host machine through the special alias)
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8081
 
 # Real device on the same LAN as the backend
-flutter run --dart-define=API_BASE_URL=http://<backend-lan-ip>:8080
+flutter run --dart-define=API_BASE_URL=http://<backend-lan-ip>:8081
 
 # From a settings file
 flutter run --dart-define-from-file=config/dev.json
@@ -30,11 +32,14 @@ flutter run --dart-define-from-file=config/dev.json
 
 Without `API_BASE_URL` the app falls back to the emulator address, which a real device cannot reach.
 
-To keep the simulator out of a build entirely (it is off by default):
+### Build settings
 
-```bash
-flutter build apk --dart-define=ENABLE_SIMULATOR=false
-```
+| Setting | Effect |
+|---|---|
+| `API_BASE_URL` | The app's default server |
+| `ENABLE_SIMULATOR` | Simulator tools. Off by default. **The dev example file turns it on. Never use it in a release** |
+| `LOGGING=true` | Turns logging on |
+| `GEIDEA_MOCK=true` | Approves card payments without a terminal. **Testing only** |
 
 ## Release builds
 
@@ -43,20 +48,23 @@ cp config/prod.example.json config/prod.json   # fill in the real server address
 scripts/build_release.sh prod                  # bumps the version, then builds the APK
 ```
 
-Use the script, not a raw `flutter build`, so the version bump takes effect. `config/*.json` is git-ignored except the `*.example.json` templates.
+Use the script, not a raw `flutter build`, so the version bump takes effect. The app id is `com.waha.kiosk`. It installs beside any older app with another id, and does not take over its sign-in or settings. `config/*.json` is git-ignored except the `*.example.json` templates.
 
 ## First launch on a device
 
-1. Install the APK. The app id is `com.waha.kiosk`, so it installs as a new app beside any older one.
-2. On the **Device Login** screen enter the device username and PIN.
-3. The store comes from the device account, and the landing page loads. No other login or store choice exists.
-4. To reach Settings later: 10 taps on the cart screen, then the device PIN. To sign out or change the account: scan a QR containing `cmd=profile`, then enter the PIN.
+1. Install the APK.
+2. On the **Device Login** screen, enter the device username and PIN.
+3. The store comes from the device account, and the landing page opens.
+4. Connect the Geidea terminal over USB, then check it: Settings → POS Terminal Options.
+5. To sign out or change the account: scan `cmd=profile`, then enter the PIN.
 
-If the server address is wrong, Settings → Developer Tools (10 taps on the version label) → Server Connection → Custom Connection sets another server.
+If the server address is wrong, change it under Server Connection → Custom Connection.
 
-## Persistence
+See [docs/architecture.md](docs/architecture.md) for sign-in and connection rules.
 
-Store id, locale, kiosk timers, the device token and the settings survive an app restart or device reboot (`shared_preferences`). The device PIN is never stored: after a restart the app restores the session from its saved token, and a rejected token leaves the device on the Device Login screen.
+## What is saved
+
+The store, language, timers, device token and settings survive a restart. The local database holds the catalog and local orders. The device PIN is never saved. **Uninstalling the app or clearing its data can lose paid orders that are not sent yet.** Check Settings for waiting orders first.
 
 ## Checks before committing
 
@@ -67,6 +75,5 @@ flutter test
 
 ## Not built here
 
-- Offline operation (a local order queue with sync on reconnect)
 - A provisioning wizard for new devices (the account is created in the dashboard)
-- The web / phone shopping flows and the admin screens — those live in `waha_client` and `waha_admin`
+- The web and phone shopping flows and the admin screens, which are in `waha_client` and `waha_admin`

@@ -16,60 +16,37 @@ The Waha modules are separate repositories:
 - **Provider** — state management
 - `flutter_localizations` + ARB — full Arabic / English localisation, RTL-aware
 - `shared_preferences` — device token, store and settings across restarts
+- Drift (SQLite) — local catalog, local orders and the file cache list
 - `webview_flutter` — HTML landing pages
 - Kotlin (Android) — Geidea card terminal SDK over USB, log capture and upload, crash and USB diagnostics
 
-## Running locally
+## Documentation
 
-```bash
-# Android emulator
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+| Document | Contents |
+|---|---|
+| [SETUP.md](SETUP.md) | Install, run, build and set up a device |
+| [docs/architecture.md](docs/architecture.md) | Startup, sign-in, server connection, screens and settings |
+| [docs/payments.md](docs/payments.md) | Card and QR payments, and late approval |
+| [docs/offline-sync.md](docs/offline-sync.md) | Offline modes, local orders, sync and cached files |
+| [docs/device-operations.md](docs/device-operations.md) | Logs, scan commands, restarts and troubleshooting |
+| [docs/backend-integration.md](docs/backend-integration.md) | The backend APIs the kiosk uses |
+| [docs/landing-page-rendering.md](docs/landing-page-rendering.md) | Landing page loading, links and debugging |
 
-# Physical device or kiosk on the LAN
-flutter run --dart-define=API_BASE_URL=http://192.168.1.x:8080
-
-# Or use a settings file
-flutter run --dart-define-from-file=config/dev.json
-```
-
-## Building for an environment
-
-The server address is baked in at build time from a per-environment settings file in `config/` (git-ignored; only the `*.example.json` templates are committed).
-
-```bash
-cp config/prod.example.json config/prod.json   # then fill in the real values
-scripts/build_release.sh prod                  # bumps the version, builds the APK
-```
-
-`API_BASE_URL` is the app's default server. A build without it falls back to the emulator address (`http://10.0.2.2:8081`), which a real device cannot reach — always build releases with the settings file or `--dart-define=API_BASE_URL=...`.
-
-On the device, Settings → Developer Tools → Server Connection → **Custom Connection** overrides the default (ON), and returning to it (OFF) never loses the saved custom fields.
-
-The app id is `com.waha.kiosk`. It installs as a new app next to any older install (`com.example.waha_platform`); saved login and settings are not carried over.
+Update the matching document when you change behaviour. Keep each topic in one place.
 
 ---
 
 ## How it works
 
-**One mode.** The app is always a kiosk. Every screen sits behind the **device login** (device username + PIN, validated by the backend). A route outside the allowlist (landing, scan, cart, checkout, invoice, success, browse, categories, search, settings) bounces back to the landing page.
+**One mode.** The app is always a kiosk. Every screen needs a **device sign-in** (device username and PIN).
 
-**Customer flow.** Landing page (HTML from the store's resource library) → scan products with the hardware scanner or camera, or browse → cart (server-computed quote, offers shown as struck-through prices and a Discount row) → checkout → invoice → pay → paid screen with the invoice QR, then back to the landing page.
+**Customer flow.** Landing page, then scan or browse, cart, checkout, invoice and payment, and the paid screen with the invoice QR.
 
-**Payment.**
-- **Card terminal** — Geidea terminal over USB. The kiosk hides Cancel once the terminal acknowledges the payment, shows "result unknown" when no answer arrives in time, and reports a late approval (after a cancel or timeout) to the server so the order can be settled.
-- **QR payment** — the kiosk shows a QR, the customer pays on their phone, and the kiosk waits for the confirmation.
+**Payment.** Card on a Geidea terminal over USB, or QR payment on the customer's phone.
 
-**Idle guard and restarts.** Configurable inactivity timers reset the kiosk to the landing page. A scheduled auto-restart runs only when the kiosk is idle on the landing page with an empty cart and no payment pending.
+**Offline.** The server decides the level: online only, caching, or full offline selling with a local database and sync.
 
-**Settings.** Reached by 10 taps on the cart screen followed by the device PIN. Developer Tools (10 taps on the version label) hold the server connection, screen scale, terminal tools and the simulator.
-
-**Scan commands.** A QR or barcode with the `cmd=` prefix is a kiosk command, not a product:
-- `cmd=upload-logs` — uploads the device log and shows the result.
-- `cmd=profile` — asks for the device PIN, then opens the profile sheet where an admin can sign out or change the account.
-
-**Logs.** The native log level comes from the server property `Log_Level` (Info, Warn or Error; default Warn). Warn and Error drop the per-byte SDK lines, receipts and card details and keep what an issue needs. `enable_logging` is the on/off switch. Old SDK log files are removed at app start.
-
-**Server properties the kiosk reads:** `Log_Level`, `enable_logging`, `heartbeat_minutes`, `terminal_timeout_seconds`, and the auto-restart settings (`device_auto_restart_enabled`, `device_auto_restart_hours`, `device_auto_restart_wait_minutes`).
+**Admin commands (QR).** `cmd=upload-logs`, `cmd=sync-pull`, `cmd=build-info`, and `cmd=profile`.
 
 ---
 
@@ -78,6 +55,8 @@ The app id is `com.waha.kiosk`. It installs as a new app next to any older insta
 ```
 lib/
 ├── config/        API base URL, connection settings, screen scale
+├── data/          catalog/ (offline levels, local catalog), db/ (Drift), orders/ (local orders, push),
+│                  resources/ (file cache), sync/ (pull)
 ├── l10n/          app_en.arb, app_ar.arb, generated/ (flutter gen-l10n output — do not edit)
 ├── models/        auth_session, cart_item, category, order, payment_method, pay_result,
 │                  product, product_page, quote, store, terminal_session
@@ -116,12 +95,6 @@ Generated files go to `lib/l10n/generated/` — do not edit by hand. The active 
 flutter analyze
 flutter test
 ```
-
----
-
-## Landing pages
-
-See `docs/landing-page-rendering.md`. Pages are HTML from the store's resource library, shown in a WebView; root-relative paths are resolved at load time. Banner links such as `href="/screen?name=browse_screen&tag=TAG"` are intercepted and open the matching screen inside the app.
 
 ---
 

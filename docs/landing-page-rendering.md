@@ -1,57 +1,83 @@
-# Landing Page Rendering (Kiosk)
+# Landing page rendering
 
-How the kiosk app loads and displays the dynamic HTML landing pages described in `waha/docs/landing-pages.md` and `waha/docs/resource-management.md` — this doc covers only the kiosk-side rendering pipeline, not the URL scheme or data model.
+How the kiosk loads and shows the HTML landing page. The URL scheme and data model are described in the backend repo: `docs/landing-pages.md` and `docs/resource-management.md`.
+
+Main files: `lib/screens/landing_screen.dart`, `lib/services/landing_cache.dart`, `lib/data/resources/html_assets.dart`.
 
 ---
 
-## Pipeline
+## Loading and updating
 
+The kiosk uses one page, `KIOSK_LANDING`.
+
+1. The saved page is shown at once, if there is one. With no page, a built-in scan screen shows.
+2. With a token and a store ready, the app asks `GET /api/landing/KIOSK_LANDING`.
+3. The page is downloaded only when its content hash changed. The old copy shows until the new one has fully arrived.
+
+**When it checks:** when a token and store become ready, when either changes, 30 s after the first of these, and then every `check_landing_page_interval_minutes` (default 30, 1 to 1440).
+
+A failed check keeps the saved page. A 404 also leaves the current `KIOSK_LANDING` page on screen.
+
+---
+
+## Files and addresses
+
+The page is saved by the resource cache with its **original root-relative addresses**, without a server host, so it still works after the server address changes. See [offline-sync.md](offline-sync.md#images-and-landing-page-files).
+
+At display time, in memory only:
+
+1. `LandingCache.resolveAbsolutePaths` makes `src`, `href`, `action` and `url()` values absolute.
+2. `HtmlAssets.withSavedCopies` replaces `src` and `url()` addresses that are already saved with the data itself. This works without a server. Files over 3 MB stay as server addresses. A file not saved yet loads from the server and is saved for next time.
+3. The page is loaded with `loadHtmlString`, with the server address as the base.
+
+Both the base address and the rewriting are needed. Flutter web ignores the base address, so do not remove the rewriting.
+
+---
+
+## What a page can do
+
+### Layout
+
+Add `<meta name="waha-mode" content="fullscreen">` to fill the screen without the app bar and bottom bar.
+
+Without it, the app bar title can come from the page: `title{ar=..., en=...}` within the first 1500 characters. Otherwise it is the store name, then the app name.
+
+### Language
+
+After loading, the app sets `lang` and `dir` on the page. If the page has a button with id `langBtn` and a global `translations` object, it also fills every `data-i18n` element.
+
+### Links
+
+The app blocks page navigation and handles links with the path `/screen`:
+
+| `name` | Opens | `tag` |
+|---|---|---|
+| `browse_screen` | Browse | Optional. Used as the search text and the title |
+| `categories_screen` | Categories | Not used |
+| `search_screen` | Search | Passed as a query argument. The route does not currently read it |
+| `cart_screen` | Cart | Not used |
+
+```html
+<a href="/screen?name=browse_screen&tag=Desserts">Desserts</a>
 ```
-LandingScreen.initState()
-  └── LandingCache.readHtml(pageKey)        — local file, shown instantly if present
-  └── (background) ApiClient.getLandingPage — GET /api/landing/{pageKey}
-        └── contentHash unchanged → keep cached HTML, do nothing
-        └── contentHash changed   → fetch bytes, LandingCache.writeHtml, reload WebView
-```
 
-The HTML is always cached on disk with its **original, root-relative** paths (e.g. `src="/resource/waha_corp/waha/res/x.jpg"`) — never with a server host baked in. That's what makes the cache portable across server IP changes; the host is only ever added back in at display time.
+JavaScript runs in the page on Android.
+
+When an item is added to the cart while the landing page is open, the cart opens.
 
 ---
 
-## Turning a relative path into something the WebView can load
+## Debugging
 
-`WebViewController.loadHtmlString()` does not give the loaded document a real origin the way a normal browser navigation does — so a raw root-relative `<img src="/resource/...">` has nothing to resolve against on its own. Two different mechanisms fix this, and **both matter**, because they don't run on the same platforms:
+### Page loads but images are broken
 
-- **Android / iOS**: `loadHtmlString(html, baseUrl: AppConfig.apiBaseUrl)` — the platform WebView (native `loadDataWithBaseUrl` under Android) resolves relative references against `baseUrl` itself, the same way a real page load would. This is the primary, most robust mechanism.
-- **Flutter Web**: the `baseUrl` parameter is silently ignored (`webview_flutter_web` loads the document via a `data:` URI with no base at all). `LandingCache.resolveAbsolutePaths()` is the only thing that makes images work there — it rewrites `src=`/`href=`/`url()` values by hand before the HTML is handed to `loadHtmlString`.
+The app and the page use **two separate network stacks**. The page's data is fetched by the app's own HTTP client. Images that are not saved yet are fetched by the Android WebView, which has its own DNS cache, connections and network policy.
 
-Both paths are kept in the code (`landing_screen.dart`, `landing_cache.dart`) — don't remove the regex rewriting on the assumption `baseUrl` covers everything; it doesn't, on web.
+So updates can succeed while images fail. Check:
 
----
+- **WebView network settings.** The WebView follows the Android network security settings. The app's own HTTP client does not. See the comments in `res/xml/network_security_config.xml`.
+- **Old connection state** in the WebView after a server address change.
 
-## Two independent network stacks — the thing that actually matters when debugging this
+### Developer messages
 
-The page's own HTML/metadata (`ApiClient`, `/api/landing/...`) is fetched over **Flutter's own `dart:io`-based HTTP client**. The images *inside* that HTML are fetched by **the platform's native WebView engine** (Android System WebView / Chromium, or WKWebView) — a completely separate network stack with its own DNS cache, connection pool, and OS-level network policy.
-
-This split is easy to miss and produces a very specific, confusing symptom: **the page loads, background update checks succeed, hashes match — and images are still broken.** When that happens, the bug is almost never in this app's Dart code (if the JSON/API layer works, the HTTP client and the URL/data are provably fine) — it's in something that only affects the *native WebView's* traffic specifically:
-
-- Android's per-app Network Security Config blocking cleartext HTTP for the WebView while `dart:io` sockets sail through unaffected (`dart:io` is not subject to Android's `NetworkSecurityPolicy` at all). See `android/app/src/main/res/xml/network_security_config.xml` — a bundled native SDK dependency in this app ships its own network security config with no `<base-config>`, which silently defaults everything *not* explicitly listed to cleartext-blocked, overriding `android:usesCleartextTraffic="true"` in our own manifest. Our own config is declared explicitly (with `tools:replace`) specifically to win that merge.
-- Stale DNS/connection state held by the WebView engine after a LAN IP change, if the backend host isn't a stable IP.
-
-### How to actually see what the WebView is doing
-
-`chrome://inspect` can't be reached through most browser automation and doesn't always show the right target automatically. The reliable path, with a device connected via `adb`:
-
-```bash
-adb shell cat /proc/net/unix | grep webview_devtools_remote   # find the debug socket for the running app's PID
-adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>
-curl -s http://localhost:9333/json                             # lists the WebView's own DevTools target(s)
-```
-
-A plain WebSocket client hitting that target's `webSocketDebuggerUrl` gets rejected by Chrome's origin allowlist (`403 ERR_CLEARTEXT`-style checks don't apply here, but WS handshake origin checks do) unless the connection is made with `suppress_origin=True` (Python `websocket-client`) — a real browser's `chrome://inspect` UI handles this internally, a bare script has to work around it explicitly. Once connected, `Network.enable` + `Page.reload` and reading `Network.loadingFailed` events gives the *actual* Chromium-level error (e.g. `net::ERR_CLEARTEXT_NOT_PERMITTED`) for each image request — far more direct than guessing from Dart-side symptoms.
-
----
-
-## Debug toast / dev tools
-
-`LandingScreen`'s `_log()` calls are gated by `LocalPrefs.devToolsUnlocked` (tap the version number 10× in Settings — a local-only unlock, no login required) and show up as on-screen toasts: fetch attempts, hash comparisons, cache hits/misses. The **Server Connection** panel lives under this same dev-tools gate (not behind `MANAGE_STORES`) specifically so a device with a wrong/changed LAN IP can still have it fixed without needing to log in first — logging in itself requires reaching the (possibly misconfigured) server.
+With Developer Tools unlocked, the landing page shows short messages about fetches, hashes and cache use.
